@@ -1,0 +1,14 @@
+node_modules
+dist
+.vite
+.turbo
+.vscode
+.vs
+*.log
+*.sqlite
+*.db
+src-tauri/target
+src-tauri/Cargo.lock
+target
+
+
