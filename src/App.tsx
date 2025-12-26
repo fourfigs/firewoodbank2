@@ -58,7 +58,7 @@ function LoginCard({
     };
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     // Placeholder auth: accept any email/password and create a session immediately.
