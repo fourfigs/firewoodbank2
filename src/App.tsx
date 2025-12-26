@@ -52,11 +52,9 @@ function LoginCard({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    // Placeholder auth: accept any email/password and create a session.
-    setTimeout(() => {
-      onLogin({ name: "Firewood Staff", email });
-      setSubmitting(false);
-    }, 300);
+    // Placeholder auth: accept any email/password and create a session immediately.
+    onLogin({ name: "Firewood Staff", email });
+    // No further state updates to avoid setting state after unmount.
   };
 
   return (
