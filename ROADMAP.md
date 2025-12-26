@@ -1,7 +1,7 @@
 # 🔥 Community Firewood Bank Management App - Complete Roadmap
 
 **Repo**: https://github.com/fourfigs/firewoodbank2  
-**Status**: 🟢 Stage 1 - Skeleton (current)  
+**Status**: 🟢 Stage 2 - SQLite + Sync Tables (current)  
 **Target**: Windows Desktop → Multi-platform sync-ready app
 
 ## 🎯 PROJECT GOALS
@@ -78,14 +78,14 @@ tax, total, client snapshot, notes, createdAt, updatedAt, isDeleted
 What you see: Schema definitions ready
 
 
-### 🟢 **Stage 1: Tauri + React Skeleton**
+### ✅ **Stage 1: Tauri + React Skeleton**
 Scaffold Tauri 2 Windows app + React nav shell
 Add ping command (test Rust↔React bridge)
 What you see: Desktop window w/ Dashboard/Clients/Inventory nav
 Branch: stage-1-skeleton
 
 
-### ⭕ **Stage 2: SQLite + Sync Tables**
+### 🟢 **Stage 2: SQLite + Sync Tables**
 SQLite migrations for ALL entities w/ sync fields
 Rust CRUD for Client/InventoryItem
 Tauri commands: createClient/listClients/etc
