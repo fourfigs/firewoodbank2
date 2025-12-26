@@ -1375,7 +1375,9 @@ function App() {
                                   return [];
                                 }
                               })();
-                              return Array.isArray(arr) && session?.username ? arr.includes(session.username) : false;
+                              return session?.username
+                                ? Array.isArray(arr) && arr.includes(session.username)
+                                : false;
                             })
                           : workOrders;
                       const showPII = canViewPII;
