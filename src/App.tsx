@@ -9,6 +9,7 @@ const tabs = ["Dashboard", "Clients", "Inventory"];
 type UserSession = {
   name: string;
   email: string;
+  username?: string;
 };
 
 function Content({ tab }: { tab: string }) {
@@ -61,7 +62,8 @@ function LoginCard({
     e.preventDefault();
     setSubmitting(true);
     // Placeholder auth: accept any email/password and create a session immediately.
-    onLogin({ name: "Firewood Staff", email });
+    const sampleUsername = "KH-1207";
+    onLogin({ name: sampleUsername, username: sampleUsername, email });
     if (isMounted.current) {
       setSubmitting(false);
     }
@@ -169,6 +171,11 @@ function App() {
           <button className="ping" onClick={handlePing} disabled={pinging}>
             {pinging ? "Pinging..." : "Ping Tauri"}
           </button>
+          {session && (
+            <div className="badge" style={{ alignSelf: "center" }}>
+              User: {session.username ?? session.name}
+            </div>
+          )}
           {session && (
             <button className="ghost" onClick={() => setSession(null)}>
               Sign out
