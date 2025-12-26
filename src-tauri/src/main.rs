@@ -495,7 +495,7 @@ async fn create_work_order(
         sqlx::query(delivery_query)
             .bind(&delivery_id)
             .bind(format!("Delivery for {}", input.client_name))
-            .bind(&input.directions)
+            .bind::<Option<String>>(None)
             .bind("delivery")
             .bind(&id)
             .bind(start_date)
