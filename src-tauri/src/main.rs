@@ -531,7 +531,7 @@ async fn list_work_orders(state: State<'_, AppState>) -> Result<Vec<WorkOrderRow
             physical_address_postal_code,
             physical_address_city AS town,
             mileage,
-            '[]' as assignees_json
+            COALESCE(assignees_json, '[]') as assignees_json
         FROM work_orders
         WHERE is_deleted = 0
         ORDER BY (scheduled_date IS NULL), datetime(scheduled_date) DESC, created_at DESC
