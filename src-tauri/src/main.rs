@@ -424,6 +424,8 @@ async fn create_work_order(
 ) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
     let status = input.status.unwrap_or_else(|| "draft".to_string());
+    let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
+
     let query = r#"
         INSERT INTO work_orders (
             id, client_id, client_number, client_title, client_name,
@@ -475,9 +477,37 @@ async fn create_work_order(
         .bind(&input.scheduled_date)
         .bind(&status)
         .bind(&input.created_by_user_id)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
+
+    // Auto-create a delivery event when a work order is scheduled.
+    if let Some(start_date) = &input.scheduled_date {
+        let delivery_id = Uuid::new_v4().to_string();
+        let delivery_query = r#"
+            INSERT INTO delivery_events (
+                id, title, description, event_type, work_order_id,
+                start_date, end_date, color_code, assigned_user_ids_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        "#;
+
+        sqlx::query(delivery_query)
+            .bind(&delivery_id)
+            .bind(format!("Delivery for {}", input.client_name))
+            .bind(&input.directions)
+            .bind("delivery")
+            .bind(&id)
+            .bind(start_date)
+            .bind::<Option<String>>(None)
+            .bind("#e67f1e")
+            .bind::<Option<String>>(None)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
 
     Ok(id)
 }
