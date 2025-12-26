@@ -534,6 +534,7 @@ function App() {
                             gate_combo: "",
                             notes: "",
                           });
+                          setShowClientForm(false);
                         } finally {
                           setBusy(false);
                         }
@@ -968,12 +969,17 @@ function App() {
                           onSubmit={async (e) => {
                         e.preventDefault();
                         setWorkOrderError(null);
+                        const mileageValue = workOrderForm.mileage === "" ? null : Number(workOrderForm.mileage);
+                        if (mileageValue !== null && Number.isNaN(mileageValue)) {
+                          setWorkOrderError("Mileage must be a number.");
+                          return;
+                        }
                         let targetClient = clients.find((c) => c.id === workOrderForm.client_id) || null;
                         if (!targetClient && !workOrderNewClientEnabled) {
                           setWorkOrderError("Work orders require a client. Select or create a client first.");
                           return;
                         }
-                        if (workOrderForm.status === "completed" && !workOrderForm.mileage) {
+                        if (workOrderForm.status === "completed" && mileageValue === null) {
                           setWorkOrderError("Mileage is required to close an order.");
                           return;
                         }
@@ -1087,7 +1093,7 @@ function App() {
                               email: targetClient.email,
                               directions: workOrderForm.directions || null,
                               gate_combo: workOrderForm.gate_combo || targetClient.gate_combo,
-                          mileage: workOrderForm.mileage ? Number(workOrderForm.mileage) : null,
+                          mileage: mileageValue,
                               other_heat_source_gas: workOrderForm.other_heat_source_gas,
                               other_heat_source_electric: workOrderForm.other_heat_source_electric,
                               other_heat_source_other: workOrderForm.other_heat_source_other || null,
@@ -1121,6 +1127,7 @@ function App() {
                             telephone: "",
                             email: "",
                           });
+                          setShowWorkOrderForm(false);
                         } finally {
                           setBusy(false);
                         }
