@@ -96,6 +96,17 @@ function LoginCard({
   const [submitting, setSubmitting] = useState(false);
   const isMounted = useRef(true);
 
+  const resolveRole = (input: string): Role => {
+    const normalized = input.trim().toLowerCase();
+    if (normalized === "admin") return "admin";
+    if (normalized === "lead") return "lead";
+    if (normalized === "staff") return "staff";
+    if (normalized === "driver") return "driver";
+    if (normalized === "volunteer") return "volunteer";
+    // Default demo role if unknown
+    return "staff";
+  };
+
   useEffect(() => {
     return () => {
       isMounted.current = false;
@@ -108,12 +119,12 @@ function LoginCard({
     // Placeholder auth: accept any email/password and create a session immediately.
     const normalized = username.trim().toUpperCase();
     const sampleName = normalized || "USER";
-    const role: Role = "admin";
+    const role: Role = resolveRole(username);
     onLogin({
       name: sampleName,
       username: normalized,
       role,
-      hipaaCertified: role === "admin",
+      hipaaCertified: role === "admin" || role === "lead",
     });
     if (isMounted.current) {
       setSubmitting(false);
@@ -128,6 +139,9 @@ function LoginCard({
         Access the Firewood Bank console to manage clients, orders, and
         inventory.
       </p>
+      <div className="badge" style={{ marginBottom: 8 }}>
+        Demo accounts: admin/admin, lead/lead, staff/staff, driver/driver, volunteer/volunteer
+      </div>
       <form onSubmit={handleSubmit} className="two-up">
         <div className="field">
           <label htmlFor="username">Username</label>
