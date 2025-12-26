@@ -20,6 +20,7 @@ type ClientRow = {
   id: string;
   name: string;
   client_number: string;
+  client_title?: string | null;
   email?: string | null;
   telephone?: string | null;
   approval_status: string;
@@ -1052,6 +1053,7 @@ function App() {
                             id: newClientId,
                             name: nc.name,
                             client_number: nc.client_number,
+                            client_title: null,
                             email: nc.email || null,
                             telephone: nc.telephone || null,
                             approval_status: "pending",
