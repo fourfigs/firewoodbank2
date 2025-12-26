@@ -93,8 +93,6 @@ function LoginCard({
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Role>("admin");
-  const [hipaaCertified, setHipaaCertified] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const isMounted = useRef(true);
 
@@ -110,11 +108,12 @@ function LoginCard({
     // Placeholder auth: accept any email/password and create a session immediately.
     const normalized = username.trim().toUpperCase();
     const sampleName = normalized || "USER";
+    const role: Role = "admin";
     onLogin({
       name: sampleName,
       username: normalized,
       role,
-      hipaaCertified: role === "lead" ? hipaaCertified : role === "admin",
+      hipaaCertified: role === "admin",
     });
     if (isMounted.current) {
       setSubmitting(false);
@@ -129,9 +128,6 @@ function LoginCard({
         Access the Firewood Bank console to manage clients, orders, and
         inventory.
       </p>
-      <div className="badge" style={{ marginBottom: 8 }}>
-        Sample logins: admin/sketch:Sketching2! (HIPAA), admin/admin, lead/lead, staff/staff, volunteer/volunteer
-      </div>
       <form onSubmit={handleSubmit} className="two-up">
         <div className="field">
           <label htmlFor="username">Username</label>
@@ -157,36 +153,6 @@ function LoginCard({
             onChange={(e) => setPassword(e.target.value)}
           />
         </div>
-        <div className="field">
-          <label htmlFor="role">Role</label>
-          <select
-            id="role"
-            value={role}
-            onChange={(e) => {
-              const next = e.target.value as Role;
-              setRole(next);
-              if (next !== "lead") setHipaaCertified(next === "admin");
-            }}
-          >
-            <option value="admin">Admin</option>
-            <option value="lead">Lead</option>
-            <option value="staff">Staff</option>
-            <option value="driver">Driver</option>
-            <option value="volunteer">Volunteer</option>
-          </select>
-        </div>
-        {role === "lead" && (
-          <div className="field">
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={hipaaCertified}
-                onChange={(e) => setHipaaCertified(e.target.checked)}
-              />
-              HIPAA certified
-            </label>
-          </div>
-        )}
         <div className="login-actions" style={{ gridColumn: "1 / -1" }}>
           <button className="ping" type="submit" disabled={submitting}>
             {submitting ? "Signing in..." : "Sign in"}
@@ -197,8 +163,6 @@ function LoginCard({
             onClick={() => {
               setUsername("");
               setPassword("");
-              setRole("admin");
-              setHipaaCertified(false);
             }}
           >
             Clear
