@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS work_orders (
   email TEXT,
   directions TEXT,
   gate_combo TEXT,
+  mileage REAL,
   other_heat_source_gas INTEGER NOT NULL DEFAULT 0,
   other_heat_source_electric INTEGER NOT NULL DEFAULT 0,
   other_heat_source_other TEXT,

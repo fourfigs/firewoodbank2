@@ -138,6 +138,7 @@ struct WorkOrderInput {
     email: Option<String>,
     directions: Option<String>,
     gate_combo: Option<String>,
+    mileage: Option<f64>,
     other_heat_source_gas: bool,
     other_heat_source_electric: bool,
     other_heat_source_other: Option<String>,
@@ -156,6 +157,14 @@ struct WorkOrderRow {
     scheduled_date: Option<String>,
     gate_combo: Option<String>,
     notes: Option<String>,
+    telephone: Option<String>,
+    physical_address_line1: Option<String>,
+    physical_address_city: Option<String>,
+    physical_address_state: Option<String>,
+    physical_address_postal_code: Option<String>,
+    town: Option<String>,
+    mileage: Option<f64>,
+    assignees_json: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -422,7 +431,7 @@ async fn create_work_order(
             physical_address_state, physical_address_postal_code,
             mailing_address_line1, mailing_address_line2, mailing_address_city,
             mailing_address_state, mailing_address_postal_code,
-            telephone, email, directions, gate_combo,
+            telephone, email, directions, gate_combo, mileage,
             other_heat_source_gas, other_heat_source_electric, other_heat_source_other,
             notes, scheduled_date, status, created_by_user_id
         )
@@ -432,7 +441,7 @@ async fn create_work_order(
             ?, ?,
             ?, ?, ?,
             ?, ?,
-            ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?, ?
         )
@@ -458,6 +467,7 @@ async fn create_work_order(
         .bind(&input.email)
         .bind(&input.directions)
         .bind(&input.gate_combo)
+        .bind(&input.mileage)
         .bind(input.other_heat_source_gas)
         .bind(input.other_heat_source_electric)
         .bind(&input.other_heat_source_other)
@@ -483,7 +493,15 @@ async fn list_work_orders(state: State<'_, AppState>) -> Result<Vec<WorkOrderRow
             status,
             scheduled_date,
             gate_combo,
-            notes
+            notes,
+            telephone,
+            physical_address_line1,
+            physical_address_city,
+            physical_address_state,
+            physical_address_postal_code,
+            physical_address_city AS town,
+            mileage,
+            '[]' as assignees_json
         FROM work_orders
         WHERE is_deleted = 0
         ORDER BY (scheduled_date IS NULL), datetime(scheduled_date) DESC, created_at DESC

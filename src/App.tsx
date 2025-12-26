@@ -65,7 +65,6 @@ type WorkOrderRow = {
   scheduled_date?: string | null;
   gate_combo?: string | null;
   notes?: string | null;
-  // Optional fields to support limited volunteer views
   mileage?: number | null;
   town?: string | null;
   telephone?: string | null;
@@ -73,6 +72,7 @@ type WorkOrderRow = {
   physical_address_city?: string | null;
   physical_address_state?: string | null;
   physical_address_postal_code?: string | null;
+  assignees_json?: string | null;
 };
 
 type DeliveryEventRow = {
@@ -1107,6 +1107,7 @@ function App() {
                               email: targetClient.email,
                               directions: workOrderForm.directions || null,
                               gate_combo: workOrderForm.gate_combo || targetClient.gate_combo,
+                          mileage: workOrderForm.mileage ? Number(workOrderForm.mileage) : null,
                               other_heat_source_gas: workOrderForm.other_heat_source_gas,
                               other_heat_source_electric: workOrderForm.other_heat_source_electric,
                               other_heat_source_other: workOrderForm.other_heat_source_other || null,
@@ -1379,7 +1380,16 @@ function App() {
                     {(() => {
                       const visibleOrders =
                         session?.role === "volunteer"
-                          ? workOrders.filter((wo: any) => wo?.assignees?.includes?.(session.username))
+                          ? workOrders.filter((wo) => {
+                              const arr = (() => {
+                                try {
+                                  return JSON.parse(wo.assignees_json ?? "[]");
+                                } catch {
+                                  return [];
+                                }
+                              })();
+                              return Array.isArray(arr) && session?.username ? arr.includes(session.username) : false;
+                            })
                           : workOrders;
                       const showPII = canViewPII;
                       return (
