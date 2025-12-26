@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tauri dev",
+    "dev": "concurrently -k \"npm:dev:ui\" \"npm:dev:tauri\"",
+    "dev:ui": "vite",
+    "dev:tauri": "tauri dev",
     "build": "tauri build",
     "lint": "echo \"No lint configured for Stage 1\""
   },
@@ -18,8 +20,8 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^9.1.2",
     "typescript": "^5.5.4",
-    "vite": "^5.4.0"
+    "vite": "^7.3.0"
   }
 }
-

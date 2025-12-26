@@ -9,6 +9,9 @@ dist
 *.db
 src-tauri/target
 src-tauri/Cargo.lock
+src-tauri/gen
 target
+logo_nmera-Color-1.png
+Final-nmera-mailer-2025-front.pdf
 
 
