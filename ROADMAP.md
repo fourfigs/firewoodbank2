@@ -1,7 +1,7 @@
 # 🔥 Community Firewood Bank Management App - Complete Roadmap
 
 **Repo**: https://github.com/fourfigs/firewoodbank2  
-**Status**: 🟢 Stage 2 - SQLite + Sync Tables (current)  
+**Status**: 🟢 Stage 5 - Work Orders + Deliveries (current)  
 **Target**: Windows Desktop → Multi-platform sync-ready app
 
 ## 🎯 PROJECT GOALS
@@ -85,7 +85,7 @@ What you see: Desktop window w/ Dashboard/Clients/Inventory nav
 Branch: stage-1-skeleton
 
 
-### 🟢 **Stage 2: SQLite + Sync Tables**
+### ✅ **Stage 2: SQLite + Sync Tables**
 SQLite migrations for ALL entities w/ sync fields
 Rust CRUD for Client/InventoryItem
 Tauri commands: createClient/listClients/etc
@@ -93,27 +93,40 @@ What you see: DB connection + test commands work
 Branch: stage-2-db
 
 
-### ⭕ **Stage 3: Clients Module**
-Client list + full onboard form (all PDF fields)
-Create/edit/search + approval status
+### ✅ **Stage 3: Clients Module**
+Client list + onboard form aligned to PDFs
+Create + approval status + gate combo capture
 Placeholder delivery metrics
 What you see: Add/edit clients w/ full form
 Branch: stage-3-clients
 
 
-### ⭕ **Stage 4: Inventory Module**
+### ✅ **Stage 4: Inventory Module**
 chainsaws/bar oil/gas/files/helmets etc + thresholds
 Below-threshold warnings + auto order messages
 CRUD + "needs restock" view
 What you see: Inventory list w/ low-stock alerts
 Branch: stage-4-inventory
 
-### ⭕ **Stage 5: Work Orders + Deliveries**
+### 🟢 **Stage 5: Work Orders + Deliveries**
 Full Order.pdf form → WorkOrder entity
 Auto-create DeliveryEvent on schedule
 Client→WorkOrder linking
 What you see: Create work orders from clients
 Branch: stage-5-workorders
+
+### ✅ **Stage 5.1: Tuning Forms & Access**
+Role-based gating for client/workorder/inventory creation
+HIPAA-aware PII masking (only admins + certified leads; drivers get address/phone for assigned work)
+Volunteer/driver limited views; mileage required to close work orders
+Mailer list view; + toggles and icon updates; login role/username flow
+What you see: Forms gated by role, PII masked per policy, mileage field on work orders
+Branch: stage-5.1-tuningForms
+Sub-stages to close gaps:
+- 5.1a: Driver delivery-only view (address/contact for assigned deliveries; strip non-delivery workorder PII)
+- 5.1b: Persist assignments/mileage/availability/vehicle in backend schema + commands
+- 5.1c: Server-side PII enforcement (role checks, driver-limited payloads, audit logging hooks; town and mileage initially derived from client address)
+- 5.1d: Volunteer/driver hours + wood-credit calc wired to persisted events
 
 ### ⭕ **Stage 6: Dashboard + Calendar**
 Split/unsplit wood summary
@@ -147,12 +160,19 @@ What you see: Driver view w/ today's route
 Branch: stage-9-driver
 
 
-### ⭕ **Stage 10: Sync Hooks**
+### ⭕ **Stage 10: HIPAA Compliance Check**
+PII masking rules, audit/logging, role verification, release checklist
+What you see: Compliance checklist + PII masking confirmed
+Branch: stage-10-hipaa
+
+### ⭕ **Stage 11: Desktop Rollout**
+Windows packaging hardening; installer/signing checks; smoke tests
+What you see: Desktop build ready for field use
+Branch: stage-11-desktop
+
+### ⭕ **Stage 12: Sync Hooks**
 SyncService abstraction (getPendingChanges/etc)
 lastSyncedAt/version fields
 Future cloud-ready comments
 What you see: No UI change (internal prep)
-Branch: stage-10-sync
-
-
-Say: "STAGE 0: Schema design"
+Branch: stage-12-sync
