@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Nav from "./components/Nav";
 import logo from "./assets/logo.png";
+import { useEffect, useRef } from "react";
 
 const tabs = ["Dashboard", "Clients", "Inventory"];
 
@@ -48,13 +49,22 @@ function LoginCard({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     // Placeholder auth: accept any email/password and create a session immediately.
     onLogin({ name: "Firewood Staff", email });
-    // No further state updates to avoid setting state after unmount.
+    if (isMounted.current) {
+      setSubmitting(false);
+    }
   };
 
   return (
