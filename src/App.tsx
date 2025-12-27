@@ -376,6 +376,11 @@ const visibleTabs = useMemo(() => {
     if (!session?.username) return { hours: 0, deliveries: 0, woodCreditCords: 0 };
     const uname = session.username.toLowerCase();
     const defaultHours = 1.5;
+    const milesPerHourFactor = 0.75 / 60; // 0.75 minutes per mile => hours per mile
+    const mileageByWorkOrder: Record<string, number | undefined> = {};
+    workOrders.forEach((wo) => {
+      mileageByWorkOrder[wo.id] = typeof wo.mileage === "number" ? wo.mileage : undefined;
+    });
     let totalHours = 0;
     let totalDeliveries = 0;
     deliveries.forEach((d) => {
@@ -390,11 +395,9 @@ const visibleTabs = useMemo(() => {
       }
       if (assigned.includes(uname)) {
         totalDeliveries += 1;
-        const startMs = Date.parse(d.start_date || "");
-        const endMs = d.end_date ? Date.parse(d.end_date) : NaN;
-        if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs > startMs) {
-          const diffHours = Math.max(0.25, (endMs - startMs) / (1000 * 60 * 60));
-          totalHours += diffHours;
+        const miles = d.work_order_id ? mileageByWorkOrder[d.work_order_id] : undefined;
+        if (typeof miles === "number" && miles >= 0) {
+          totalHours += Math.max(0.1, miles * milesPerHourFactor);
         } else {
           totalHours += defaultHours;
         }
