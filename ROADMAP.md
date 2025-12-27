@@ -130,6 +130,12 @@ Sub-stages to close gaps:
 - 5.1d: Volunteer/driver hours + wood-credit calc wired to persisted events (0.75 minutes/mile; delivery assignments mirrored into delivery_events)
 - Closing a work order to “completed” requires mileage and records the lead/admin who closed it
 - Slice: Audit log persisted (audit_logs table) and MOTD surfaced on login newest→oldest
+- Upcoming slices:
+  - Client/Inventory edit/delete UI (Stage 2)
+  - Full onboarding fields + client edit flow (Stage 3)
+  - “Needs restock” filter + auto-order messaging (Stage 4)
+  - User CRUD (availability/vehicle/DL/HIPAA) in Worker Directory (Stage 5.1b)
+  - Town derivation for volunteer view + audit log viewer/export (Stage 5.1c)
 
 ### ⏳ **Stage 5.2: Work Order and Intake Hardening (new)**
 Tighten intake UX/validation before Stage 6:
