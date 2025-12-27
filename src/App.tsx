@@ -4,7 +4,7 @@ import Nav from "./components/Nav";
 import logo from "./assets/logo.png";
 import firewoodIcon from "../firewoodBank-icon.png";
 
-const tabs = ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics"];
+const tabs = ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics", "Worker Directory"];
 
 type Role = "admin" | "lead" | "staff" | "driver" | "volunteer";
 
@@ -76,6 +76,17 @@ type WorkOrderRow = {
   assignees_json?: string | null;
 };
 
+type UserRow = {
+  id: string;
+  name: string;
+  email?: string | null;
+  telephone?: string | null;
+  role: Role;
+  availability_notes?: string | null;
+  driver_license_status?: string | null;
+  vehicle?: string | null;
+};
+
 type DeliveryEventRow = {
   id: string;
   title: string;
@@ -84,6 +95,7 @@ type DeliveryEventRow = {
   end_date?: string | null;
   work_order_id?: string | null;
   color_code?: string | null;
+  assigned_user_ids_json?: string | null;
 };
 
 function LoginCard({
@@ -196,16 +208,20 @@ function App() {
   const [inventory, setInventory] = useState<InventoryRow[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrderRow[]>([]);
   const [deliveries, setDeliveries] = useState<DeliveryEventRow[]>([]);
+  const [users, setUsers] = useState<UserRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [showClientForm, setShowClientForm] = useState(false);
   const [showInventoryForm, setShowInventoryForm] = useState(false);
   const [showWorkOrderForm, setShowWorkOrderForm] = useState(false);
   const [clientError, setClientError] = useState<string | null>(null);
   const [workOrderError, setWorkOrderError] = useState<string | null>(null);
+  const [progressEdits, setProgressEdits] = useState<Record<string, { status: string; mileage: string }>>({});
+  const [selectedWorker, setSelectedWorker] = useState<UserRow | null>(null);
 
   const [clientForm, setClientForm] = useState({
     client_number: "",
-    name: "",
+    first_name: "",
+    last_name: "",
     physical_address_line1: "",
     physical_address_city: "",
     physical_address_state: "",
@@ -239,12 +255,15 @@ function App() {
     other_heat_source_other: "",
     mileage: "",
     mailingSameAsPhysical: true,
+    assignees: [] as string[],
+    helpers: [] as string[],
   });
 
   const [workOrderNewClientEnabled, setWorkOrderNewClientEnabled] = useState(false);
   const [workOrderNewClient, setWorkOrderNewClient] = useState({
     client_number: "",
-    name: "",
+    first_name: "",
+    last_name: "",
     physical_address_line1: "",
     physical_address_city: "",
     physical_address_state: "",
@@ -277,7 +296,10 @@ function App() {
   };
 
   const loadClients = async () => {
-    const data = await invoke<ClientRow[]>("list_clients");
+    const data = await invoke<ClientRow[]>("list_clients", {
+      role: session?.role ?? null,
+      hipaa_certified: session?.hipaaCertified ?? false,
+    });
     setClients(data);
   };
 
@@ -287,19 +309,37 @@ function App() {
   };
 
   const loadWorkOrders = async () => {
-    const data = await invoke<WorkOrderRow[]>("list_work_orders");
+    const data = await invoke<WorkOrderRow[]>("list_work_orders", {
+      role: session?.role ?? null,
+      username: session?.username ?? null,
+      hipaa_certified: session?.hipaaCertified ?? false,
+    });
     setWorkOrders(data);
+    const nextProgress: Record<string, { status: string; mileage: string }> = {};
+    data.forEach((wo) => {
+      nextProgress[wo.id] = { status: wo.status ?? "scheduled", mileage: wo.mileage != null ? String(wo.mileage) : "" };
+    });
+    setProgressEdits(nextProgress);
   };
 
   const loadDeliveries = async () => {
-    const data = await invoke<DeliveryEventRow[]>("list_delivery_events");
+    const data = await invoke<DeliveryEventRow[]>("list_delivery_events", {
+      role: session?.role ?? null,
+      username: session?.username ?? null,
+      hipaa_certified: session?.hipaaCertified ?? false,
+    });
     setDeliveries(data);
+  };
+
+  const loadUsers = async () => {
+    const data = await invoke<UserRow[]>("list_users");
+    setUsers(data);
   };
 
   const loadAll = async () => {
     setBusy(true);
     try {
-      await Promise.all([loadClients(), loadInventory(), loadWorkOrders(), loadDeliveries()]);
+      await Promise.all([loadClients(), loadInventory(), loadWorkOrders(), loadDeliveries(), loadUsers()]);
     } finally {
       setBusy(false);
     }
@@ -308,9 +348,11 @@ function App() {
   const canManage = session?.role === "admin" || session?.role === "lead";
   const canViewPII = session?.role === "admin" || (session?.role === "lead" && session.hipaaCertified);
   const canViewClientPII = canViewPII || session?.role === "driver";
-  const visibleTabs = useMemo(() => {
-    if (!session) return tabs;
+const visibleTabs = useMemo(() => {
+    if (!session) return tabs.filter((t) => t !== "Worker Directory");
     if (session.role === "volunteer" || session.role === "driver") return ["Dashboard", "Work Orders"];
+    if (session.role === "staff") return ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics"];
+    // admin / lead
     return tabs;
   }, [session]);
 
@@ -329,6 +371,38 @@ function App() {
       .join("")
       .toUpperCase();
   }, [session]);
+
+  const userDeliveryHours = useMemo(() => {
+    if (!session?.username) return { hours: 0, deliveries: 0, woodCreditCords: 0 };
+    const uname = session.username.toLowerCase();
+    const defaultHours = 1.5;
+    let totalHours = 0;
+    let totalDeliveries = 0;
+    deliveries.forEach((d) => {
+      let assigned: string[] = [];
+      try {
+        const arr = JSON.parse(d.assigned_user_ids_json ?? "[]");
+        if (Array.isArray(arr)) {
+          assigned = arr.map((x) => (typeof x === "string" ? x.toLowerCase() : "")).filter(Boolean);
+        }
+      } catch {
+        assigned = [];
+      }
+      if (assigned.includes(uname)) {
+        totalDeliveries += 1;
+        const startMs = Date.parse(d.start_date || "");
+        const endMs = d.end_date ? Date.parse(d.end_date) : NaN;
+        if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs > startMs) {
+          const diffHours = Math.max(0.25, (endMs - startMs) / (1000 * 60 * 60));
+          totalHours += diffHours;
+        } else {
+          totalHours += defaultHours;
+        }
+      }
+    });
+    const woodCreditCords = Math.round(((totalHours * 31) / 450) * 10) / 10;
+    return { hours: totalHours, deliveries: totalDeliveries, woodCreditCords };
+  }, [deliveries, session?.username]);
 
   return (
     <div className="app">
@@ -411,31 +485,24 @@ function App() {
                       </ul>
                     </div>
                   </div>
-                  {session?.role === "volunteer" && (
+                  {(session?.role === "volunteer" || session?.role === "driver") && (
                     <div className="two-up" style={{ marginTop: 12 }}>
                       <div className="card muted">
-                        <h3>Your volunteer stats</h3>
-                        {(() => {
-                          const volunteerHours = 0; // placeholder
-                          const driverHours = 0; // placeholder
-                          const woodCreditCords = Math.round(((volunteerHours * 31) / 450) * 10) / 10;
-                          return (
-                            <div className="stack">
-                              <div className="list-head">
-                                <span>Hours</span>
-                                <strong>{volunteerHours.toFixed(1)} h</strong>
-                              </div>
-                              <div className="list-head">
-                                <span>Driver hours</span>
-                                <strong>{driverHours.toFixed(1)} h</strong>
-                              </div>
-                              <div className="list-head">
-                                <span>Wood credit</span>
-                                <strong>{woodCreditCords.toFixed(1)} cords</strong>
-                              </div>
-                            </div>
-                          );
-                        })()}
+                        <h3>Your {session.role === "driver" ? "driver" : "volunteer"} stats</h3>
+                        <div className="stack">
+                          <div className="list-head">
+                            <span>Deliveries</span>
+                            <strong>{userDeliveryHours.deliveries}</strong>
+                          </div>
+                          <div className="list-head">
+                            <span>Hours (from assigned deliveries)</span>
+                            <strong>{userDeliveryHours.hours.toFixed(1)} h</strong>
+                          </div>
+                          <div className="list-head">
+                            <span>Wood credit (est.)</span>
+                            <strong>{userDeliveryHours.woodCreditCords.toFixed(1)} cords</strong>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -458,7 +525,8 @@ function App() {
                           } else {
                             setClientForm({
                               client_number: "",
-                              name: "",
+                              first_name: "",
+                              last_name: "",
                               physical_address_line1: "",
                               physical_address_city: "",
                               physical_address_state: "",
@@ -489,8 +557,9 @@ function App() {
                         setClientError(null);
                         setBusy(true);
                         try {
+                          const fullName = `${clientForm.first_name.trim()} ${clientForm.last_name.trim()}`.trim();
                           const conflicts = await invoke<ClientConflictRow[]>("check_client_conflict", {
-                            name: clientForm.name,
+                            name: fullName,
                           });
                           const conflictAtOtherAddress = conflicts.some((c) => {
                             const sameAddress =
@@ -507,6 +576,7 @@ function App() {
                           await invoke("create_client", {
                             input: {
                               ...clientForm,
+                              name: fullName,
                               physical_address_line2: null,
                               mailing_address_line1: null,
                               mailing_address_line2: null,
@@ -523,7 +593,8 @@ function App() {
                           await loadClients();
                           setClientForm({
                             client_number: "",
-                            name: "",
+                            first_name: "",
+                            last_name: "",
                             physical_address_line1: "",
                             physical_address_city: "",
                             physical_address_state: "",
@@ -549,11 +620,19 @@ function App() {
                         />
                       </label>
                       <label>
-                        Full name
+                        First name
                         <input
                           required
-                          value={clientForm.name}
-                          onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
+                          value={clientForm.first_name}
+                          onChange={(e) => setClientForm({ ...clientForm, first_name: e.target.value })}
+                        />
+                      </label>
+                      <label>
+                        Last name
+                        <input
+                          required
+                          value={clientForm.last_name}
+                          onChange={(e) => setClientForm({ ...clientForm, last_name: e.target.value })}
                         />
                       </label>
                       <label>
@@ -658,6 +737,55 @@ function App() {
                       <p className="muted">Press + to add a new client.</p>
                     )}
                   </div>
+
+                  {session?.role === "driver" && (
+                    <div className="list-card">
+                      <div className="list-head">
+                        <h3>My deliveries</h3>
+                        <button className="ghost" onClick={() => { loadDeliveries(); loadWorkOrders(); }} disabled={busy}>
+                          Refresh
+                        </button>
+                      </div>
+                      {(() => {
+                        const mine = deliveries.filter((d) => {
+                          try {
+                            const arr = JSON.parse(d.assigned_user_ids_json ?? "[]");
+                            if (Array.isArray(arr)) {
+                              return arr.some((a) =>
+                                typeof a === "string"
+                                  ? a.toLowerCase() === (session.username ?? "").toLowerCase()
+                                  : false
+                              );
+                            }
+                          } catch {
+                            return false;
+                          }
+                          return false;
+                        });
+                        return (
+                          <div className="table">
+                            <div className="table-head">
+                              <span>Title</span>
+                              <span>When</span>
+                              <span>Work order</span>
+                              <span>Type</span>
+                            </div>
+                            {mine.map((d) => (
+                              <div className="table-row" key={d.id}>
+                                <div>
+                                  <strong>{d.title}</strong>
+                                </div>
+                                <div>{d.start_date}</div>
+                                <div className="muted">{d.work_order_id ?? "—"}</div>
+                                <div className="pill">{d.event_type}</div>
+                              </div>
+                            ))}
+                            {!mine.length && <div className="table-row">No assigned deliveries.</div>}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
 
                   <div className="list-card">
                     <div className="list-head">
@@ -939,11 +1067,14 @@ function App() {
                               other_heat_source_other: "",
                               mileage: "",
                               mailingSameAsPhysical: true,
+                            assignees: [],
+                          helpers: [],
                             });
                             setWorkOrderNewClientEnabled(false);
                             setWorkOrderNewClient({
                               client_number: "",
-                              name: "",
+                            first_name: "",
+                            last_name: "",
                               physical_address_line1: "",
                               physical_address_city: "",
                               physical_address_state: "",
@@ -986,12 +1117,20 @@ function App() {
                         // Optional: create a new client inline for this work order.
                         if (!targetClient && workOrderNewClientEnabled) {
                           const nc = workOrderNewClient;
-                          if (!nc.name || !nc.client_number || !nc.physical_address_line1 || !nc.physical_address_city || !nc.physical_address_state) {
-                            setWorkOrderError("Please fill name, client #, and address for the new client.");
+                          if (
+                            !nc.first_name ||
+                            !nc.last_name ||
+                            !nc.client_number ||
+                            !nc.physical_address_line1 ||
+                            !nc.physical_address_city ||
+                            !nc.physical_address_state
+                          ) {
+                            setWorkOrderError("Please fill first/last name, client #, and address for the new client.");
                             return;
                           }
+                          const fullName = `${nc.first_name.trim()} ${nc.last_name.trim()}`.trim();
                           const conflicts = await invoke<ClientConflictRow[]>("check_client_conflict", {
-                            name: nc.name,
+                            name: fullName,
                           });
                           const conflictAtOtherAddress = conflicts.some((c) => {
                             const sameAddress =
@@ -1009,7 +1148,7 @@ function App() {
                             input: {
                               client_number: nc.client_number,
                               client_title: null,
-                              name: nc.name,
+                              name: fullName,
                               physical_address_line1: nc.physical_address_line1,
                               physical_address_line2: null,
                               physical_address_city: nc.physical_address_city,
@@ -1035,7 +1174,7 @@ function App() {
                           await loadClients();
                           targetClient = {
                             id: newClientId,
-                            name: nc.name,
+                              name: fullName,
                             client_number: nc.client_number,
                             client_title: null,
                             email: nc.email || null,
@@ -1100,6 +1239,12 @@ function App() {
                               notes: workOrderForm.notes || null,
                               scheduled_date: workOrderForm.scheduled_date || null,
                               status: workOrderForm.status,
+                              assignees_json: JSON.stringify([
+                                ...workOrderForm.assignees,
+                                ...workOrderForm.helpers
+                                  .map((h) => h.trim())
+                                  .filter((h) => h.length > 0),
+                              ]),
                               created_by_user_id: null,
                             },
                           });
@@ -1116,10 +1261,13 @@ function App() {
                             other_heat_source_other: "",
                             mileage: "",
                             mailingSameAsPhysical: true,
+                            assignees: [],
+                            helpers: [],
                           });
                           setWorkOrderNewClient({
                             client_number: "",
-                            name: "",
+                            first_name: "",
+                            last_name: "",
                             physical_address_line1: "",
                             physical_address_city: "",
                             physical_address_state: "",
@@ -1148,6 +1296,69 @@ function App() {
                           ))}
                         </select>
                       </label>
+                      <label className="span-2">
+                        Assign driver(s)
+                        <select
+                          multiple
+                          value={workOrderForm.assignees}
+                          onChange={(e) => {
+                            const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+                            setWorkOrderForm({ ...workOrderForm, assignees: selected });
+                          }}
+                        >
+                          {users
+                            .filter((u) => u.role === "driver")
+                            .map((u) => (
+                              <option key={u.id} value={u.name}>
+                                {u.name} {u.vehicle ? `• ${u.vehicle}` : ""} {u.availability_notes ? `• ${u.availability_notes}` : ""}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                      <div className="span-2" style={{ display: "grid", gap: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span className="muted">Workers (up to 4)</span>
+                          <button
+                            type="button"
+                            className="ghost"
+                            disabled={workOrderForm.helpers.length >= 4}
+                            onClick={() => {
+                              if (workOrderForm.helpers.length >= 4) return;
+                              setWorkOrderForm({
+                                ...workOrderForm,
+                                helpers: [...workOrderForm.helpers, ""],
+                              });
+                            }}
+                          >
+                            + Add Worker
+                          </button>
+                        </div>
+                        {workOrderForm.helpers.map((helper, idx) => (
+                          <div key={`helper-${idx}`} style={{ display: "flex", gap: 8 }}>
+                            <input
+                              type="text"
+                              placeholder="Worker first and last name"
+                              value={helper}
+                              onChange={(e) => {
+                                const next = [...workOrderForm.helpers];
+                                next[idx] = e.target.value;
+                                setWorkOrderForm({ ...workOrderForm, helpers: next });
+                              }}
+                            />
+                            <button
+                              type="button"
+                              className="ghost"
+                              onClick={() => {
+                                const next = [...workOrderForm.helpers];
+                                next.splice(idx, 1);
+                                setWorkOrderForm({ ...workOrderForm, helpers: next });
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                       <label className="checkbox span-2">
                         <input
                           type="checkbox"
@@ -1169,11 +1380,19 @@ function App() {
                             />
                           </label>
                           <label>
-                            New client name
+                            First name
                             <input
                               required
-                              value={workOrderNewClient.name}
-                              onChange={(e) => setWorkOrderNewClient({ ...workOrderNewClient, name: e.target.value })}
+                              value={workOrderNewClient.first_name}
+                              onChange={(e) => setWorkOrderNewClient({ ...workOrderNewClient, first_name: e.target.value })}
+                            />
+                          </label>
+                          <label>
+                            Last name
+                            <input
+                              required
+                              value={workOrderNewClient.last_name}
+                              onChange={(e) => setWorkOrderNewClient({ ...workOrderNewClient, last_name: e.target.value })}
                             />
                           </label>
                           <label>
@@ -1336,7 +1555,15 @@ function App() {
                         />
                       </div>
                       <div className="actions span-2">
-                        <button className="ping" type="submit" disabled={busy || !clients.length || !canManage}>
+                        <button
+                          className="ping"
+                          type="submit"
+                          disabled={
+                            busy ||
+                            !canManage ||
+                            (!workOrderNewClientEnabled && !clients.length)
+                          }
+                        >
                           Save work order
                         </button>
                         <button
@@ -1448,6 +1675,77 @@ function App() {
                                   <div>{wo.scheduled_date ?? "—"}</div>
                                   <div className="muted">{showPII ? wo.notes ?? "—" : "PII hidden"}</div>
                                 </>
+                              )}
+                              {(session?.role === "driver" || session?.role === "lead" || session?.role === "admin") && (
+                                <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
+                                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.1"
+                                      value={progressEdits[wo.id]?.mileage ?? ""}
+                                      onChange={(e) =>
+                                        setProgressEdits({
+                                          ...progressEdits,
+                                          [wo.id]: {
+                                            status: progressEdits[wo.id]?.status ?? wo.status,
+                                            mileage: e.target.value,
+                                          },
+                                        })
+                                      }
+                                      placeholder="Mileage"
+                                      style={{ width: 100 }}
+                                    />
+                                    {(session?.role === "lead" || session?.role === "admin") && (
+                                      <select
+                                        value={progressEdits[wo.id]?.status ?? wo.status}
+                                        onChange={(e) =>
+                                          setProgressEdits({
+                                            ...progressEdits,
+                                            [wo.id]: {
+                                              status: e.target.value,
+                                              mileage: progressEdits[wo.id]?.mileage ?? "",
+                                            },
+                                          })
+                                        }
+                                      >
+                                        <option value="draft">draft</option>
+                                        <option value="scheduled">scheduled</option>
+                                        <option value="in_progress">in_progress</option>
+                                        <option value="completed">completed</option>
+                                        <option value="cancelled">cancelled</option>
+                                      </select>
+                                    )}
+                                    <button
+                                      className="ghost"
+                                      type="button"
+                                      disabled={busy}
+                                      onClick={async () => {
+                                        const edit = progressEdits[wo.id] ?? { status: wo.status, mileage: "" };
+                                        if ((session?.role === "lead" || session?.role === "admin") && edit.status === "completed" && edit.mileage === "") {
+                                          setWorkOrderError("Mileage is required to mark completed.");
+                                          return;
+                                        }
+                                        setBusy(true);
+                                        try {
+                                          await invoke("update_work_order_status", {
+                                            input: {
+                                              work_order_id: wo.id,
+                                              status: session?.role === "lead" || session?.role === "admin" ? edit.status : "in_progress",
+                                              mileage: edit.mileage === "" ? null : Number(edit.mileage),
+                                            },
+                                        role: session?.role ?? null,
+                                          });
+                                          await loadWorkOrders();
+                                        } finally {
+                                          setBusy(false);
+                                        }
+                                      }}
+                                    >
+                                      Save status/mileage
+                                    </button>
+                                  </div>
+                                </div>
                               )}
                             </div>
                           ))}
@@ -1567,6 +1865,66 @@ function App() {
                   </div>
                 </div>
               )}
+
+              {activeTab === "Worker Directory" && session && (session.role === "admin" || session.role === "lead") && (
+                <div className="stack">
+                  <div className="list-card">
+                    <div className="list-head">
+                      <h3>Workers & Drivers ({users.length})</h3>
+                      <button className="ghost" onClick={loadUsers} disabled={busy}>
+                        Refresh
+                      </button>
+                    </div>
+                    <div className="table">
+                      <div className="table-head">
+                        <span>Name</span>
+                        <span>Phone</span>
+                        <span>Schedule</span>
+                        <span>Credentials</span>
+                      </div>
+                      {users.map((u) => (
+                        <div
+                          className="table-row"
+                          key={u.id}
+                          onDoubleClick={() => setSelectedWorker(u)}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <div>
+                            <strong>{u.name}</strong>
+                            <div className="muted">{u.role}</div>
+                          </div>
+                          <div className="muted">{u.telephone ?? "—"}</div>
+                          <div className="muted">{u.availability_notes ?? "—"}</div>
+                          <div className="muted">
+                            DL: {u.driver_license_status ?? "—"} | Vehicle: {u.vehicle ?? "—"} | HIPAA: unknown
+                          </div>
+                        </div>
+                      ))}
+                      {!users.length && <div className="table-row">No workers yet.</div>}
+                    </div>
+                  </div>
+
+                  {selectedWorker && (
+                    <div className="card">
+                      <div className="list-head">
+                        <h3>{selectedWorker.name}</h3>
+                        <button className="ghost" onClick={() => setSelectedWorker(null)}>
+                          Close
+                        </button>
+                      </div>
+                      <div className="stack">
+                        <div><strong>Role:</strong> {selectedWorker.role}</div>
+                        <div><strong>Phone:</strong> {selectedWorker.telephone ?? "—"}</div>
+                        <div><strong>Email:</strong> {selectedWorker.email ?? "—"}</div>
+                        <div><strong>Schedule:</strong> {selectedWorker.availability_notes ?? "—"}</div>
+                        <div><strong>Driver License:</strong> {selectedWorker.driver_license_status ?? "—"}</div>
+                        <div><strong>Working Vehicle:</strong> {selectedWorker.vehicle ?? "—"}</div>
+                        <div><strong>HIPAA Certified:</strong> unknown</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
 
             <section className="card">
@@ -1612,6 +1970,19 @@ function App() {
                   Dashboard, Clients, Inventory, plus a Rust↔React bridge test.
                 </p>
               </div>
+            </div>
+            <div className="card" style={{ marginTop: 12 }}>
+              <h3>Revision checklist (what to verify per stage)</h3>
+              <ul className="list">
+                <li><strong>Stage 1</strong>: App boots (Tauri window), nav buttons present, Ping returns “pong”.</li>
+                <li><strong>Stage 2</strong>: DB connects, client/inventory CRUD commands work (no migration errors).</li>
+                <li><strong>Stage 3</strong>: Client onboard form saves; duplicate-name-at-different-address warning fires.</li>
+                <li><strong>Stage 4</strong>: Inventory list shows thresholds; can add items; low-stock rows highlighted.</li>
+                <li><strong>Stage 5</strong>: Work orders create against clients; scheduled orders auto-create delivery events.</li>
+                <li><strong>Stage 5.1</strong>: Role gating enforced; PII masked for non-HIPAA; driver/volunteer only see assigned; mileage required on completion; status edits role-checked.</li>
+                <li><strong>Stage 5.2</strong>: Intake hardening pending—expect name split, client # auto-gen, validation, wood/delivery size (track when delivered).</li>
+                <li><strong>Stage 5.3</strong>: Worker Directory tab visible only to admin/lead; rows open detail on double-click.</li>
+              </ul>
             </div>
           </section>
           <LoginCard onLogin={setSession} />

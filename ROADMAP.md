@@ -34,6 +34,7 @@ npm install && tauri dev
 3️⃣ VERIFY:
 
 Check "What you should see" matches
+Review login screen “Revision checklist” for per-stage behaviors to smoke-test
 
 Test all new UI flows
 
@@ -128,7 +129,25 @@ Sub-stages to close gaps:
 - 5.1c: Server-side PII enforcement (role checks, driver-limited payloads, audit logging hooks; town and mileage initially derived from client address)
 - 5.1d: Volunteer/driver hours + wood-credit calc wired to persisted events
 
-### ⭕ **Stage 6: Dashboard + Calendar**
+### ⏳ **Stage 5.2: Work Order Intake Hardening (new)**
+Tighten intake UX/validation before Stage 6:
+- Split client name into first/last; auto-generate client number from name + entry month + 2 random digits; lock edit to admin
+- Enforce required: name, address, at least one contact (phone/email/other+specify); format phone `(###) ###-####`; city init-cap; state 2-letter uppercase and validated; ZIP `#####` or `#####-####`
+- Add wood size dropdown (12/14/16/Other + specify inches integer) and delivery size (1 cord / 1/3 cord / other numeric), carry both on work orders
+- Inventory impact: reserve wood on schedule/in-progress and deduct on completed; release on cancel
+- Driver assignment dropdown (licensed drivers from DB) unlocks scheduling; driver availability drives schedule choices; status/mileage editable only by lead/admin (driver can enter mileage and mark delivered pending approval)
+-only poeople with the DL flag are populated to the driver list for deliveries
+- Label work orders with creator display name (not username)
+-orders are to be entered by staff and admin only.
+
+### ⏳ **Stage 5.3: Worker Directory (new)**
+Admin/Lead-only Worker Directory tab:
+- List Volunteers/ staff with name, phone, schedule/availability, driver license status, working vehicle, HIPAA certification flag
+- Double-click row opens full profile detail
+- Tab hidden for non-admin/non-lead
+-full profile includes name, address, contact, availability, DL?, HIPAA Certified, working vehicle. It does not need to be in this order. ask lead in qwuestions for anything you think should be included.
+
+### ⭕ **Stage 6: Login + Dashboard + Calendar**
 Split/unsplit wood summary
 2-weeks-at-glance + monthly calendar (color-coded)
 Upcoming list + MOTD
