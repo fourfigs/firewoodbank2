@@ -128,8 +128,10 @@ Sub-stages to close gaps:
 - 5.1b: Persist assignments/mileage/availability/vehicle in backend schema + commands
 - 5.1c: Server-side PII enforcement (role checks, driver-limited payloads, audit logging hooks; town and mileage initially derived from client address)
 - 5.1d: Volunteer/driver hours + wood-credit calc wired to persisted events (0.75 minutes/mile; delivery assignments mirrored into delivery_events)
+- Closing a work order to “completed” requires mileage and records the lead/admin who closed it
+- Slice: Audit log persisted (audit_logs table) and MOTD surfaced on login newest→oldest
 
-### ⏳ **Stage 5.2: Work Order Intake Hardening (new)**
+### ⏳ **Stage 5.2: Work Order and Intake Hardening (new)**
 Tighten intake UX/validation before Stage 6:
 - Split client name into first/last; auto-generate client number from name + entry month + 2 random digits; lock edit to admin
 - Enforce required: name, address, at least one contact (phone/email/other+specify); format phone `(###) ###-####`; city init-cap; state 2-letter uppercase and validated; ZIP `#####` or `#####-####`
@@ -140,6 +142,7 @@ Tighten intake UX/validation before Stage 6:
 - Label work orders with creator display name (not username)
 -orders are to be entered by staff and admin only. — **implemented (UI + backend gate)**
 - Drivers can add up to four workers/helpers on a delivery — **implemented**
+-all clients can be workers, all workers can be driver/hipaa/working vehicle flagged, only leads get PII unfiltered, and drivers only see the name, address, and contact info
 
 ### ⏳ **Stage 5.3: Worker Directory (new)**
 Admin/Lead-only Worker Directory tab:

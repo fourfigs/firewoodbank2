@@ -3,16 +3,27 @@
 mod db;
 
 use anyhow::Result;
-use std::path::PathBuf;
 use db::init_pool;
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, SqlitePool, Transaction, Sqlite};
+use sqlx::{FromRow, Sqlite, SqlitePool, Transaction};
+use std::collections::HashSet;
+use std::path::PathBuf;
 use tauri::{Manager, State};
 use uuid::Uuid;
 
-fn audit(event: &str, role: &str, actor: &str) {
-    // Simple console-based audit trail placeholder.
-    println!("[audit] event={event} role={role} actor={actor}");
+async fn audit_db(pool: &SqlitePool, event: &str, role: &str, actor: &str) {
+    let _ = sqlx::query(
+        r#"
+        INSERT INTO audit_logs (id, event, role, actor, created_at)
+        VALUES (?, ?, ?, ?, datetime('now'))
+        "#,
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(event)
+    .bind(role)
+    .bind(actor)
+    .execute(pool)
+    .await;
 }
 
 #[derive(Clone)]
@@ -65,6 +76,33 @@ struct ClientInput {
     gate_combo: Option<String>,
     notes: Option<String>,
     created_by_user_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClientUpdateInput {
+    id: String,
+    client_number: String,
+    client_title: Option<String>,
+    name: String,
+    physical_address_line1: String,
+    physical_address_line2: Option<String>,
+    physical_address_city: String,
+    physical_address_state: String,
+    physical_address_postal_code: String,
+    mailing_address_line1: Option<String>,
+    mailing_address_line2: Option<String>,
+    mailing_address_city: Option<String>,
+    mailing_address_state: Option<String>,
+    mailing_address_postal_code: Option<String>,
+    telephone: Option<String>,
+    email: Option<String>,
+    date_of_onboarding: Option<String>,
+    how_did_they_hear_about_us: Option<String>,
+    referring_agency: Option<String>,
+    approval_status: Option<String>,
+    denial_reason: Option<String>,
+    gate_combo: Option<String>,
+    notes: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -122,6 +160,18 @@ struct InventoryRow {
     reorder_amount: Option<f64>,
     notes: Option<String>,
     reserved_quantity: f64,
+}
+
+#[derive(Debug, Deserialize)]
+struct InventoryUpdateInput {
+    id: String,
+    name: String,
+    category: Option<String>,
+    quantity_on_hand: f64,
+    unit: String,
+    reorder_threshold: f64,
+    reorder_amount: Option<f64>,
+    notes: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -193,6 +243,7 @@ struct UserRow {
     availability_notes: Option<String>,
     driver_license_status: Option<String>,
     vehicle: Option<String>,
+    hipaa_certified: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -219,6 +270,23 @@ struct DeliveryEventRow {
     assigned_user_ids_json: Option<String>,
 }
 
+#[derive(Debug, Serialize, FromRow)]
+struct MotdRow {
+    id: String,
+    message: String,
+    active_from: Option<String>,
+    active_to: Option<String>,
+    created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct MotdInput {
+    message: String,
+    active_from: Option<String>,
+    active_to: Option<String>,
+    created_by_user_id: Option<String>,
+}
+
 #[tauri::command]
 fn ping() -> String {
     "pong".to_string()
@@ -228,7 +296,7 @@ fn ping() -> String {
 async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
     let approval_status = input.approval_status.unwrap_or_else(|| "pending".to_string());
-    audit("create_client", "unknown", "unknown");
+    audit_db(&state.pool, "create_client", "unknown", "unknown").await;
 
     // Enforce: a name can only have one address; check conflicts before insert.
     let conflicts = sqlx::query_as::<_, ClientConflictRow>(
@@ -329,6 +397,7 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
 async fn list_clients(
     state: State<'_, AppState>,
     role: Option<String>,
+    username: Option<String>,
     hipaa_certified: Option<bool>,
 ) -> Result<Vec<ClientRow>, String> {
     let mut rows = sqlx::query_as::<_, ClientRow>(
@@ -362,9 +431,50 @@ async fn list_clients(
     .map_err(|e| e.to_string())?;
 
     let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let username_val = username.unwrap_or_default();
+    let username_lower = username_val.to_lowercase();
     let is_hipaa = hipaa_certified.unwrap_or(false);
-    audit("list_clients", &role_val, "unknown");
-    if !(role_val == "admin" || (role_val == "lead" && is_hipaa) || role_val == "driver") {
+    audit_db(&state.pool, "list_clients", &role_val, "unknown").await;
+    if role_val == "driver" {
+        // Drivers only see clients tied to work orders they are assigned to.
+        let assignments = sqlx::query!(
+            r#"
+            SELECT client_id, assignees_json
+            FROM work_orders
+            WHERE is_deleted = 0
+              AND client_id IS NOT NULL
+            "#
+        )
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        let mut allowed_ids: HashSet<String> = HashSet::new();
+        for row in assignments {
+            if let Some(client_id) = row.client_id {
+                let assignees: Vec<String> = serde_json::from_str(row.assignees_json.as_deref().unwrap_or("[]"))
+                    .unwrap_or_default();
+                let matched = assignees
+                    .iter()
+                    .map(|a| a.to_lowercase())
+                    .any(|a| a == username_lower);
+                if matched {
+                    allowed_ids.insert(client_id);
+                }
+            }
+        }
+
+        rows = rows
+            .into_iter()
+            .filter(|c| allowed_ids.contains(&c.id))
+            .map(|mut c| {
+                // Drivers do not need gate codes or notes from intake.
+                c.gate_combo = None;
+                c.notes = None;
+                c
+            })
+            .collect();
+    } else if !(role_val == "admin" || (role_val == "lead" && is_hipaa)) {
         rows.iter_mut().for_each(|c| {
             c.email = None;
             c.telephone = None;
@@ -377,6 +487,88 @@ async fn list_clients(
     }
 
     Ok(rows)
+}
+
+#[tauri::command]
+async fn update_client(state: State<'_, AppState>, input: ClientUpdateInput) -> Result<(), String> {
+    let approval_status = input.approval_status.unwrap_or_else(|| "pending".to_string());
+    audit_db(&state.pool, "update_client", "unknown", "unknown").await;
+
+    let query = r#"
+        UPDATE clients
+        SET client_number = ?,
+            client_title = ?,
+            name = ?,
+            physical_address_line1 = ?,
+            physical_address_line2 = ?,
+            physical_address_city = ?,
+            physical_address_state = ?,
+            physical_address_postal_code = ?,
+            mailing_address_line1 = ?,
+            mailing_address_line2 = ?,
+            mailing_address_city = ?,
+            mailing_address_state = ?,
+            mailing_address_postal_code = ?,
+            telephone = ?,
+            email = ?,
+            date_of_onboarding = ?,
+            how_did_they_hear_about_us = ?,
+            referring_agency = ?,
+            approval_status = ?,
+            denial_reason = ?,
+            gate_combo = ?,
+            notes = ?,
+            updated_at = datetime('now')
+        WHERE id = ?
+    "#;
+
+    sqlx::query(query)
+        .bind(&input.client_number)
+        .bind(&input.client_title)
+        .bind(&input.name)
+        .bind(&input.physical_address_line1)
+        .bind(&input.physical_address_line2)
+        .bind(&input.physical_address_city)
+        .bind(&input.physical_address_state)
+        .bind(&input.physical_address_postal_code)
+        .bind(&input.mailing_address_line1)
+        .bind(&input.mailing_address_line2)
+        .bind(&input.mailing_address_city)
+        .bind(&input.mailing_address_state)
+        .bind(&input.mailing_address_postal_code)
+        .bind(&input.telephone)
+        .bind(&input.email)
+        .bind(&input.date_of_onboarding)
+        .bind(&input.how_did_they_hear_about_us)
+        .bind(&input.referring_agency)
+        .bind(&approval_status)
+        .bind(&input.denial_reason)
+        .bind(&input.gate_combo)
+        .bind(&input.notes)
+        .bind(&input.id)
+        .execute(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_client(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    audit_db(&state.pool, "delete_client", "unknown", "unknown").await;
+    sqlx::query(
+        r#"
+        UPDATE clients
+        SET is_deleted = 1,
+            updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+    )
+    .bind(&id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -416,6 +608,7 @@ async fn create_inventory_item(
     input: InventoryInput,
 ) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
+    audit_db(&state.pool, "create_inventory_item", "unknown", "unknown").await;
     let query = r#"
         INSERT INTO inventory_items (
             id, name, category, quantity_on_hand, unit,
@@ -464,7 +657,60 @@ async fn list_inventory_items(state: State<'_, AppState>) -> Result<Vec<Inventor
     .await
     .map_err(|e| e.to_string())?;
 
+    audit_db(&state.pool, "list_inventory_items", "unknown", "unknown").await;
     Ok(rows)
+}
+
+#[tauri::command]
+async fn update_inventory_item(
+    state: State<'_, AppState>,
+    input: InventoryUpdateInput,
+) -> Result<(), String> {
+    audit_db(&state.pool, "update_inventory_item", "unknown", "unknown").await;
+    sqlx::query(
+        r#"
+        UPDATE inventory_items
+        SET name = ?,
+            category = ?,
+            quantity_on_hand = ?,
+            unit = ?,
+            reorder_threshold = ?,
+            reorder_amount = ?,
+            notes = ?,
+            updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+    )
+    .bind(&input.name)
+    .bind(&input.category)
+    .bind(input.quantity_on_hand)
+    .bind(&input.unit)
+    .bind(input.reorder_threshold)
+    .bind(input.reorder_amount)
+    .bind(&input.notes)
+    .bind(&input.id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_inventory_item(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    audit_db(&state.pool, "delete_inventory_item", "unknown", "unknown").await;
+    sqlx::query(
+        r#"
+        UPDATE inventory_items
+        SET is_deleted = 1,
+            updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+    )
+    .bind(&id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -480,7 +726,7 @@ async fn create_work_order(
     if role_val != "admin" && role_val != "staff" {
         return Err("Only staff or admin may create work orders".to_string());
     }
-    audit("create_work_order", &role_val, "unknown");
+    audit_db(&state.pool, "create_work_order", &role_val, "unknown").await;
 
     let query = r#"
         INSERT INTO work_orders (
@@ -639,7 +885,7 @@ async fn list_work_orders(
     let username_val = username.unwrap_or_default();
     let username_lower = username_val.to_lowercase();
     let is_hipaa = hipaa_certified.unwrap_or(false);
-    audit("list_work_orders", &role_val, &username_val);
+    audit_db(&state.pool, "list_work_orders", &role_val, &username_val).await;
 
     if role_val == "volunteer" || role_val == "driver" {
         rows = rows
@@ -758,6 +1004,7 @@ async fn create_delivery_event(
     input: DeliveryEventInput,
 ) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
+    audit_db(&state.pool, "create_delivery_event", "unknown", "unknown").await;
     let query = r#"
         INSERT INTO delivery_events (
             id, title, description, event_type, work_order_id,
@@ -795,7 +1042,8 @@ async fn list_users(state: State<'_, AppState>) -> Result<Vec<UserRow>, String> 
             role,
             availability_notes,
             driver_license_status,
-            vehicle
+            vehicle,
+            COALESCE(hipaa_certified, 0) as hipaa_certified
         FROM users
         WHERE is_deleted = 0
         ORDER BY name ASC
@@ -805,6 +1053,7 @@ async fn list_users(state: State<'_, AppState>) -> Result<Vec<UserRow>, String> 
     .await
     .map_err(|e| e.to_string())?;
 
+    audit_db(&state.pool, "list_users", "unknown", "unknown").await;
     Ok(rows)
 }
 
@@ -831,7 +1080,7 @@ async fn update_work_order_assignees(
     if role_val != "admin" && role_val != "lead" {
         return Err("Only admins or leads can assign drivers/helpers".to_string());
     }
-    audit("update_work_order_assignees", &role_val, "unknown");
+    audit_db(&state.pool, "update_work_order_assignees", &role_val, "unknown").await;
 
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
 
@@ -873,7 +1122,7 @@ async fn update_work_order_status(
     role: Option<String>,
 ) -> Result<(), String> {
     let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
-    audit("update_work_order_status", &role_val, "unknown");
+    audit_db(&state.pool, "update_work_order_status", &role_val, "unknown").await;
 
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
 
@@ -963,7 +1212,7 @@ async fn list_delivery_events(
     let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
     let username_val = username.unwrap_or_default();
     let is_hipaa = hipaa_certified.unwrap_or(false);
-    audit("list_delivery_events", &role_val, &username_val);
+    audit_db(&state.pool, "list_delivery_events", &role_val, &username_val).await;
 
     if role_val == "driver" || role_val == "volunteer" {
         let uname = username_val.to_lowercase();
@@ -988,6 +1237,63 @@ async fn list_delivery_events(
     Ok(rows)
 }
 
+#[tauri::command]
+async fn list_motd(
+    state: State<'_, AppState>,
+    active_only: Option<bool>,
+) -> Result<Vec<MotdRow>, String> {
+    let only_active = active_only.unwrap_or(true);
+    let mut query = String::from(
+        r#"
+        SELECT id, message, active_from, active_to, created_at
+        FROM motd
+        WHERE is_deleted = 0
+        "#,
+    );
+    if only_active {
+        query.push_str(
+            r#"
+              AND (active_from IS NULL OR datetime(active_from) <= datetime('now'))
+              AND (active_to IS NULL OR datetime(active_to) >= datetime('now'))
+            "#,
+        );
+    }
+    query.push_str(" ORDER BY datetime(created_at) DESC");
+
+    let rows = sqlx::query_as::<_, MotdRow>(&query)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    audit_db(&state.pool, "list_motd", "unknown", "unknown").await;
+    Ok(rows)
+}
+
+#[tauri::command]
+async fn create_motd(
+    state: State<'_, AppState>,
+    input: MotdInput,
+) -> Result<String, String> {
+    let id = Uuid::new_v4().to_string();
+    sqlx::query(
+        r#"
+        INSERT INTO motd (id, message, active_from, active_to, created_by_user_id)
+        VALUES (?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(&id)
+    .bind(&input.message)
+    .bind(&input.active_from)
+    .bind(&input.active_to)
+    .bind(&input.created_by_user_id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    audit_db(&state.pool, "create_motd", "unknown", "unknown").await;
+    Ok(id)
+}
+
 fn main() -> Result<()> {
     let app = tauri::Builder::default()
         .setup(|app| {
@@ -1004,15 +1310,21 @@ fn main() -> Result<()> {
             create_client,
             list_clients,
             check_client_conflict,
+            update_client,
+            delete_client,
             create_inventory_item,
             list_inventory_items,
+            update_inventory_item,
+            delete_inventory_item,
             create_work_order,
             list_work_orders,
             update_work_order_assignees,
             update_work_order_status,
             create_delivery_event,
             list_delivery_events,
-            list_users
+            list_users,
+            list_motd,
+            create_motd
         ])
         .run(tauri::generate_context!())?;
 

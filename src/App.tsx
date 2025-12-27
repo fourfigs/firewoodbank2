@@ -104,6 +104,47 @@ type DeliveryEventRow = {
   assigned_user_ids_json?: string | null;
 };
 
+type MotdRow = {
+  id: string;
+  message: string;
+  active_from?: string | null;
+  active_to?: string | null;
+  created_at: string;
+};
+
+const buildClientNumber = (first: string, last: string) => {
+  const clean = (value: string) => value.replace(/[^A-Za-z]/g, "").toUpperCase();
+  const f = clean(first);
+  const l = clean(last);
+  if (!f || !l) return "";
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const yy = String(now.getFullYear()).slice(-2);
+  const rand = String(Math.floor(Math.random() * 100)).padStart(2, "0");
+  return `${l}-${f}-${mm}${yy}-${rand}`;
+};
+
+const normalizePhone = (value: string) => {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return value.trim();
+};
+
+const isValidPhone = (value: string) => /^\(\d{3}\) \d{3}-\d{4}$/.test(value);
+const normalizeState = (value: string) => value.trim().toUpperCase();
+const isValidState = (value: string) => /^[A-Z]{2}$/.test(value);
+const normalizePostal = (value: string) => value.trim();
+const isValidPostal = (value: string) => /^\d{5}(?:-\d{4})?$/.test(value);
+const initCapCity = (value: string) =>
+  value
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+
 function LoginCard({
   onLogin,
 }: {
@@ -112,6 +153,7 @@ function LoginCard({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [motdItems, setMotdItems] = useState<MotdRow[]>([]);
   const isMounted = useRef(true);
 
   const resolveRole = (input: string): Role => {
@@ -129,6 +171,21 @@ function LoginCard({
     return () => {
       isMounted.current = false;
     };
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const items = await invoke<MotdRow[]>("list_motd", { active_only: true });
+        // Backend returns newest first, but ensure ordering just in case.
+        items.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+        if (isMounted.current) {
+          setMotdItems(items);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    })();
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -160,6 +217,20 @@ function LoginCard({
       <div className="badge" style={{ marginBottom: 8 }}>
         Demo accounts: admin/admin, lead/lead, staff/staff, driver/driver, volunteer/volunteer
       </div>
+      {motdItems.length > 0 && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div className="list-head">
+            <strong>Notes (newest first)</strong>
+          </div>
+          <div className="stack" style={{ gap: 6, maxHeight: 160, overflowY: "auto" }}>
+            {motdItems.map((m) => (
+              <div key={m.id} className="muted" style={{ borderBottom: "1px solid #eee", paddingBottom: 4 }}>
+                {m.message}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <form onSubmit={handleSubmit} className="two-up">
         <div className="field">
           <label htmlFor="username">Username</label>
@@ -228,6 +299,7 @@ function App() {
     client_number: "",
     first_name: "",
     last_name: "",
+    date_of_onboarding: new Date().toISOString().slice(0, 10),
     physical_address_line1: "",
     physical_address_city: "",
     physical_address_state: "",
@@ -274,6 +346,7 @@ function App() {
     client_number: "",
     first_name: "",
     last_name: "",
+    date_of_onboarding: new Date().toISOString().slice(0, 10),
     physical_address_line1: "",
     physical_address_city: "",
     physical_address_state: "",
@@ -308,6 +381,7 @@ function App() {
   const loadClients = async () => {
     const data = await invoke<ClientRow[]>("list_clients", {
       role: session?.role ?? null,
+      username: session?.username ?? null,
       hipaa_certified: session?.hipaaCertified ?? false,
     });
     setClients(data);
@@ -349,7 +423,12 @@ function App() {
   const loadAll = async () => {
     setBusy(true);
     try {
-      await Promise.all([loadClients(), loadInventory(), loadWorkOrders(), loadDeliveries(), loadUsers()]);
+      const tasks: Promise<unknown>[] = [];
+      if (session?.role === "admin" || session?.role === "lead" || session?.role === "staff") {
+        tasks.push(loadClients(), loadInventory(), loadUsers());
+      }
+      tasks.push(loadWorkOrders(), loadDeliveries());
+      await Promise.all(tasks);
     } finally {
       setBusy(false);
     }
@@ -359,13 +438,13 @@ function App() {
   const canCreateWorkOrders = session?.role === "admin" || session?.role === "staff";
   const canViewPII = session?.role === "admin" || (session?.role === "lead" && session.hipaaCertified);
   const canViewClientPII = canViewPII || session?.role === "driver";
-const visibleTabs = useMemo(() => {
-    if (!session) return tabs.filter((t) => t !== "Worker Directory");
-    if (session.role === "volunteer" || session.role === "driver") return ["Dashboard", "Work Orders"];
-    if (session.role === "staff") return ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics"];
-    // admin / lead
-    return tabs;
-  }, [session]);
+  const visibleTabs = useMemo(() => {
+      if (!session) return tabs.filter((t) => t !== "Worker Directory");
+      if (session.role === "volunteer" || session.role === "driver") return ["Dashboard", "Work Orders"];
+      if (session.role === "staff") return ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics"];
+      // admin / lead
+      return tabs;
+    }, [session]);
 
   useEffect(() => {
     if (session) {
@@ -551,6 +630,7 @@ const visibleTabs = useMemo(() => {
                               client_number: "",
                               first_name: "",
                               last_name: "",
+                              date_of_onboarding: new Date().toISOString().slice(0, 10),
                               physical_address_line1: "",
                               physical_address_city: "",
                               physical_address_state: "",
@@ -597,20 +677,60 @@ const visibleTabs = useMemo(() => {
                             return;
                           }
 
+                          const generatedNumber =
+                            clientForm.client_number || buildClientNumber(clientForm.first_name, clientForm.last_name);
+                          if (!generatedNumber) {
+                            setClientError("Client number could not be generated. Add first and last name.");
+                            return;
+                          }
+                          const normalizedState = normalizeState(clientForm.physical_address_state);
+                          if (!isValidState(normalizedState)) {
+                            setClientError("State must be two letters (e.g., VT).");
+                            return;
+                          }
+                          const normalizedPostal = normalizePostal(clientForm.physical_address_postal_code);
+                          if (!isValidPostal(normalizedPostal)) {
+                            setClientError("Postal code must be 5 digits or 5+4 (##### or #####-####).");
+                            return;
+                          }
+                          const normalizedCity = initCapCity(clientForm.physical_address_city);
+                          const normalizedPhone = clientForm.telephone ? normalizePhone(clientForm.telephone) : "";
+                          if (normalizedPhone && !isValidPhone(normalizedPhone)) {
+                            setClientError("Phone must use (###) ###-#### format.");
+                            return;
+                          }
+                          const trimmedEmail = clientForm.email.trim();
+                          if (!normalizedPhone && !trimmedEmail) {
+                            setClientError("Provide at least one contact method (phone or email).");
+                            return;
+                          }
+                          if (!clientForm.date_of_onboarding) {
+                            setClientError("Onboarding date is required.");
+                            return;
+                          }
+
                           await invoke("create_client", {
                             input: {
                               ...clientForm,
+                              client_number: generatedNumber,
                               name: fullName,
+                              date_of_onboarding: `${clientForm.date_of_onboarding}T00:00:00`,
                               physical_address_line2: null,
+                              physical_address_city: normalizedCity,
+                              physical_address_state: normalizedState,
+                              physical_address_postal_code: normalizedPostal,
                               mailing_address_line1: null,
                               mailing_address_line2: null,
                               mailing_address_city: null,
                               mailing_address_state: null,
                               mailing_address_postal_code: null,
-                              date_of_onboarding: null,
                               how_did_they_hear_about_us: null,
                               referring_agency: null,
                               denial_reason: null,
+                              telephone: normalizedPhone || null,
+                              email: trimmedEmail || null,
+                              gate_combo: clientForm.gate_combo || null,
+                              notes: clientForm.notes || null,
                               created_by_user_id: null,
                             },
                           });
@@ -619,6 +739,7 @@ const visibleTabs = useMemo(() => {
                             client_number: "",
                             first_name: "",
                             last_name: "",
+                            date_of_onboarding: new Date().toISOString().slice(0, 10),
                             physical_address_line1: "",
                             physical_address_city: "",
                             physical_address_state: "",
@@ -639,8 +760,8 @@ const visibleTabs = useMemo(() => {
                         Client #
                         <input
                           required
+                              readOnly
                           value={clientForm.client_number}
-                          onChange={(e) => setClientForm({ ...clientForm, client_number: e.target.value })}
                         />
                       </label>
                       <label>
@@ -648,7 +769,13 @@ const visibleTabs = useMemo(() => {
                         <input
                           required
                           value={clientForm.first_name}
-                          onChange={(e) => setClientForm({ ...clientForm, first_name: e.target.value })}
+                              onChange={(e) =>
+                                setClientForm((prev) => ({
+                                  ...prev,
+                                  first_name: e.target.value,
+                                  client_number: buildClientNumber(e.target.value, prev.last_name),
+                                }))
+                              }
                         />
                       </label>
                       <label>
@@ -656,14 +783,35 @@ const visibleTabs = useMemo(() => {
                         <input
                           required
                           value={clientForm.last_name}
-                          onChange={(e) => setClientForm({ ...clientForm, last_name: e.target.value })}
+                              onChange={(e) =>
+                                setClientForm((prev) => ({
+                                  ...prev,
+                                  last_name: e.target.value,
+                                  client_number: buildClientNumber(prev.first_name, e.target.value),
+                                }))
+                              }
                         />
                       </label>
+                          <label>
+                            Onboarding date
+                            <input
+                              type="date"
+                              required
+                              value={clientForm.date_of_onboarding}
+                              onChange={(e) => setClientForm({ ...clientForm, date_of_onboarding: e.target.value })}
+                            />
+                          </label>
                       <label>
                         Telephone
                         <input
                           value={clientForm.telephone}
-                          onChange={(e) => setClientForm({ ...clientForm, telephone: e.target.value })}
+                              onChange={(e) => setClientForm({ ...clientForm, telephone: e.target.value })}
+                              onBlur={(e) =>
+                                setClientForm((prev) => ({
+                                  ...prev,
+                                  telephone: normalizePhone(e.target.value),
+                                }))
+                              }
                         />
                       </label>
                       <label>
@@ -1106,6 +1254,7 @@ const visibleTabs = useMemo(() => {
                               client_number: "",
                               first_name: "",
                               last_name: "",
+                              date_of_onboarding: new Date().toISOString().slice(0, 10),
                               physical_address_line1: "",
                               physical_address_city: "",
                               physical_address_state: "",
@@ -1136,6 +1285,52 @@ const visibleTabs = useMemo(() => {
                           setWorkOrderError("Mileage must be a number.");
                           return;
                         }
+                        const statusNeedsDriver = ["scheduled", "in_progress", "completed"].includes(
+                          workOrderForm.status,
+                        );
+                        if (statusNeedsDriver && workOrderForm.assignees.length === 0) {
+                          setWorkOrderError("Assign at least one available driver for scheduled or in-progress work.");
+                          return;
+                        }
+                        if (statusNeedsDriver && !workOrderForm.scheduled_date) {
+                          setWorkOrderError("Pick a scheduled date/time when assigning a driver.");
+                          return;
+                        }
+                        if (!workOrderForm.scheduled_date) {
+                          setWorkOrderError("Scheduled date/time is required.");
+                          return;
+                        }
+                        if (workOrderForm.scheduled_date && workOrderForm.assignees.length > 0) {
+                          const scheduledDay = (() => {
+                            try {
+                              const d = new Date(workOrderForm.scheduled_date);
+                              return d.toLocaleDateString("en-US", { weekday: "short" }).toLowerCase();
+                            } catch {
+                              return "";
+                            }
+                          })();
+                          if (scheduledDay) {
+                            const unavailable = users
+                              .filter((u) => workOrderForm.assignees.includes(u.name))
+                              .filter((u) => {
+                                const note = (u.availability_notes ?? "").toLowerCase();
+                                const mentionsDay =
+                                  note.includes(scheduledDay) ||
+                                  note.includes(scheduledDay.replace(".", "")) ||
+                                  note.includes("any");
+                                const flaggedUnavailable =
+                                  note.includes("unavailable") || note.includes("off");
+                                return flaggedUnavailable && mentionsDay;
+                              })
+                              .map((u) => u.name);
+                            if (unavailable.length) {
+                              setWorkOrderError(
+                                `Selected driver(s) are marked unavailable on that day: ${unavailable.join(", ")}.`,
+                              );
+                              return;
+                            }
+                          }
+                        }
                         let targetClient = clients.find((c) => c.id === workOrderForm.client_id) || null;
                         if (!targetClient && !workOrderNewClientEnabled) {
                           setWorkOrderError("Work orders require a client. Select or create a client first.");
@@ -1152,11 +1347,38 @@ const visibleTabs = useMemo(() => {
                             !nc.first_name ||
                             !nc.last_name ||
                             !nc.client_number ||
+                            !nc.date_of_onboarding ||
                             !nc.physical_address_line1 ||
                             !nc.physical_address_city ||
                             !nc.physical_address_state
                           ) {
-                            setWorkOrderError("Please fill first/last name, client #, and address for the new client.");
+                            setWorkOrderError("Please fill first/last name, client #, onboarding date, and address for the new client.");
+                            return;
+                          }
+                          const ncState = normalizeState(nc.physical_address_state);
+                          if (!isValidState(ncState)) {
+                            setWorkOrderError("New client state must be two letters.");
+                            return;
+                          }
+                          const ncPostal = normalizePostal(nc.physical_address_postal_code);
+                          if (ncPostal && !isValidPostal(ncPostal)) {
+                            setWorkOrderError("New client postal code must be 5 digits or 5+4.");
+                            return;
+                          }
+                          const ncCity = initCapCity(nc.physical_address_city);
+                          const ncPhone = nc.telephone ? normalizePhone(nc.telephone) : "";
+                          if (ncPhone && !isValidPhone(ncPhone)) {
+                            setWorkOrderError("New client phone must be (###) ###-####.");
+                            return;
+                          }
+                          const ncEmail = nc.email.trim();
+                          if (!ncPhone && !ncEmail) {
+                            setWorkOrderError("Provide at least one contact (phone/email) for the new client.");
+                            return;
+                          }
+                          const ncDate = nc.date_of_onboarding;
+                          if (!ncDate) {
+                            setWorkOrderError("New client onboarding date is required.");
                             return;
                           }
                           const fullName = `${nc.first_name.trim()} ${nc.last_name.trim()}`.trim();
@@ -1182,17 +1404,17 @@ const visibleTabs = useMemo(() => {
                               name: fullName,
                               physical_address_line1: nc.physical_address_line1,
                               physical_address_line2: null,
-                              physical_address_city: nc.physical_address_city,
-                              physical_address_state: nc.physical_address_state,
-                              physical_address_postal_code: nc.physical_address_postal_code,
+                              physical_address_city: ncCity,
+                              physical_address_state: ncState,
+                              physical_address_postal_code: ncPostal,
+                              date_of_onboarding: `${ncDate}T00:00:00`,
                               mailing_address_line1: null,
                               mailing_address_line2: null,
                               mailing_address_city: null,
                               mailing_address_state: null,
                               mailing_address_postal_code: null,
-                              telephone: nc.telephone,
-                              email: nc.email,
-                              date_of_onboarding: null,
+                              telephone: ncPhone || null,
+                              email: ncEmail || null,
                               how_did_they_hear_about_us: null,
                               referring_agency: null,
                               approval_status: "pending",
@@ -1340,6 +1562,7 @@ const visibleTabs = useMemo(() => {
                             client_number: "",
                             first_name: "",
                             last_name: "",
+                            date_of_onboarding: new Date().toISOString().slice(0, 10),
                             physical_address_line1: "",
                             physical_address_city: "",
                             physical_address_state: "",
@@ -1496,6 +1719,7 @@ const visibleTabs = useMemo(() => {
                             New client #
                             <input
                               required
+                              readOnly
                               value={workOrderNewClient.client_number}
                               onChange={(e) =>
                                 setWorkOrderNewClient({ ...workOrderNewClient, client_number: e.target.value })
@@ -1507,7 +1731,13 @@ const visibleTabs = useMemo(() => {
                             <input
                               required
                               value={workOrderNewClient.first_name}
-                              onChange={(e) => setWorkOrderNewClient({ ...workOrderNewClient, first_name: e.target.value })}
+                              onChange={(e) =>
+                                setWorkOrderNewClient((prev) => ({
+                                  ...prev,
+                                  first_name: e.target.value,
+                                  client_number: buildClientNumber(e.target.value, prev.last_name),
+                                }))
+                              }
                             />
                           </label>
                           <label>
@@ -1515,7 +1745,27 @@ const visibleTabs = useMemo(() => {
                             <input
                               required
                               value={workOrderNewClient.last_name}
-                              onChange={(e) => setWorkOrderNewClient({ ...workOrderNewClient, last_name: e.target.value })}
+                              onChange={(e) =>
+                                setWorkOrderNewClient((prev) => ({
+                                  ...prev,
+                                  last_name: e.target.value,
+                                  client_number: buildClientNumber(prev.first_name, e.target.value),
+                                }))
+                              }
+                            />
+                          </label>
+                          <label>
+                            Onboarding date
+                            <input
+                              type="date"
+                              required
+                              value={workOrderNewClient.date_of_onboarding}
+                              onChange={(e) =>
+                                setWorkOrderNewClient({
+                                  ...workOrderNewClient,
+                                  date_of_onboarding: e.target.value,
+                                })
+                              }
                             />
                           </label>
                           <label>
