@@ -137,6 +137,14 @@ Sub-stages to close gaps:
   - User CRUD (availability/vehicle/DL/HIPAA) in Worker Directory (Stage 5.1b)
   - Town derivation for volunteer view + audit log viewer/export (Stage 5.1c)
 
+### ✅ Stage Prompts Reference (used and implemented across stages 0–5)
+- Stage 0 prompt: Windows desktop–first Tauri 2 + React + TypeScript + SQLite; sync-ready schema/DTOs for User, Client, InventoryItem, WorkOrder, DeliveryEvent, Invoice, MOTD, ChangeRequest; UUID + audit/sync fields; infer fields from Onboard/Order/Invoice; output Rust/SQL + TS DTOs; call out missing/ambiguous.
+- Stage 1 prompt: Scaffold Tauri 2 app (Windows), React+TS frontend, nav shell (Dashboard, Clients, Inventory, Work Orders, Admin, Driver placeholder), Tauri `ping` command and React caller; include run commands.
+- Stage 2 prompt: Add SQLite/migrations for all entities with sync fields; Rust CRUD for Client/Inventory; Tauri commands create/update/list for both; handle createdAt/updatedAt/isDeleted/UUID.
+- Stage 3 prompt: Clients module with search/filter, detail/edit with all onboard fields (title, clientNumber, onboarding date, addresses, phones, email, how heard, referring agency, approvalStatus+denialReason, gateCombo, notes), delivery metrics placeholders, backend wiring.
+- Stage 4 prompt: Inventory module with list/detail, CRUD for operational items, fields (name, category, currentQuantity, unit, reorderThreshold, isActive), derived belowThreshold + orderMessage, “Needs restock” view for dashboard/admin.
+- Stage 5 prompt: Work Orders + DeliveryEvents with full Order fields, client snapshot/link, addresses/directions/gate combo/heat sources/notes/dateOfOnboarding/scheduledDate/status; DeliveryEvent tied to WorkOrder (type/title/notes/start/end/colorCode); create WorkOrder from Client and auto-create DeliveryEvent when scheduled.
+
 ### ⏳ **Stage 5.2: Work Order and Intake Hardening (new)**
 Tighten intake UX/validation before Stage 6:
 - Split client name into first/last; auto-generate client number from name + entry month + 2 random digits; lock edit to admin
