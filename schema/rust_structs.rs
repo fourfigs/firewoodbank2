@@ -142,7 +142,7 @@ pub enum UserRole {
     Admin,
     Lead,
     Staff,
-    Driver,
+    Volunteer,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -154,7 +154,11 @@ pub struct User {
     pub role: UserRole,
     pub availability_notes: Option<String>,
     pub driver_license_status: Option<String>,
+    pub driver_license_number: Option<String>,
+    pub driver_license_expires_on: Option<String>,
     pub vehicle: Option<String>,
+    pub is_driver: bool,
+    pub hipaa_certified: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

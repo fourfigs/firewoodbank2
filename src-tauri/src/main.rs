@@ -113,6 +113,10 @@ struct ClientRow {
     email: Option<String>,
     telephone: Option<String>,
     approval_status: String,
+    date_of_onboarding: Option<String>,
+    how_did_they_hear_about_us: Option<String>,
+    referring_agency: Option<String>,
+    denial_reason: Option<String>,
     physical_address_line1: String,
     physical_address_line2: Option<String>,
     physical_address_city: String,
@@ -242,8 +246,11 @@ struct UserRow {
     role: String,
     availability_notes: Option<String>,
     driver_license_status: Option<String>,
+    driver_license_number: Option<String>,
+    driver_license_expires_on: Option<String>,
     vehicle: Option<String>,
     hipaa_certified: i64,
+    is_driver: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -399,6 +406,7 @@ async fn list_clients(
     role: Option<String>,
     username: Option<String>,
     hipaa_certified: Option<bool>,
+    is_driver: Option<bool>,
 ) -> Result<Vec<ClientRow>, String> {
     let mut rows = sqlx::query_as::<_, ClientRow>(
         r#"
@@ -409,6 +417,10 @@ async fn list_clients(
             email,
             telephone,
             approval_status,
+            date_of_onboarding,
+            how_did_they_hear_about_us,
+            referring_agency,
+            denial_reason,
             physical_address_line1,
             physical_address_line2,
             physical_address_city,
@@ -434,8 +446,9 @@ async fn list_clients(
     let username_val = username.unwrap_or_default();
     let username_lower = username_val.to_lowercase();
     let is_hipaa = hipaa_certified.unwrap_or(false);
+    let driver_capable = is_driver.unwrap_or(false);
     audit_db(&state.pool, "list_clients", &role_val, "unknown").await;
-    if role_val == "driver" {
+    if driver_capable {
         // Drivers only see clients tied to work orders they are assigned to.
         let assignments = sqlx::query!(
             r#"
@@ -451,7 +464,8 @@ async fn list_clients(
 
         let mut allowed_ids: HashSet<String> = HashSet::new();
         for row in assignments {
-            if let Some(client_id) = row.client_id {
+            let client_id = row.client_id.clone();
+            if !client_id.is_empty() {
                 let assignees: Vec<String> = serde_json::from_str(row.assignees_json.as_deref().unwrap_or("[]"))
                     .unwrap_or_default();
                 let matched = assignees
@@ -848,6 +862,7 @@ async fn list_work_orders(
     role: Option<String>,
     username: Option<String>,
     hipaa_certified: Option<bool>,
+    is_driver: Option<bool>,
 ) -> Result<Vec<WorkOrderRow>, String> {
     let mut rows = sqlx::query_as::<_, WorkOrderRow>(
         r#"
@@ -885,9 +900,10 @@ async fn list_work_orders(
     let username_val = username.unwrap_or_default();
     let username_lower = username_val.to_lowercase();
     let is_hipaa = hipaa_certified.unwrap_or(false);
+    let driver_capable = is_driver.unwrap_or(false);
     audit_db(&state.pool, "list_work_orders", &role_val, &username_val).await;
 
-    if role_val == "volunteer" || role_val == "driver" {
+    if role_val == "volunteer" || driver_capable {
         rows = rows
             .into_iter()
             .filter(|wo| {
@@ -958,11 +974,11 @@ async fn adjust_inventory_for_transition_tx(
         LIMIT 1
         "#
     )
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?;
 
     if let Some(record) = inventory_row {
-        let mut reserved = record.reserved_quantity.unwrap_or(0.0);
+        let mut reserved = record.reserved_quantity;
         let mut on_hand = record.quantity_on_hand;
         if !prev_reserved && next_reserved {
             reserved += delivery_size_cords;
@@ -1042,8 +1058,11 @@ async fn list_users(state: State<'_, AppState>) -> Result<Vec<UserRow>, String> 
             role,
             availability_notes,
             driver_license_status,
+            driver_license_number,
+            driver_license_expires_on,
             vehicle,
-            COALESCE(hipaa_certified, 0) as hipaa_certified
+            COALESCE(hipaa_certified, 0) as hipaa_certified,
+            COALESCE(is_driver, 0) as is_driver
         FROM users
         WHERE is_deleted = 0
         ORDER BY name ASC
@@ -1068,6 +1087,75 @@ struct WorkOrderStatusInput {
     work_order_id: String,
     status: Option<String>,
     mileage: Option<f64>,
+    is_driver: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserUpdateInput {
+    id: String,
+    availability_notes: Option<String>,
+    driver_license_status: Option<String>,
+    driver_license_number: Option<String>,
+    driver_license_expires_on: Option<String>,
+    vehicle: Option<String>,
+    hipaa_certified: Option<bool>,
+    is_driver: Option<bool>,
+}
+
+#[tauri::command]
+async fn update_user_flags(
+    state: State<'_, AppState>,
+    input: UserUpdateInput,
+    role: Option<String>,
+) -> Result<(), String> {
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    if role_val != "admin" && role_val != "lead" {
+        return Err("Only admins or leads can update users".to_string());
+    }
+    audit_db(&state.pool, "update_user_flags", &role_val, "unknown").await;
+
+    let status_clean = input
+        .driver_license_status
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let expiry_clean = input
+        .driver_license_expires_on
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let wants_driver = input.is_driver.unwrap_or(false);
+    let final_is_driver = wants_driver && status_clean.is_some() && expiry_clean.is_some();
+    let hipaa = input.hipaa_certified.unwrap_or(false);
+
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET availability_notes = ?,
+            driver_license_status = ?,
+            driver_license_number = ?,
+            driver_license_expires_on = ?,
+            vehicle = ?,
+            hipaa_certified = ?,
+            is_driver = ?,
+            updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+    )
+    .bind(&input.availability_notes)
+    .bind(&status_clean)
+    .bind(&input.driver_license_number)
+    .bind(&expiry_clean)
+    .bind(&input.vehicle)
+    .bind(if hipaa { 1 } else { 0 })
+    .bind(if final_is_driver { 1 } else { 0 })
+    .bind(&input.id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -1122,6 +1210,7 @@ async fn update_work_order_status(
     role: Option<String>,
 ) -> Result<(), String> {
     let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let driver_capable = input.is_driver.unwrap_or(false);
     audit_db(&state.pool, "update_work_order_status", &role_val, "unknown").await;
 
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
@@ -1134,7 +1223,7 @@ async fn update_work_order_status(
     .await
     .map_err(|e| e.to_string())?;
 
-    let current_status = existing.status.unwrap_or_else(|| "draft".to_string());
+    let current_status = existing.status;
     let next_status = input.status.clone().unwrap_or_else(|| current_status.clone());
     let delivery_size = existing.delivery_size_cords.unwrap_or(0.0);
 
@@ -1148,7 +1237,7 @@ async fn update_work_order_status(
         return Err("Volunteers cannot update status/mileage".to_string());
     }
 
-    if role_val == "driver" && input.status.is_some() && next_status != "in_progress" {
+    if driver_capable && input.status.is_some() && next_status != "in_progress" {
         return Err("Drivers can only mark in_progress with mileage".to_string());
     }
 
@@ -1185,6 +1274,7 @@ async fn list_delivery_events(
     role: Option<String>,
     username: Option<String>,
     hipaa_certified: Option<bool>,
+    is_driver: Option<bool>,
 ) -> Result<Vec<DeliveryEventRow>, String> {
     let mut rows = sqlx::query_as::<_, DeliveryEventRow>(
         r#"
@@ -1212,9 +1302,10 @@ async fn list_delivery_events(
     let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
     let username_val = username.unwrap_or_default();
     let is_hipaa = hipaa_certified.unwrap_or(false);
+    let driver_capable = is_driver.unwrap_or(false);
     audit_db(&state.pool, "list_delivery_events", &role_val, &username_val).await;
 
-    if role_val == "driver" || role_val == "volunteer" {
+    if driver_capable || role_val == "volunteer" {
         let uname = username_val.to_lowercase();
         rows = rows
             .into_iter()
@@ -1323,6 +1414,7 @@ fn main() -> Result<()> {
             create_delivery_event,
             list_delivery_events,
             list_users,
+            update_user_flags,
             list_motd,
             create_motd
         ])

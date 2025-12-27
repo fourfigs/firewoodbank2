@@ -112,7 +112,7 @@ export interface Invoice {
   status: InvoiceStatus;
 }
 
-export type UserRole = "admin" | "lead" | "staff" | "driver";
+export type UserRole = "admin" | "lead" | "staff" | "volunteer";
 
 export interface User {
   meta: SyncMeta;
@@ -122,7 +122,11 @@ export interface User {
   role: UserRole;
   availabilityNotes?: string;
   driverLicenseStatus?: string;
+  driverLicenseNumber?: string;
+  driverLicenseExpiresOn?: string;
   vehicle?: string;
+  isDriver?: boolean;
+  hipaaCertified?: boolean;
 }
 
 export interface InventoryItem {

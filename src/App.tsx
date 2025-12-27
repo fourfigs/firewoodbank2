@@ -6,13 +6,14 @@ import firewoodIcon from "../firewoodBank-icon.png";
 
 const tabs = ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics", "Worker Directory"];
 
-type Role = "admin" | "lead" | "staff" | "driver" | "volunteer";
+type Role = "admin" | "lead" | "staff" | "volunteer";
 
 type UserSession = {
   name: string;
   username: string;
   role: Role;
   hipaaCertified?: boolean;
+  isDriver?: boolean;
   email?: string; // recovery; not used for login
 };
 
@@ -34,6 +35,10 @@ type ClientRow = {
   mailing_address_city?: string | null;
   mailing_address_state?: string | null;
   mailing_address_postal_code?: string | null;
+  how_did_they_hear_about_us?: string | null;
+  referring_agency?: string | null;
+  denial_reason?: string | null;
+  date_of_onboarding?: string | null;
   gate_combo?: string | null;
   notes?: string | null;
 };
@@ -90,7 +95,11 @@ type UserRow = {
   role: Role;
   availability_notes?: string | null;
   driver_license_status?: string | null;
+  driver_license_number?: string | null;
+  driver_license_expires_on?: string | null;
   vehicle?: string | null;
+  is_driver?: boolean | null;
+  hipaa_certified?: number;
 };
 
 type DeliveryEventRow = {
@@ -153,6 +162,8 @@ function LoginCard({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [isDriverLogin, setIsDriverLogin] = useState(false);
+  const [hipaaCertified, setHipaaCertified] = useState(false);
   const [motdItems, setMotdItems] = useState<MotdRow[]>([]);
   const isMounted = useRef(true);
 
@@ -161,7 +172,6 @@ function LoginCard({
     if (normalized === "admin") return "admin";
     if (normalized === "lead") return "lead";
     if (normalized === "staff") return "staff";
-    if (normalized === "driver") return "driver";
     if (normalized === "volunteer") return "volunteer";
     // Default demo role if unknown
     return "staff";
@@ -199,7 +209,8 @@ function LoginCard({
       name: sampleName,
       username: normalized,
       role,
-      hipaaCertified: role === "admin" || role === "lead",
+      hipaaCertified: hipaaCertified || role === "admin" || role === "lead",
+      isDriver: isDriverLogin,
     });
     if (isMounted.current) {
       setSubmitting(false);
@@ -257,6 +268,22 @@ function LoginCard({
           />
         </div>
         <div className="login-actions" style={{ gridColumn: "1 / -1" }}>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={isDriverLogin}
+              onChange={(e) => setIsDriverLogin(e.target.checked)}
+            />
+            Driver-capable (demo flag; requires valid DL in Worker Directory)
+          </label>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={hipaaCertified}
+              onChange={(e) => setHipaaCertified(e.target.checked)}
+            />
+            HIPAA certified (demo)
+          </label>
           <button className="ping" type="submit" disabled={submitting}>
             {submitting ? "Signing in..." : "Sign in"}
           </button>
@@ -266,6 +293,8 @@ function LoginCard({
             onClick={() => {
               setUsername("");
               setPassword("");
+              setIsDriverLogin(false);
+              setHipaaCertified(false);
             }}
           >
             Clear
@@ -294,24 +323,40 @@ function App() {
   const [workOrderError, setWorkOrderError] = useState<string | null>(null);
   const [progressEdits, setProgressEdits] = useState<Record<string, { status: string; mileage: string }>>({});
   const [selectedWorker, setSelectedWorker] = useState<UserRow | null>(null);
+  const [workerEdit, setWorkerEdit] = useState<Partial<UserRow> | null>(null);
+  const [workerError, setWorkerError] = useState<string | null>(null);
+  const [editingClientId, setEditingClientId] = useState<string | null>(null);
+  const [editingInventoryId, setEditingInventoryId] = useState<string | null>(null);
+  const [showNeedsRestock, setShowNeedsRestock] = useState(false);
+  const [clientSearch, setClientSearch] = useState("");
 
-  const [clientForm, setClientForm] = useState({
+const buildBlankClientForm = () => ({
     client_number: "",
     first_name: "",
     last_name: "",
-    date_of_onboarding: new Date().toISOString().slice(0, 10),
+  date_of_onboarding: new Date().toISOString().slice(0, 10),
     physical_address_line1: "",
+    physical_address_line2: "",
     physical_address_city: "",
     physical_address_state: "",
     physical_address_postal_code: "",
+    mailing_same_as_physical: true,
+    mailing_address_line1: "",
+    mailing_address_line2: "",
+    mailing_address_city: "",
+    mailing_address_state: "",
+    mailing_address_postal_code: "",
     telephone: "",
     email: "",
+    how_did_they_hear_about_us: "",
+    referring_agency: "",
     approval_status: "pending",
+    denial_reason: "",
     gate_combo: "",
     notes: "",
   });
 
-  const [inventoryForm, setInventoryForm] = useState({
+  const buildBlankInventoryForm = () => ({
     name: "",
     category: "",
     quantity_on_hand: 0,
@@ -321,9 +366,20 @@ function App() {
     notes: "",
   });
 
+  const [clientForm, setClientForm] = useState(buildBlankClientForm);
+
+  const [inventoryForm, setInventoryForm] = useState(buildBlankInventoryForm);
+
+  const formatDateTimeLocal = (d: Date) => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
+      d.getMinutes()
+    )}`;
+  };
+
   const [workOrderForm, setWorkOrderForm] = useState({
     client_id: "",
-    scheduled_date: "",
+    scheduled_date: formatDateTimeLocal(new Date()),
     status: "scheduled",
     directions: "",
     gate_combo: "",
@@ -365,6 +421,19 @@ function App() {
     color_code: "#e67f1e",
   });
 
+  const resetClientForm = () => {
+    setEditingClientId(null);
+    setClientForm(buildBlankClientForm());
+    setShowClientForm(false);
+    setClientError(null);
+  };
+
+  const resetInventoryForm = () => {
+    setEditingInventoryId(null);
+    setInventoryForm(buildBlankInventoryForm());
+    setShowInventoryForm(false);
+  };
+
   const handlePing = async () => {
     try {
       setPinging(true);
@@ -383,6 +452,7 @@ function App() {
       role: session?.role ?? null,
       username: session?.username ?? null,
       hipaa_certified: session?.hipaaCertified ?? false,
+      is_driver: session?.isDriver ?? false,
     });
     setClients(data);
   };
@@ -397,6 +467,7 @@ function App() {
       role: session?.role ?? null,
       username: session?.username ?? null,
       hipaa_certified: session?.hipaaCertified ?? false,
+      is_driver: session?.isDriver ?? false,
     });
     setWorkOrders(data);
     const nextProgress: Record<string, { status: string; mileage: string }> = {};
@@ -411,13 +482,19 @@ function App() {
       role: session?.role ?? null,
       username: session?.username ?? null,
       hipaa_certified: session?.hipaaCertified ?? false,
+      is_driver: session?.isDriver ?? false,
     });
     setDeliveries(data);
   };
 
   const loadUsers = async () => {
     const data = await invoke<UserRow[]>("list_users");
-    setUsers(data);
+    const mapped = data.map((u) => ({
+      ...u,
+      is_driver: !!u.is_driver,
+      hipaa_certified: u.hipaa_certified ? 1 : 0,
+    }));
+    setUsers(mapped);
   };
 
   const loadAll = async () => {
@@ -435,12 +512,22 @@ function App() {
   };
 
   const canManage = session?.role === "admin" || session?.role === "lead";
+  const isDriver = session?.isDriver ?? false;
   const canCreateWorkOrders = session?.role === "admin" || session?.role === "staff";
   const canViewPII = session?.role === "admin" || (session?.role === "lead" && session.hipaaCertified);
-  const canViewClientPII = canViewPII || session?.role === "driver";
+  const canViewClientPII = canViewPII || isDriver;
+  const filteredClients = clients.filter((c) => {
+    if (!clientSearch.trim()) return true;
+    const term = clientSearch.toLowerCase();
+    return (
+      c.name.toLowerCase().includes(term) ||
+      c.client_number.toLowerCase().includes(term) ||
+      c.physical_address_city.toLowerCase().includes(term)
+    );
+  });
   const visibleTabs = useMemo(() => {
       if (!session) return tabs.filter((t) => t !== "Worker Directory");
-      if (session.role === "volunteer" || session.role === "driver") return ["Dashboard", "Work Orders"];
+      if (session.role === "volunteer") return ["Dashboard", "Work Orders"];
       if (session.role === "staff") return ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics"];
       // admin / lead
       return tabs;
@@ -588,10 +675,10 @@ function App() {
                       </ul>
                     </div>
                   </div>
-                  {(session?.role === "volunteer" || session?.role === "driver") && (
+                  {(session?.role === "volunteer" || session?.isDriver) && (
                     <div className="two-up" style={{ marginTop: 12 }}>
                       <div className="card muted">
-                        <h3>Your {session.role === "driver" ? "driver" : "volunteer"} stats</h3>
+                        <h3>Your {session.isDriver ? "driver" : "volunteer"} stats</h3>
                         <div className="stack">
                           <div className="list-head">
                             <span>Deliveries</span>
@@ -623,24 +710,10 @@ function App() {
                         disabled={!canManage}
                         onClick={() => {
                           if (showClientForm) {
-                            setShowClientForm(false);
-                            setClientError(null);
+                            resetClientForm();
                           } else {
-                            setClientForm({
-                              client_number: "",
-                              first_name: "",
-                              last_name: "",
-                              date_of_onboarding: new Date().toISOString().slice(0, 10),
-                              physical_address_line1: "",
-                              physical_address_city: "",
-                              physical_address_state: "",
-                              physical_address_postal_code: "",
-                              telephone: "",
-                              email: "",
-                              approval_status: "pending",
-                              gate_combo: "",
-                              notes: "",
-                            });
+                            setEditingClientId(null);
+                            setClientForm(buildBlankClientForm());
                             setClientError(null);
                             setShowClientForm(true);
                           }
@@ -648,7 +721,7 @@ function App() {
                       >
                         +
                       </button>
-                      <h3>New client (Onboard)</h3>
+                      <h3>{editingClientId ? "Edit client" : "New client (Onboard)"}</h3>
                     </div>
                     {!canManage && <p className="muted">Only leads or admins can add clients.</p>}
                     {showClientForm ? (
@@ -678,7 +751,8 @@ function App() {
                           }
 
                           const generatedNumber =
-                            clientForm.client_number || buildClientNumber(clientForm.first_name, clientForm.last_name);
+                            clientForm.client_number ||
+                            (editingClientId ? clientForm.client_number : buildClientNumber(clientForm.first_name, clientForm.last_name));
                           if (!generatedNumber) {
                             setClientError("Client number could not be generated. Add first and last name.");
                             return;
@@ -708,49 +782,54 @@ function App() {
                             setClientError("Onboarding date is required.");
                             return;
                           }
+                          const mailing = clientForm.mailing_same_as_physical
+                            ? {
+                                mailing_address_line1: clientForm.physical_address_line1,
+                                mailing_address_line2: clientForm.physical_address_line2 || null,
+                                mailing_address_city: normalizedCity,
+                                mailing_address_state: normalizedState,
+                                mailing_address_postal_code: normalizedPostal,
+                              }
+                            : {
+                                mailing_address_line1: clientForm.mailing_address_line1 || null,
+                                mailing_address_line2: clientForm.mailing_address_line2 || null,
+                                mailing_address_city: clientForm.mailing_address_city || null,
+                                mailing_address_state: clientForm.mailing_address_state || null,
+                                mailing_address_postal_code: clientForm.mailing_address_postal_code || null,
+                              };
 
-                          await invoke("create_client", {
-                            input: {
-                              ...clientForm,
-                              client_number: generatedNumber,
-                              name: fullName,
-                              date_of_onboarding: `${clientForm.date_of_onboarding}T00:00:00`,
-                              physical_address_line2: null,
-                              physical_address_city: normalizedCity,
-                              physical_address_state: normalizedState,
-                              physical_address_postal_code: normalizedPostal,
-                              mailing_address_line1: null,
-                              mailing_address_line2: null,
-                              mailing_address_city: null,
-                              mailing_address_state: null,
-                              mailing_address_postal_code: null,
-                              how_did_they_hear_about_us: null,
-                              referring_agency: null,
-                              denial_reason: null,
-                              telephone: normalizedPhone || null,
-                              email: trimmedEmail || null,
-                              gate_combo: clientForm.gate_combo || null,
-                              notes: clientForm.notes || null,
-                              created_by_user_id: null,
-                            },
-                          });
+                          const payload = {
+                            ...clientForm,
+                            client_number: generatedNumber,
+                            name: fullName,
+                            date_of_onboarding: `${clientForm.date_of_onboarding}T00:00:00`,
+                            physical_address_line2: clientForm.physical_address_line2 || null,
+                            physical_address_city: normalizedCity,
+                            physical_address_state: normalizedState,
+                            physical_address_postal_code: normalizedPostal,
+                            telephone: normalizedPhone || null,
+                            email: trimmedEmail || null,
+                            gate_combo: clientForm.gate_combo || null,
+                            notes: clientForm.notes || null,
+                            how_did_they_hear_about_us: clientForm.how_did_they_hear_about_us || null,
+                            referring_agency: clientForm.referring_agency || null,
+                            denial_reason: clientForm.denial_reason || null,
+                            created_by_user_id: null,
+                            ...mailing,
+                          };
+
+                          if (editingClientId) {
+                            await invoke("update_client", {
+                              input: {
+                                ...payload,
+                                id: editingClientId,
+                              },
+                            });
+                          } else {
+                            await invoke("create_client", { input: payload });
+                          }
                           await loadClients();
-                          setClientForm({
-                            client_number: "",
-                            first_name: "",
-                            last_name: "",
-                            date_of_onboarding: new Date().toISOString().slice(0, 10),
-                            physical_address_line1: "",
-                            physical_address_city: "",
-                            physical_address_state: "",
-                            physical_address_postal_code: "",
-                            telephone: "",
-                            email: "",
-                            approval_status: "pending",
-                            gate_combo: "",
-                            notes: "",
-                          });
-                          setShowClientForm(false);
+                          resetClientForm();
                         } finally {
                           setBusy(false);
                         }
@@ -773,7 +852,7 @@ function App() {
                                 setClientForm((prev) => ({
                                   ...prev,
                                   first_name: e.target.value,
-                                  client_number: buildClientNumber(e.target.value, prev.last_name),
+                                  client_number: editingClientId ? prev.client_number : buildClientNumber(e.target.value, prev.last_name),
                                 }))
                               }
                         />
@@ -787,20 +866,22 @@ function App() {
                                 setClientForm((prev) => ({
                                   ...prev,
                                   last_name: e.target.value,
-                                  client_number: buildClientNumber(prev.first_name, e.target.value),
+                                  client_number: editingClientId ? prev.client_number : buildClientNumber(prev.first_name, e.target.value),
                                 }))
                               }
                         />
                       </label>
-                          <label>
+                      <label>
                             Onboarding date
                             <input
                               type="date"
                               required
                               value={clientForm.date_of_onboarding}
-                              onChange={(e) => setClientForm({ ...clientForm, date_of_onboarding: e.target.value })}
+                          onChange={(e) => setClientForm({ ...clientForm, date_of_onboarding: e.target.value })}
+                          disabled={!canManage}
                             />
                           </label>
+                      {!canManage && <div className="muted">Only leads/admins can change onboarding date.</div>}
                       <label>
                         Telephone
                         <input
@@ -833,6 +914,13 @@ function App() {
                         />
                       </label>
                       <label>
+                        Address line 2
+                        <input
+                          value={clientForm.physical_address_line2}
+                          onChange={(e) => setClientForm({ ...clientForm, physical_address_line2: e.target.value })}
+                        />
+                      </label>
+                      <label>
                         City
                         <input
                           required
@@ -862,6 +950,53 @@ function App() {
                           }
                         />
                       </label>
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={clientForm.mailing_same_as_physical}
+                          onChange={(e) => setClientForm({ ...clientForm, mailing_same_as_physical: e.target.checked })}
+                        />
+                        Mailing address same as physical
+                      </label>
+                      {!clientForm.mailing_same_as_physical && (
+                        <>
+                          <label>
+                            Mailing line 1
+                            <input
+                              value={clientForm.mailing_address_line1}
+                              onChange={(e) => setClientForm({ ...clientForm, mailing_address_line1: e.target.value })}
+                            />
+                          </label>
+                          <label>
+                            Mailing line 2
+                            <input
+                              value={clientForm.mailing_address_line2}
+                              onChange={(e) => setClientForm({ ...clientForm, mailing_address_line2: e.target.value })}
+                            />
+                          </label>
+                          <label>
+                            Mailing city
+                            <input
+                              value={clientForm.mailing_address_city}
+                              onChange={(e) => setClientForm({ ...clientForm, mailing_address_city: e.target.value })}
+                            />
+                          </label>
+                          <label>
+                            Mailing state
+                            <input
+                              value={clientForm.mailing_address_state}
+                              onChange={(e) => setClientForm({ ...clientForm, mailing_address_state: e.target.value })}
+                            />
+                          </label>
+                          <label>
+                            Mailing postal
+                            <input
+                              value={clientForm.mailing_address_postal_code}
+                              onChange={(e) => setClientForm({ ...clientForm, mailing_address_postal_code: e.target.value })}
+                            />
+                          </label>
+                        </>
+                      )}
                       <label>
                         Gate combo
                         <input
@@ -880,6 +1015,30 @@ function App() {
                           <option value="pending">pending</option>
                         </select>
                       </label>
+                      {clientForm.approval_status === "denied" && (
+                        <label>
+                          Denial reason
+                          <textarea
+                            value={clientForm.denial_reason}
+                            onChange={(e) => setClientForm({ ...clientForm, denial_reason: e.target.value })}
+                            rows={2}
+                          />
+                        </label>
+                      )}
+                      <label>
+                        How did they hear about us?
+                        <input
+                          value={clientForm.how_did_they_hear_about_us}
+                          onChange={(e) => setClientForm({ ...clientForm, how_did_they_hear_about_us: e.target.value })}
+                        />
+                      </label>
+                      <label>
+                        Referring agency
+                        <input
+                          value={clientForm.referring_agency}
+                          onChange={(e) => setClientForm({ ...clientForm, referring_agency: e.target.value })}
+                        />
+                      </label>
                       <label className="span-2">
                         Notes
                         <textarea
@@ -895,10 +1054,7 @@ function App() {
                         <button
                           className="ghost"
                           type="button"
-                          onClick={() => {
-                            setShowClientForm(false);
-                            setClientError(null);
-                          }}
+                            onClick={() => resetClientForm()}
                         >
                           Cancel
                         </button>
@@ -910,7 +1066,7 @@ function App() {
                     )}
                   </div>
 
-                  {session?.role === "driver" && (
+                  {session?.isDriver && (
                     <div className="list-card">
                       <div className="list-head">
                         <h3>My deliveries</h3>
@@ -962,6 +1118,12 @@ function App() {
                   <div className="list-card">
                     <div className="list-head">
                       <h3>Clients ({clients.length})</h3>
+                      <input
+                        placeholder="Search name, #, city"
+                        value={clientSearch}
+                        onChange={(e) => setClientSearch(e.target.value)}
+                        style={{ minWidth: 200 }}
+                      />
                       <button className="ghost" onClick={loadClients} disabled={busy}>
                         Refresh
                       </button>
@@ -972,8 +1134,9 @@ function App() {
                         <span>Contact</span>
                         <span>Approval</span>
                         <span>Address</span>
+                        {canManage && <span>Actions</span>}
                       </div>
-                      {clients.map((c) => (
+                      {filteredClients.map((c) => (
                         <div className="table-row" key={c.id}>
                           <div>
                             <strong>{c.name}</strong>
@@ -999,9 +1162,68 @@ function App() {
                                 )
                               : "Hidden (HIPAA)"}
                           </div>
+                          {canManage && (
+                            <div className="muted" style={{ display: "flex", gap: 8 }}>
+                              <button
+                                className="ghost"
+                                type="button"
+                                onClick={() => {
+                                  const [first, ...rest] = c.name.split(" ");
+                                  const last = rest.join(" ");
+                                  setEditingClientId(c.id);
+                                  setClientForm({
+                                    client_number: c.client_number,
+                                    first_name: first,
+                                    last_name: last,
+                                    date_of_onboarding: c.date_of_onboarding
+                                      ? c.date_of_onboarding.slice(0, 10)
+                                      : new Date().toISOString().slice(0, 10),
+                                    physical_address_line1: c.physical_address_line1,
+                                    physical_address_line2: c.physical_address_line2 ?? "",
+                                    physical_address_city: c.physical_address_city,
+                                    physical_address_state: c.physical_address_state,
+                                    physical_address_postal_code: c.physical_address_postal_code,
+                                    mailing_same_as_physical: !c.mailing_address_line1,
+                                    mailing_address_line1: c.mailing_address_line1 ?? "",
+                                    mailing_address_line2: c.mailing_address_line2 ?? "",
+                                    mailing_address_city: c.mailing_address_city ?? "",
+                                    mailing_address_state: c.mailing_address_state ?? "",
+                                    mailing_address_postal_code: c.mailing_address_postal_code ?? "",
+                                    telephone: c.telephone ?? "",
+                                    email: c.email ?? "",
+                                    how_did_they_hear_about_us: c.how_did_they_hear_about_us ?? "",
+                                    referring_agency: c.referring_agency ?? "",
+                                    approval_status: c.approval_status,
+                                    denial_reason: c.denial_reason ?? "",
+                                    gate_combo: c.gate_combo ?? "",
+                                    notes: c.notes ?? "",
+                                  });
+                                  setShowClientForm(true);
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="ghost"
+                                type="button"
+                                onClick={async () => {
+                                  if (!window.confirm(`Delete client ${c.name}? This marks them deleted.`)) return;
+                                  setBusy(true);
+                                  try {
+                                    await invoke("delete_client", { id: c.id });
+                                    await loadClients();
+                                  } finally {
+                                    setBusy(false);
+                                  }
+                                }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
-                      {!clients.length && <div className="table-row">No clients yet.</div>}
+                      {!filteredClients.length && <div className="table-row">No clients yet.</div>}
                     </div>
                   </div>
 
@@ -1046,24 +1268,16 @@ function App() {
                         title="Add inventory item"
                         onClick={() => {
                           if (showInventoryForm) {
-                            setShowInventoryForm(false);
+                          resetInventoryForm();
                           } else {
-                            setInventoryForm({
-                              name: "",
-                              category: "",
-                              quantity_on_hand: 0,
-                              unit: "pcs",
-                              reorder_threshold: 0,
-                              reorder_amount: 0,
-                              notes: "",
-                            });
+                          setInventoryForm(buildBlankInventoryForm());
                             setShowInventoryForm(true);
                           }
                         }}
                       >
                         +
                       </button>
-                      <h3>Add inventory item</h3>
+                    <h3>{editingInventoryId ? "Edit inventory item" : "Add inventory item"}</h3>
                     </div>
                     {!canManage && <p className="muted">Only leads or admins can add inventory.</p>}
                     {showInventoryForm ? (
@@ -1073,28 +1287,28 @@ function App() {
                           e.preventDefault();
                           setBusy(true);
                           try {
-                            await invoke("create_inventory_item", {
-                              input: {
-                                ...inventoryForm,
-                                quantity_on_hand: Number(inventoryForm.quantity_on_hand),
-                                reorder_threshold: Number(inventoryForm.reorder_threshold),
-                                reorder_amount: inventoryForm.reorder_amount
-                                  ? Number(inventoryForm.reorder_amount)
-                                  : null,
-                                created_by_user_id: null,
-                              },
-                            });
+                            const payload = {
+                              ...inventoryForm,
+                              quantity_on_hand: Number(inventoryForm.quantity_on_hand),
+                              reorder_threshold: Number(inventoryForm.reorder_threshold),
+                              reorder_amount:
+                                inventoryForm.reorder_amount === null || inventoryForm.reorder_amount === undefined
+                                  ? null
+                                  : Number(inventoryForm.reorder_amount),
+                              created_by_user_id: null,
+                            };
+                            if (editingInventoryId) {
+                              await invoke("update_inventory_item", {
+                                input: {
+                                  ...payload,
+                                  id: editingInventoryId,
+                                },
+                              });
+                            } else {
+                              await invoke("create_inventory_item", { input: payload });
+                            }
                             await loadInventory();
-                            setInventoryForm({
-                              name: "",
-                              category: "",
-                              quantity_on_hand: 0,
-                              unit: "pcs",
-                              reorder_threshold: 0,
-                              reorder_amount: 0,
-                              notes: "",
-                            });
-                            setShowInventoryForm(false);
+                            resetInventoryForm();
                           } finally {
                             setBusy(false);
                           }
@@ -1162,12 +1376,12 @@ function App() {
                         </label>
                         <div className="actions span-2">
                           <button className="ping" type="submit" disabled={busy || !canManage}>
-                            Save item
+                            {editingInventoryId ? "Update item" : "Save item"}
                           </button>
                           <button
                             className="ghost"
                             type="button"
-                            onClick={() => setShowInventoryForm(false)}
+                            onClick={() => resetInventoryForm()}
                           >
                             Cancel
                           </button>
@@ -1179,7 +1393,15 @@ function App() {
                   </div>
                   <div className="list-card">
                     <div className="list-head">
-                      <h3>Inventory ({inventory.length})</h3>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <h3>Inventory ({inventory.length})</h3>
+                        <div className="pill" style={{ cursor: "pointer" }} onClick={() => setShowNeedsRestock(false)}>
+                          {showNeedsRestock ? "All" : "All ✓"}
+                        </div>
+                        <div className="pill" style={{ cursor: "pointer" }} onClick={() => setShowNeedsRestock(true)}>
+                          {showNeedsRestock ? "Needs restock ✓" : "Needs restock"}
+                        </div>
+                      </div>
                       <button className="ghost" onClick={loadInventory} disabled={busy}>
                         Refresh
                       </button>
@@ -1190,9 +1412,25 @@ function App() {
                         <span>Qty</span>
                         <span>Threshold</span>
                         <span>Notes</span>
+                        {canManage && <span>Actions</span>}
                       </div>
-                      {inventory.map((item) => {
+                      {(() => {
+                        const items = showNeedsRestock
+                          ? inventory.filter((item) => item.quantity_on_hand <= item.reorder_threshold)
+                          : inventory;
+                        if (!items.length) {
+                          return (
+                            <div className="table-row">
+                              {showNeedsRestock ? "No items need restock." : "No inventory yet."}
+                            </div>
+                          );
+                        }
+                        return items.map((item) => {
                         const low = item.quantity_on_hand <= item.reorder_threshold;
+                        const orderAmount =
+                          item.reorder_amount != null && item.reorder_amount > 0
+                            ? item.reorder_amount
+                            : Math.max(item.reorder_threshold * 2 - item.quantity_on_hand, item.reorder_threshold);
                         return (
                           <div className={`table-row ${low ? "warn" : ""}`} key={item.id}>
                             <div>
@@ -1206,11 +1444,57 @@ function App() {
                             )}
                             </div>
                             <div>{item.reorder_threshold}</div>
-                            <div className="muted">{item.notes ?? "—"}</div>
+                            <div className="muted">
+                              {item.notes ?? "—"}
+                              {low && (
+                                <div>
+                                  <em>Auto-order:</em> Recommend ordering {orderAmount} {item.unit} to restock.
+                                </div>
+                              )}
+                            </div>
+                            {canManage && (
+                              <div className="muted" style={{ display: "flex", gap: 8 }}>
+                                <button
+                                  className="ghost"
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingInventoryId(item.id);
+                                    setInventoryForm({
+                                      name: item.name,
+                                      category: item.category ?? "",
+                                      quantity_on_hand: item.quantity_on_hand,
+                                      unit: item.unit,
+                                      reorder_threshold: item.reorder_threshold,
+                                      reorder_amount: item.reorder_amount ?? 0,
+                                      notes: item.notes ?? "",
+                                    });
+                                    setShowInventoryForm(true);
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="ghost"
+                                  type="button"
+                                  onClick={async () => {
+                                    if (!window.confirm(`Delete ${item.name}? This marks it deleted.`)) return;
+                                    setBusy(true);
+                                    try {
+                                      await invoke("delete_inventory_item", { id: item.id });
+                                      await loadInventory();
+                                    } finally {
+                                      setBusy(false);
+                                    }
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )}
                           </div>
                         );
-                      })}
-                      {!inventory.length && <div className="table-row">No inventory yet.</div>}
+                        });
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -1232,7 +1516,7 @@ function App() {
                           } else {
                             setWorkOrderForm({
                               client_id: "",
-                              scheduled_date: "",
+                              scheduled_date: formatDateTimeLocal(new Date()),
                               status: "scheduled",
                               directions: "",
                               gate_combo: "",
@@ -1653,7 +1937,7 @@ function App() {
                           }}
                         >
                           {users
-                            .filter((u) => u.role === "driver" && !!u.driver_license_status)
+                            .filter((u) => !!u.is_driver && !!u.driver_license_status)
                             .map((u) => (
                               <option key={u.id} value={u.name}>
                                 {u.name} {u.vehicle ? `• ${u.vehicle}` : ""} {u.availability_notes ? `• ${u.availability_notes}` : ""}
@@ -1837,6 +2121,7 @@ function App() {
                           type="datetime-local"
                           value={workOrderForm.scheduled_date}
                           onChange={(e) => setWorkOrderForm({ ...workOrderForm, scheduled_date: e.target.value })}
+                          disabled={session?.role === "staff"}
                         />
                       </label>
                       <label>
@@ -1991,7 +2276,7 @@ function App() {
                                 <span>Scheduled</span>
                                 <span>Mileage</span>
                               </>
-                          ) : session?.role === "driver" ? (
+                            ) : isDriver ? (
                               <>
                                 <span>Client</span>
                                 <span>Status</span>
@@ -2020,7 +2305,7 @@ function App() {
                                   <div>{wo.scheduled_date ?? "—"}</div>
                                   <div className="muted">{wo.mileage != null ? `${wo.mileage} mi` : "—"}</div>
                                 </>
-                              ) : session?.role === "driver" ? (
+                              ) : isDriver ? (
                                   <>
                                     <div>
                                       <strong>{wo.client_name}</strong>
@@ -2056,7 +2341,7 @@ function App() {
                                   <div className="muted">{showPII ? wo.notes ?? "—" : "PII hidden"}</div>
                                 </>
                               )}
-                              {(session?.role === "driver" || session?.role === "lead" || session?.role === "admin") && (
+                              {(isDriver || session?.role === "lead" || session?.role === "admin") && (
                                 <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
                                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                                     <input
@@ -2113,6 +2398,7 @@ function App() {
                                               work_order_id: wo.id,
                                               status: session?.role === "lead" || session?.role === "admin" ? edit.status : "in_progress",
                                               mileage: edit.mileage === "" ? null : Number(edit.mileage),
+                                              is_driver: isDriver,
                                             },
                                         role: session?.role ?? null,
                                           });
@@ -2266,7 +2552,19 @@ function App() {
                         <div
                           className="table-row"
                           key={u.id}
-                          onDoubleClick={() => setSelectedWorker(u)}
+                          onDoubleClick={() => {
+                            setSelectedWorker(u);
+                            setWorkerEdit({
+                              availability_notes: u.availability_notes ?? "",
+                              vehicle: u.vehicle ?? "",
+                              driver_license_status: u.driver_license_status ?? "",
+                              driver_license_number: u.driver_license_number ?? "",
+                              driver_license_expires_on: u.driver_license_expires_on ?? "",
+                              is_driver: !!u.is_driver,
+                              hipaa_certified: u.hipaa_certified,
+                            });
+                            setWorkerError(null);
+                          }}
                           style={{ cursor: "pointer" }}
                         >
                           <div>
@@ -2276,7 +2574,7 @@ function App() {
                           <div className="muted">{u.telephone ?? "—"}</div>
                           <div className="muted">{u.availability_notes ?? "—"}</div>
                           <div className="muted">
-                            DL: {u.driver_license_status ?? "—"} | Vehicle: {u.vehicle ?? "—"} | HIPAA: unknown
+                            DL: {u.driver_license_status ?? "—"} | Driver: {u.is_driver ? "Yes" : "No"} | Vehicle: {u.vehicle ?? "—"} | HIPAA: {u.hipaa_certified ? "Yes" : "Unknown"}
                           </div>
                         </div>
                       ))}
@@ -2292,14 +2590,112 @@ function App() {
                           Close
                         </button>
                       </div>
+                      {workerError && <div className="pill" style={{ background: "#fbe2e2", color: "#b3261e" }}>{workerError}</div>}
                       <div className="stack">
                         <div><strong>Role:</strong> {selectedWorker.role}</div>
                         <div><strong>Phone:</strong> {selectedWorker.telephone ?? "—"}</div>
                         <div><strong>Email:</strong> {selectedWorker.email ?? "—"}</div>
-                        <div><strong>Schedule:</strong> {selectedWorker.availability_notes ?? "—"}</div>
-                        <div><strong>Driver License:</strong> {selectedWorker.driver_license_status ?? "—"}</div>
-                        <div><strong>Working Vehicle:</strong> {selectedWorker.vehicle ?? "—"}</div>
-                        <div><strong>HIPAA Certified:</strong> unknown</div>
+                        <label>
+                          Schedule/availability
+                          <input
+                            value={workerEdit?.availability_notes ?? ""}
+                            onChange={(e) => setWorkerEdit((prev) => ({ ...prev, availability_notes: e.target.value }))}
+                          />
+                        </label>
+                        <label>
+                          Working vehicle
+                          <input
+                            value={workerEdit?.vehicle ?? ""}
+                            onChange={(e) => setWorkerEdit((prev) => ({ ...prev, vehicle: e.target.value }))}
+                          />
+                        </label>
+                        <label>
+                          Driver license status
+                          <input
+                            value={workerEdit?.driver_license_status ?? ""}
+                            onChange={(e) => setWorkerEdit((prev) => ({ ...prev, driver_license_status: e.target.value }))}
+                          />
+                        </label>
+                        <label>
+                          Driver license number
+                          <input
+                            value={workerEdit?.driver_license_number ?? ""}
+                            onChange={(e) => setWorkerEdit((prev) => ({ ...prev, driver_license_number: e.target.value }))}
+                          />
+                        </label>
+                        <label>
+                          Driver license expiration
+                          <input
+                            type="date"
+                            value={workerEdit?.driver_license_expires_on?.slice(0, 10) ?? ""}
+                            onChange={(e) => setWorkerEdit((prev) => ({ ...prev, driver_license_expires_on: e.target.value }))}
+                          />
+                        </label>
+                        <label className="checkbox">
+                          <input
+                            type="checkbox"
+                            checked={!!workerEdit?.is_driver}
+                            onChange={(e) => setWorkerEdit((prev) => ({ ...prev, is_driver: e.target.checked }))}
+                          />
+                          Driver flag (requires DL status + expiration)
+                        </label>
+                        <label className="checkbox">
+                          <input
+                            type="checkbox"
+                            checked={!!workerEdit?.hipaa_certified}
+                            onChange={(e) => setWorkerEdit((prev) => ({ ...prev, hipaa_certified: e.target.checked ? 1 : 0 }))}
+                          />
+                          HIPAA certified
+                        </label>
+                        {(session?.role === "admin" || session?.role === "lead") && (
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button
+                              className="ping"
+                              type="button"
+                              disabled={busy}
+                              onClick={async () => {
+                                setWorkerError(null);
+                                const wantsDriver = !!workerEdit?.is_driver;
+                                const hasStatus = !!(workerEdit?.driver_license_status ?? "").trim();
+                                const hasExpiry = !!(workerEdit?.driver_license_expires_on ?? "").trim();
+                                if (wantsDriver && (!hasStatus || !hasExpiry)) {
+                                  setWorkerError("Driver flag requires license status and expiration.");
+                                  return;
+                                }
+                                setBusy(true);
+                                try {
+                                  await invoke("update_user_flags", {
+                                    input: {
+                                      id: selectedWorker.id,
+                                      availability_notes: workerEdit?.availability_notes ?? null,
+                                      vehicle: workerEdit?.vehicle ?? null,
+                                      driver_license_status: workerEdit?.driver_license_status ?? null,
+                                      driver_license_number: workerEdit?.driver_license_number ?? null,
+                                      driver_license_expires_on: workerEdit?.driver_license_expires_on
+                                        ? `${workerEdit.driver_license_expires_on}T00:00:00`
+                                        : null,
+                                      hipaa_certified: !!workerEdit?.hipaa_certified,
+                                      is_driver: wantsDriver,
+                                    },
+                                    role: session?.role ?? null,
+                                  });
+                                  await loadUsers();
+                                  setSelectedWorker(null);
+                                } finally {
+                                  setBusy(false);
+                                }
+                              }}
+                            >
+                              Save worker
+                            </button>
+                            <button className="ghost" type="button" onClick={() => setSelectedWorker(null)}>
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                        {!(session?.role === "admin" || session?.role === "lead") && (
+                          <div className="muted">Read-only (admin/lead can edit).</div>
+                        )}
                       </div>
                     </div>
                   )}
