@@ -974,7 +974,7 @@ async fn adjust_inventory_for_transition_tx(
         LIMIT 1
         "#
     )
-    .fetch_optional(&mut **tx)
+    .fetch_optional(&mut *tx)
     .await?;
 
     if let Some(record) = inventory_row {
@@ -1007,7 +1007,7 @@ async fn adjust_inventory_for_transition_tx(
         .bind(reserved)
         .bind(on_hand)
         .bind(&record.id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     }
 
