@@ -152,6 +152,7 @@ Split/unsplit wood summary
 2-weeks-at-glance + monthly calendar (color-coded)
 Upcoming list + MOTD
 Admin: availability + low inventory cards
+Dashboard MOTD panel uses the scrollable notes area (like login checklist); newest messages push older down
 What you see: Operational dashboard w/ calendar
 Branch: stage-6-dashboard
 

@@ -1974,7 +1974,14 @@ const visibleTabs = useMemo(() => {
                 </p>
               </div>
             </div>
-            <div className="card" style={{ marginTop: 12 }}>
+            <div
+              className="card"
+              style={{
+                marginTop: 12,
+                maxHeight: 300,
+                overflowY: "auto",
+              }}
+            >
               <h3>Revision checklist (what to verify per stage)</h3>
               <ul className="list">
                 <li><strong>Stage 1</strong>: App boots (Tauri window), nav buttons present, Ping returns “pong”.</li>
@@ -1986,6 +1993,9 @@ const visibleTabs = useMemo(() => {
                 <li><strong>Stage 5.2</strong>: Intake hardening pending—expect name split, client # auto-gen, validation, wood/delivery size (track when delivered).</li>
                 <li><strong>Stage 5.3</strong>: Worker Directory tab visible only to admin/lead; rows open detail on double-click.</li>
               </ul>
+              <p className="muted" style={{ marginTop: 8 }}>
+                This panel will also host a scrolling MOTD feed later; new messages will appear on top and push prior notes down.
+              </p>
             </div>
           </section>
           <LoginCard onLogin={setSession} />
