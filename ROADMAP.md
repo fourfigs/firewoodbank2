@@ -127,18 +127,19 @@ Sub-stages to close gaps:
 - 5.1a: Driver delivery-only view (address/contact for assigned deliveries; strip non-delivery workorder PII)
 - 5.1b: Persist assignments/mileage/availability/vehicle in backend schema + commands
 - 5.1c: Server-side PII enforcement (role checks, driver-limited payloads, audit logging hooks; town and mileage initially derived from client address)
-- 5.1d: Volunteer/driver hours + wood-credit calc wired to persisted events
+- 5.1d: Volunteer/driver hours + wood-credit calc wired to persisted events (0.75 minutes/mile; delivery assignments mirrored into delivery_events)
 
 ### ⏳ **Stage 5.2: Work Order Intake Hardening (new)**
 Tighten intake UX/validation before Stage 6:
 - Split client name into first/last; auto-generate client number from name + entry month + 2 random digits; lock edit to admin
 - Enforce required: name, address, at least one contact (phone/email/other+specify); format phone `(###) ###-####`; city init-cap; state 2-letter uppercase and validated; ZIP `#####` or `#####-####`
-- Add wood size dropdown (12/14/16/Other + specify inches integer) and delivery size (1 cord / 1/3 cord / other numeric), carry both on work orders
-- Inventory impact: reserve wood on schedule/in-progress and deduct on completed; release on cancel
+- Add wood size dropdown (12/14/16/Other + specify inches integer) and delivery size (1 cord / 1/3 cord / other numeric), carry both on work orders — **implemented**
+- Inventory impact: reserve wood on schedule/in-progress and deduct on completed; release on cancel — **implemented with reserved_quantity tracking**
 - Driver assignment dropdown (licensed drivers from DB) unlocks scheduling; driver availability drives schedule choices; status/mileage editable only by lead/admin (driver can enter mileage and mark delivered pending approval)
--only poeople with the DL flag are populated to the driver list for deliveries
+-only poeople with the DL flag are populated to the driver list for deliveries — **implemented**
 - Label work orders with creator display name (not username)
--orders are to be entered by staff and admin only.
+-orders are to be entered by staff and admin only. — **implemented (UI + backend gate)**
+- Drivers can add up to four workers/helpers on a delivery — **implemented**
 
 ### ⏳ **Stage 5.3: Worker Directory (new)**
 Admin/Lead-only Worker Directory tab:

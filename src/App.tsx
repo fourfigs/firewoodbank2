@@ -56,6 +56,7 @@ type InventoryRow = {
   reorder_threshold: number;
   reorder_amount?: number | null;
   notes?: string | null;
+  reserved_quantity: number;
 };
 
 type WorkOrderRow = {
@@ -73,7 +74,12 @@ type WorkOrderRow = {
   physical_address_city?: string | null;
   physical_address_state?: string | null;
   physical_address_postal_code?: string | null;
+  wood_size_label?: string | null;
+  wood_size_other?: string | null;
+  delivery_size_label?: string | null;
+  delivery_size_cords?: number | null;
   assignees_json?: string | null;
+  created_by_display?: string | null;
 };
 
 type UserRow = {
@@ -257,6 +263,10 @@ function App() {
     mailingSameAsPhysical: true,
     assignees: [] as string[],
     helpers: [] as string[],
+    wood_size_label: "16",
+    wood_size_other: "",
+    delivery_size_choice: "1_cord",
+    delivery_size_other: "",
   });
 
   const [workOrderNewClientEnabled, setWorkOrderNewClientEnabled] = useState(false);
@@ -346,6 +356,7 @@ function App() {
   };
 
   const canManage = session?.role === "admin" || session?.role === "lead";
+  const canCreateWorkOrders = session?.role === "admin" || session?.role === "staff";
   const canViewPII = session?.role === "admin" || (session?.role === "lead" && session.hipaaCertified);
   const canViewClientPII = canViewPII || session?.role === "driver";
 const visibleTabs = useMemo(() => {
@@ -375,14 +386,19 @@ const visibleTabs = useMemo(() => {
   const userDeliveryHours = useMemo(() => {
     if (!session?.username) return { hours: 0, deliveries: 0, woodCreditCords: 0 };
     const uname = session.username.toLowerCase();
+    const displayLower = (session.name ?? "").toLowerCase();
     const defaultHours = 1.5;
     const milesPerHourFactor = 0.75 / 60; // 0.75 minutes per mile => hours per mile
     const mileageByWorkOrder: Record<string, number | undefined> = {};
+    const deliverySizeByWorkOrder: Record<string, number | undefined> = {};
     workOrders.forEach((wo) => {
       mileageByWorkOrder[wo.id] = typeof wo.mileage === "number" ? wo.mileage : undefined;
+      deliverySizeByWorkOrder[wo.id] =
+        typeof wo.delivery_size_cords === "number" ? wo.delivery_size_cords : undefined;
     });
     let totalHours = 0;
     let totalDeliveries = 0;
+    let totalWoodCords = 0;
     deliveries.forEach((d) => {
       let assigned: string[] = [];
       try {
@@ -393,19 +409,24 @@ const visibleTabs = useMemo(() => {
       } catch {
         assigned = [];
       }
-      if (assigned.includes(uname)) {
+      const matched =
+        assigned.includes(uname) || (displayLower.length > 0 && assigned.includes(displayLower));
+      if (matched) {
         totalDeliveries += 1;
         const miles = d.work_order_id ? mileageByWorkOrder[d.work_order_id] : undefined;
+        const deliverySize = d.work_order_id
+          ? deliverySizeByWorkOrder[d.work_order_id]
+          : undefined;
         if (typeof miles === "number" && miles >= 0) {
           totalHours += Math.max(0.1, miles * milesPerHourFactor);
         } else {
           totalHours += defaultHours;
         }
+        totalWoodCords += typeof deliverySize === "number" && deliverySize > 0 ? deliverySize : 0.33;
       }
     });
-    const woodCreditCords = Math.round(((totalHours * 31) / 450) * 10) / 10;
-    return { hours: totalHours, deliveries: totalDeliveries, woodCreditCords };
-  }, [deliveries, session?.username]);
+    return { hours: totalHours, deliveries: totalDeliveries, woodCreditCords: totalWoodCords };
+  }, [deliveries, workOrders, session?.username, session?.name]);
 
   return (
     <div className="app">
@@ -1031,7 +1052,10 @@ const visibleTabs = useMemo(() => {
                               <div className="muted">{item.category ?? "—"}</div>
                             </div>
                             <div>
-                              {item.quantity_on_hand} {item.unit}
+                            {item.quantity_on_hand} {item.unit}
+                            {item.reserved_quantity > 0 && (
+                              <div className="muted">Reserved: {item.reserved_quantity} {item.unit}</div>
+                            )}
                             </div>
                             <div>{item.reorder_threshold}</div>
                             <div className="muted">{item.notes ?? "—"}</div>
@@ -1052,7 +1076,7 @@ const visibleTabs = useMemo(() => {
                         type="button"
                         className="icon-button"
                         title="Schedule work order"
-                        disabled={!canManage}
+                        disabled={!canCreateWorkOrders}
                         onClick={() => {
                           if (showWorkOrderForm) {
                             setShowWorkOrderForm(false);
@@ -1070,14 +1094,18 @@ const visibleTabs = useMemo(() => {
                               other_heat_source_other: "",
                               mileage: "",
                               mailingSameAsPhysical: true,
-                            assignees: [],
-                          helpers: [],
+                              assignees: [],
+                              helpers: [],
+                              wood_size_label: "16",
+                              wood_size_other: "",
+                              delivery_size_choice: "1_cord",
+                              delivery_size_other: "",
                             });
                             setWorkOrderNewClientEnabled(false);
                             setWorkOrderNewClient({
                               client_number: "",
-                            first_name: "",
-                            last_name: "",
+                              first_name: "",
+                              last_name: "",
                               physical_address_line1: "",
                               physical_address_city: "",
                               physical_address_state: "",
@@ -1094,7 +1122,7 @@ const visibleTabs = useMemo(() => {
                       </button>
                       <h3>Schedule work order</h3>
                     </div>
-                    {!canManage && <p className="muted">Only leads or admins can add work orders.</p>}
+                    {!canCreateWorkOrders && <p className="muted">Only staff or admins can add work orders.</p>}
                     {showWorkOrderForm ? (
                       <>
                         {workOrderError && <div className="pill" style={{ background: "#fbe2e2", color: "#b3261e" }}>{workOrderError}</div>}
@@ -1203,6 +1231,37 @@ const visibleTabs = useMemo(() => {
                           return;
                         }
 
+                        if (!canCreateWorkOrders) {
+                          setWorkOrderError("Only staff or admin can create work orders.");
+                          return;
+                        }
+
+                        const deliveryChoice = workOrderForm.delivery_size_choice;
+                        let deliverySizeCords = 0;
+                        let deliverySizeLabel = "";
+                        if (deliveryChoice === "1_cord") {
+                          deliverySizeCords = 1;
+                          deliverySizeLabel = "1 cord";
+                        } else if (deliveryChoice === "one_third") {
+                          deliverySizeCords = 0.33;
+                          deliverySizeLabel = "1/3 cord";
+                        } else {
+                          const parsed = Number(workOrderForm.delivery_size_other);
+                          if (!Number.isFinite(parsed) || parsed <= 0) {
+                            setWorkOrderError("Enter a valid delivery size (cords).");
+                            return;
+                          }
+                          deliverySizeCords = parsed;
+                          deliverySizeLabel = `${parsed} cord(s)`;
+                        }
+
+                        const woodSizeLabel =
+                          workOrderForm.wood_size_label === "other"
+                            ? "Other"
+                            : workOrderForm.wood_size_label;
+                        const woodSizeOther =
+                          workOrderForm.wood_size_label === "other" ? workOrderForm.wood_size_other : "";
+
                         setBusy(true);
                         try {
                           await invoke("create_work_order", {
@@ -1242,6 +1301,10 @@ const visibleTabs = useMemo(() => {
                               notes: workOrderForm.notes || null,
                               scheduled_date: workOrderForm.scheduled_date || null,
                               status: workOrderForm.status,
+                              wood_size_label: woodSizeLabel,
+                              wood_size_other: woodSizeOther || null,
+                              delivery_size_label: deliverySizeLabel,
+                              delivery_size_cords: deliverySizeCords,
                               assignees_json: JSON.stringify([
                                 ...workOrderForm.assignees,
                                 ...workOrderForm.helpers
@@ -1249,7 +1312,9 @@ const visibleTabs = useMemo(() => {
                                   .filter((h) => h.length > 0),
                               ]),
                               created_by_user_id: null,
+                              created_by_display: session?.name ?? session?.username ?? null,
                             },
+                            role: session?.role ?? null,
                           });
                           await loadWorkOrders();
                           setWorkOrderForm({
@@ -1266,6 +1331,10 @@ const visibleTabs = useMemo(() => {
                             mailingSameAsPhysical: true,
                             assignees: [],
                             helpers: [],
+                            wood_size_label: "16",
+                            wood_size_other: "",
+                            delivery_size_choice: "1_cord",
+                            delivery_size_other: "",
                           });
                           setWorkOrderNewClient({
                             client_number: "",
@@ -1299,6 +1368,57 @@ const visibleTabs = useMemo(() => {
                           ))}
                         </select>
                       </label>
+                      <label>
+                        Wood size
+                        <select
+                          value={workOrderForm.wood_size_label}
+                          onChange={(e) => setWorkOrderForm({ ...workOrderForm, wood_size_label: e.target.value })}
+                        >
+                          <option value="12">12 in</option>
+                          <option value="14">14 in</option>
+                          <option value="16">16 in</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </label>
+                      {workOrderForm.wood_size_label === "other" && (
+                        <label>
+                          Wood size (other, inches)
+                          <input
+                            type="number"
+                            min="1"
+                            value={workOrderForm.wood_size_other}
+                            onChange={(e) => setWorkOrderForm({ ...workOrderForm, wood_size_other: e.target.value })}
+                          />
+                        </label>
+                      )}
+                      <label>
+                        Delivery size
+                        <select
+                          value={workOrderForm.delivery_size_choice}
+                          onChange={(e) => setWorkOrderForm({ ...workOrderForm, delivery_size_choice: e.target.value })}
+                        >
+                          <option value="1_cord">1 cord</option>
+                          <option value="one_third">1/3 cord</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </label>
+                      {workOrderForm.delivery_size_choice === "other" && (
+                        <label>
+                          Delivery size (cords)
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={workOrderForm.delivery_size_other}
+                            onChange={(e) =>
+                              setWorkOrderForm({
+                                ...workOrderForm,
+                                delivery_size_other: e.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                      )}
                       <label className="span-2">
                         Assign driver(s)
                         <select
@@ -1310,7 +1430,7 @@ const visibleTabs = useMemo(() => {
                           }}
                         >
                           {users
-                            .filter((u) => u.role === "driver")
+                            .filter((u) => u.role === "driver" && !!u.driver_license_status)
                             .map((u) => (
                               <option key={u.id} value={u.name}>
                                 {u.name} {u.vehicle ? `• ${u.vehicle}` : ""} {u.availability_notes ? `• ${u.availability_notes}` : ""}
@@ -1563,7 +1683,7 @@ const visibleTabs = useMemo(() => {
                           type="submit"
                           disabled={
                             busy ||
-                            !canManage ||
+                            !canCreateWorkOrders ||
                             (!workOrderNewClientEnabled && !clients.length)
                           }
                         >
@@ -1659,6 +1779,9 @@ const visibleTabs = useMemo(() => {
                                           ? `${wo.physical_address_line1}, ${wo.physical_address_city ?? ""}, ${wo.physical_address_state ?? ""} ${wo.physical_address_postal_code ?? ""}`
                                           : "—"}
                                       </div>
+                                      {wo.delivery_size_label && (
+                                        <div className="muted">Delivery: {wo.delivery_size_label}</div>
+                                      )}
                                     </div>
                                     <div>
                                       <span className="pill">{wo.status}</span>
@@ -1671,6 +1794,10 @@ const visibleTabs = useMemo(() => {
                                   <div>
                                     <strong>{wo.client_name}</strong>
                                     <div className="muted">#{wo.client_number}</div>
+                                {wo.created_by_display && <div className="muted">Created by: {wo.created_by_display}</div>}
+                                {wo.delivery_size_label && (
+                                  <div className="muted">Delivery: {wo.delivery_size_label}</div>
+                                )}
                                   </div>
                                   <div>
                                     <span className="pill">{wo.status}</span>

@@ -6,9 +6,14 @@ use anyhow::Result;
 use std::path::PathBuf;
 use db::init_pool;
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{FromRow, SqlitePool, Transaction, Sqlite};
 use tauri::{Manager, State};
 use uuid::Uuid;
+
+fn audit(event: &str, role: &str, actor: &str) {
+    // Simple console-based audit trail placeholder.
+    println!("[audit] event={event} role={role} actor={actor}");
+}
 
 #[derive(Clone)]
 struct AppState {
@@ -116,6 +121,7 @@ struct InventoryRow {
     reorder_threshold: f64,
     reorder_amount: Option<f64>,
     notes: Option<String>,
+    reserved_quantity: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -145,7 +151,13 @@ struct WorkOrderInput {
     notes: Option<String>,
     scheduled_date: Option<String>,
     status: Option<String>,
+    wood_size_label: Option<String>,
+    wood_size_other: Option<String>,
+    delivery_size_label: Option<String>,
+    delivery_size_cords: Option<f64>,
+    assignees_json: Option<String>,
     created_by_user_id: Option<String>,
+    created_by_display: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -162,9 +174,25 @@ struct WorkOrderRow {
     physical_address_city: Option<String>,
     physical_address_state: Option<String>,
     physical_address_postal_code: Option<String>,
-    town: Option<String>,
     mileage: Option<f64>,
+    wood_size_label: Option<String>,
+    wood_size_other: Option<String>,
+    delivery_size_label: Option<String>,
+    delivery_size_cords: Option<f64>,
     assignees_json: Option<String>,
+    created_by_display: Option<String>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct UserRow {
+    id: String,
+    name: String,
+    email: Option<String>,
+    telephone: Option<String>,
+    role: String,
+    availability_notes: Option<String>,
+    driver_license_status: Option<String>,
+    vehicle: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -188,6 +216,7 @@ struct DeliveryEventRow {
     end_date: Option<String>,
     work_order_id: Option<String>,
     color_code: Option<String>,
+    assigned_user_ids_json: Option<String>,
 }
 
 #[tauri::command]
@@ -199,6 +228,7 @@ fn ping() -> String {
 async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
     let approval_status = input.approval_status.unwrap_or_else(|| "pending".to_string());
+    audit("create_client", "unknown", "unknown");
 
     // Enforce: a name can only have one address; check conflicts before insert.
     let conflicts = sqlx::query_as::<_, ClientConflictRow>(
@@ -296,8 +326,12 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
 }
 
 #[tauri::command]
-async fn list_clients(state: State<'_, AppState>) -> Result<Vec<ClientRow>, String> {
-    let rows = sqlx::query_as::<_, ClientRow>(
+async fn list_clients(
+    state: State<'_, AppState>,
+    role: Option<String>,
+    hipaa_certified: Option<bool>,
+) -> Result<Vec<ClientRow>, String> {
+    let mut rows = sqlx::query_as::<_, ClientRow>(
         r#"
         SELECT
             id,
@@ -326,6 +360,21 @@ async fn list_clients(state: State<'_, AppState>) -> Result<Vec<ClientRow>, Stri
     .fetch_all(&state.pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let is_hipaa = hipaa_certified.unwrap_or(false);
+    audit("list_clients", &role_val, "unknown");
+    if !(role_val == "admin" || (role_val == "lead" && is_hipaa) || role_val == "driver") {
+        rows.iter_mut().for_each(|c| {
+            c.email = None;
+            c.telephone = None;
+            c.gate_combo = None;
+            c.physical_address_line1 = String::from("Hidden");
+            c.physical_address_city = String::from("Hidden");
+            c.physical_address_state = String::from("Hidden");
+            c.physical_address_postal_code = String::from("Hidden");
+        });
+    }
 
     Ok(rows)
 }
@@ -404,7 +453,8 @@ async fn list_inventory_items(state: State<'_, AppState>) -> Result<Vec<Inventor
             unit,
             reorder_threshold,
             reorder_amount,
-            notes
+            notes,
+            reserved_quantity
         FROM inventory_items
         WHERE is_deleted = 0
         ORDER BY name ASC
@@ -421,10 +471,16 @@ async fn list_inventory_items(state: State<'_, AppState>) -> Result<Vec<Inventor
 async fn create_work_order(
     state: State<'_, AppState>,
     input: WorkOrderInput,
+    role: Option<String>,
 ) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
     let status = input.status.unwrap_or_else(|| "draft".to_string());
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    if role_val != "admin" && role_val != "staff" {
+        return Err("Only staff or admin may create work orders".to_string());
+    }
+    audit("create_work_order", &role_val, "unknown");
 
     let query = r#"
         INSERT INTO work_orders (
@@ -435,7 +491,11 @@ async fn create_work_order(
             mailing_address_state, mailing_address_postal_code,
             telephone, email, directions, gate_combo, mileage,
             other_heat_source_gas, other_heat_source_electric, other_heat_source_other,
-            notes, scheduled_date, status, created_by_user_id
+            notes, scheduled_date, status,
+            wood_size_label, wood_size_other,
+            delivery_size_label, delivery_size_cords,
+            assignees_json,
+            created_by_user_id, created_by_display
         )
         VALUES (
             ?, ?, ?, ?, ?,
@@ -445,9 +505,16 @@ async fn create_work_order(
             ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?,
-            ?, ?, ?, ?
+            ?, ?, ?,
+            ?, ?,
+            ?, ?, ?
         )
     "#;
+
+    let assignees_store = input
+        .assignees_json
+        .clone()
+        .unwrap_or_else(|| "[]".to_string());
 
     sqlx::query(query)
         .bind(&id)
@@ -476,10 +543,27 @@ async fn create_work_order(
         .bind(&input.notes)
         .bind(&input.scheduled_date)
         .bind(&status)
+        .bind(&input.wood_size_label)
+        .bind(&input.wood_size_other)
+        .bind(&input.delivery_size_label)
+        .bind(&input.delivery_size_cords)
+        .bind(&assignees_store)
         .bind(&input.created_by_user_id)
+        .bind(&input.created_by_display)
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
+
+    adjust_inventory_for_transition_tx(
+        &mut tx,
+        "draft",
+        &status,
+        input.delivery_size_cords.unwrap_or(0.0),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let assigned_json = assignees_store.clone();
 
     // Auto-create a delivery event when a work order is scheduled.
     if let Some(start_date) = &input.scheduled_date {
@@ -501,7 +585,7 @@ async fn create_work_order(
             .bind(start_date)
             .bind::<Option<String>>(None)
             .bind("#e67f1e")
-            .bind::<Option<String>>(None)
+            .bind(&assigned_json)
             .execute(&mut *tx)
             .await
             .map_err(|e| e.to_string())?;
@@ -513,8 +597,13 @@ async fn create_work_order(
 }
 
 #[tauri::command]
-async fn list_work_orders(state: State<'_, AppState>) -> Result<Vec<WorkOrderRow>, String> {
-    let rows = sqlx::query_as::<_, WorkOrderRow>(
+async fn list_work_orders(
+    state: State<'_, AppState>,
+    role: Option<String>,
+    username: Option<String>,
+    hipaa_certified: Option<bool>,
+) -> Result<Vec<WorkOrderRow>, String> {
+    let mut rows = sqlx::query_as::<_, WorkOrderRow>(
         r#"
         SELECT
             id,
@@ -529,9 +618,13 @@ async fn list_work_orders(state: State<'_, AppState>) -> Result<Vec<WorkOrderRow
             physical_address_city,
             physical_address_state,
             physical_address_postal_code,
-            physical_address_city AS town,
             mileage,
-            COALESCE(assignees_json, '[]') as assignees_json
+            wood_size_label,
+            wood_size_other,
+            delivery_size_label,
+            delivery_size_cords,
+            COALESCE(assignees_json, '[]') as assignees_json,
+            created_by_display
         FROM work_orders
         WHERE is_deleted = 0
         ORDER BY (scheduled_date IS NULL), datetime(scheduled_date) DESC, created_at DESC
@@ -541,7 +634,122 @@ async fn list_work_orders(state: State<'_, AppState>) -> Result<Vec<WorkOrderRow
     .await
     .map_err(|e| e.to_string())?;
 
+    // PII filtering and assignment filtering
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let username_val = username.unwrap_or_default();
+    let username_lower = username_val.to_lowercase();
+    let is_hipaa = hipaa_certified.unwrap_or(false);
+    audit("list_work_orders", &role_val, &username_val);
+
+    if role_val == "volunteer" || role_val == "driver" {
+        rows = rows
+            .into_iter()
+            .filter(|wo| {
+                let assignees: Vec<String> =
+                    serde_json::from_str(wo.assignees_json.as_deref().unwrap_or("[]"))
+                        .unwrap_or_default();
+                assignees
+                    .iter()
+                    .map(|a| a.to_lowercase())
+                    .any(|a| a == username_lower)
+            })
+            .map(|mut wo| {
+                if role_val == "volunteer" {
+                    // Strip PII for volunteers
+                    wo.telephone = None;
+                    wo.gate_combo = None;
+                    wo.notes = None;
+                    wo.physical_address_line1 = None;
+                    wo.physical_address_city = None;
+                    wo.physical_address_state = None;
+                    wo.physical_address_postal_code = None;
+                }
+                wo
+            })
+            .collect();
+    } else if role_val == "staff" || role_val == "lead" {
+        if role_val == "lead" && is_hipaa {
+            // full access
+        } else {
+            // mask PII for non-HIPAA staff
+            rows.iter_mut().for_each(|wo| {
+                wo.telephone = None;
+                wo.gate_combo = None;
+                wo.notes = None;
+            });
+        }
+    }
+
     Ok(rows)
+}
+
+async fn adjust_inventory_for_transition_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    previous_status: &str,
+    next_status: &str,
+    delivery_size_cords: f64,
+) -> Result<(), sqlx::Error> {
+    if delivery_size_cords <= 0.0 {
+        return Ok(());
+    }
+
+    let reserve_states = ["scheduled", "in_progress"];
+    let prev_status_lower = previous_status.to_lowercase();
+    let next_status_lower = next_status.to_lowercase();
+    let prev_reserved = reserve_states.contains(&prev_status_lower.as_str());
+    let next_reserved = reserve_states.contains(&next_status_lower.as_str());
+
+    let inventory_row = sqlx::query!(
+        r#"
+        SELECT id, quantity_on_hand, reserved_quantity
+        FROM inventory_items
+        WHERE is_deleted = 0
+          AND (
+            lower(unit) LIKE '%cord%'
+            OR lower(name) LIKE '%wood%'
+          )
+        ORDER BY created_at ASC
+        LIMIT 1
+        "#
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    if let Some(record) = inventory_row {
+        let mut reserved = record.reserved_quantity.unwrap_or(0.0);
+        let mut on_hand = record.quantity_on_hand;
+        if !prev_reserved && next_reserved {
+            reserved += delivery_size_cords;
+        } else if prev_reserved && !next_reserved {
+            reserved -= delivery_size_cords;
+        }
+
+        if next_status.eq_ignore_ascii_case("completed") {
+            on_hand -= delivery_size_cords;
+        }
+
+        if reserved < 0.0 {
+            reserved = 0.0;
+        }
+        if on_hand < 0.0 {
+            on_hand = 0.0;
+        }
+
+        sqlx::query(
+            r#"
+            UPDATE inventory_items
+            SET reserved_quantity = ?, quantity_on_hand = ?, updated_at = datetime('now')
+            WHERE id = ?
+            "#
+        )
+        .bind(reserved)
+        .bind(on_hand)
+        .bind(&record.id)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -576,10 +784,160 @@ async fn create_delivery_event(
 }
 
 #[tauri::command]
+async fn list_users(state: State<'_, AppState>) -> Result<Vec<UserRow>, String> {
+    let rows = sqlx::query_as::<_, UserRow>(
+        r#"
+        SELECT
+            id,
+            name,
+            email,
+            telephone,
+            role,
+            availability_notes,
+            driver_license_status,
+            vehicle
+        FROM users
+        WHERE is_deleted = 0
+        ORDER BY name ASC
+        "#
+    )
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(rows)
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkOrderAssignmentInput {
+    work_order_id: String,
+    assignees_json: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkOrderStatusInput {
+    work_order_id: String,
+    status: Option<String>,
+    mileage: Option<f64>,
+}
+
+#[tauri::command]
+async fn update_work_order_assignees(
+    state: State<'_, AppState>,
+    input: WorkOrderAssignmentInput,
+    role: Option<String>,
+) -> Result<(), String> {
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    if role_val != "admin" && role_val != "lead" {
+        return Err("Only admins or leads can assign drivers/helpers".to_string());
+    }
+    audit("update_work_order_assignees", &role_val, "unknown");
+
+    let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        r#"
+        UPDATE work_orders
+        SET assignees_json = ?, updated_at = datetime('now')
+        WHERE id = ?
+        "#
+    )
+    .bind(&input.assignees_json)
+    .bind(&input.work_order_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        r#"
+        UPDATE delivery_events
+        SET assigned_user_ids_json = COALESCE(?, '[]'), updated_at = datetime('now')
+        WHERE work_order_id = ?
+        "#
+    )
+    .bind(&input.assignees_json)
+    .bind(&input.work_order_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn update_work_order_status(
+    state: State<'_, AppState>,
+    input: WorkOrderStatusInput,
+    role: Option<String>,
+) -> Result<(), String> {
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    audit("update_work_order_status", &role_val, "unknown");
+
+    let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
+
+    let existing = sqlx::query!(
+        r#"SELECT status, delivery_size_cords FROM work_orders WHERE id = ?"#,
+        input.work_order_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let current_status = existing.status.unwrap_or_else(|| "draft".to_string());
+    let next_status = input.status.clone().unwrap_or_else(|| current_status.clone());
+    let delivery_size = existing.delivery_size_cords.unwrap_or(0.0);
+
+    // Simple validation: mileage required if status completed
+    if next_status == "completed" && input.mileage.is_none() {
+        return Err("Mileage is required to mark completed".to_string());
+    }
+
+    // Drivers can only move to in_progress and set mileage; volunteers cannot update; staff/leads/admin can update status.
+    if role_val == "volunteer" {
+        return Err("Volunteers cannot update status/mileage".to_string());
+    }
+
+    if role_val == "driver" && input.status.is_some() && next_status != "in_progress" {
+        return Err("Drivers can only mark in_progress with mileage".to_string());
+    }
+
+    sqlx::query(
+        r#"
+        UPDATE work_orders
+        SET status = ?,
+            mileage = COALESCE(?, mileage),
+            updated_at = datetime('now')
+        WHERE id = ?
+        "#
+    )
+    .bind(&next_status)
+    .bind(&input.mileage)
+    .bind(&input.work_order_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if current_status != next_status {
+        adjust_inventory_for_transition_tx(&mut tx, &current_status, &next_status, delivery_size)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn list_delivery_events(
     state: State<'_, AppState>,
+    role: Option<String>,
+    username: Option<String>,
+    hipaa_certified: Option<bool>,
 ) -> Result<Vec<DeliveryEventRow>, String> {
-    let rows = sqlx::query_as::<_, DeliveryEventRow>(
+    let mut rows = sqlx::query_as::<_, DeliveryEventRow>(
         r#"
         SELECT
             id,
@@ -588,7 +946,11 @@ async fn list_delivery_events(
             start_date,
             end_date,
             work_order_id,
-            color_code
+            color_code,
+            COALESCE(
+              assigned_user_ids_json,
+              (SELECT assignees_json FROM work_orders WHERE work_orders.id = delivery_events.work_order_id)
+            ) AS assigned_user_ids_json
         FROM delivery_events
         WHERE is_deleted = 0
         ORDER BY datetime(start_date) ASC
@@ -597,6 +959,31 @@ async fn list_delivery_events(
     .fetch_all(&state.pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let username_val = username.unwrap_or_default();
+    let is_hipaa = hipaa_certified.unwrap_or(false);
+    audit("list_delivery_events", &role_val, &username_val);
+
+    if role_val == "driver" || role_val == "volunteer" {
+        let uname = username_val.to_lowercase();
+        rows = rows
+            .into_iter()
+            .filter(|ev| {
+                let assignees: Vec<String> =
+                    serde_json::from_str(ev.assigned_user_ids_json.as_deref().unwrap_or("[]"))
+                        .unwrap_or_default();
+                assignees
+                    .iter()
+                    .map(|a| a.to_lowercase())
+                    .any(|a| a == uname)
+            })
+            .collect();
+    } else if !(role_val == "admin" || (role_val == "lead" && is_hipaa)) {
+        rows.iter_mut().for_each(|ev| {
+            ev.title = "Hidden".to_string();
+        });
+    }
 
     Ok(rows)
 }
@@ -621,8 +1008,11 @@ fn main() -> Result<()> {
             list_inventory_items,
             create_work_order,
             list_work_orders,
+            update_work_order_assignees,
+            update_work_order_status,
             create_delivery_event,
-            list_delivery_events
+            list_delivery_events,
+            list_users
         ])
         .run(tauri::generate_context!())?;
 
