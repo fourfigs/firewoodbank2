@@ -135,7 +135,7 @@ Sub-stages to close gaps:
   - ✅ Full onboarding fields + client edit flow (Stage 3) - COMPLETE (client_title is old/unused and should be removed)
   - ✅ "Needs restock" filter + auto-order messaging (Stage 4) - COMPLETE
   - ✅ User CRUD (availability/vehicle/DL/HIPAA) in Worker Directory (Stage 5.1b) - COMPLETE
-  - ⚠️ Audit log viewer/export (Stage 5.1c) - Audit persists but no UI viewer yet
+  - ✅ Audit log viewer/export (Stage 5.1c / 5.4) - COMPLETE (Reports tab with filtering)
   - Note: Town derivation is NOT needed (was an old mistake) - all contact blocks use standard form names
 
 ### ✅ Stage Prompts Reference (used and implemented across stages 0–5)
