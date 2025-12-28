@@ -75,6 +75,9 @@ struct ClientInput {
     denial_reason: Option<String>,
     gate_combo: Option<String>,
     notes: Option<String>,
+    wood_size_label: Option<String>,
+    wood_size_other: Option<String>,
+    directions: Option<String>,
     created_by_user_id: Option<String>,
 }
 
@@ -103,6 +106,9 @@ struct ClientUpdateInput {
     denial_reason: Option<String>,
     gate_combo: Option<String>,
     notes: Option<String>,
+    wood_size_label: Option<String>,
+    wood_size_other: Option<String>,
+    directions: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -129,6 +135,9 @@ struct ClientRow {
     mailing_address_postal_code: Option<String>,
     gate_combo: Option<String>,
     notes: Option<String>,
+    wood_size_label: Option<String>,
+    wood_size_other: Option<String>,
+    directions: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -245,6 +254,7 @@ struct UserRow {
     telephone: Option<String>,
     role: String,
     availability_notes: Option<String>,
+    availability_schedule: Option<String>,
     driver_license_status: Option<String>,
     driver_license_number: Option<String>,
     driver_license_expires_on: Option<String>,
@@ -354,7 +364,9 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
             mailing_address_state, mailing_address_postal_code,
             telephone, email, date_of_onboarding,
             how_did_they_hear_about_us, referring_agency, approval_status,
-            denial_reason, gate_combo, notes, created_by_user_id
+            denial_reason, gate_combo, notes,
+            wood_size_label, wood_size_other, directions,
+            created_by_user_id
         )
         VALUES (
             ?, ?, ?, ?,
@@ -364,7 +376,8 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
             ?, ?,
             ?, ?, ?,
             ?, ?, ?,
-            ?, ?, ?, ?
+            ?, ?, ?,
+            ?, ?, ?
         )
     "#;
 
@@ -392,6 +405,9 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
         .bind(&input.denial_reason)
         .bind(&input.gate_combo)
         .bind(&input.notes)
+        .bind(&input.wood_size_label)
+        .bind(&input.wood_size_other)
+        .bind(&input.directions)
         .bind(&input.created_by_user_id)
         .execute(&state.pool)
         .await
@@ -432,7 +448,10 @@ async fn list_clients(
             mailing_address_state,
             mailing_address_postal_code,
             gate_combo,
-            notes
+            notes,
+            wood_size_label,
+            wood_size_other,
+            directions
         FROM clients
         WHERE is_deleted = 0
         ORDER BY created_at DESC
@@ -532,6 +551,9 @@ async fn update_client(state: State<'_, AppState>, input: ClientUpdateInput) -> 
             denial_reason = ?,
             gate_combo = ?,
             notes = ?,
+            wood_size_label = ?,
+            wood_size_other = ?,
+            directions = ?,
             updated_at = datetime('now')
         WHERE id = ?
     "#;
@@ -559,6 +581,9 @@ async fn update_client(state: State<'_, AppState>, input: ClientUpdateInput) -> 
         .bind(&input.denial_reason)
         .bind(&input.gate_combo)
         .bind(&input.notes)
+        .bind(&input.wood_size_label)
+        .bind(&input.wood_size_other)
+        .bind(&input.directions)
         .bind(&input.id)
         .execute(&state.pool)
         .await
@@ -1064,6 +1089,7 @@ async fn list_users(state: State<'_, AppState>) -> Result<Vec<UserRow>, String> 
             telephone,
             role,
             availability_notes,
+            availability_schedule,
             driver_license_status,
             driver_license_number,
             driver_license_expires_on,
@@ -1097,16 +1123,70 @@ struct WorkOrderStatusInput {
     is_driver: Option<bool>,
 }
 
+#[derive(Debug, Serialize, FromRow)]
+struct DriverAvailabilityRow {
+    name: String,
+    availability_schedule: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 struct UserUpdateInput {
     id: String,
     availability_notes: Option<String>,
+    availability_schedule: Option<String>,
     driver_license_status: Option<String>,
     driver_license_number: Option<String>,
     driver_license_expires_on: Option<String>,
     vehicle: Option<String>,
     hipaa_certified: Option<bool>,
     is_driver: Option<bool>,
+}
+
+#[tauri::command]
+async fn get_available_drivers(
+    state: State<'_, AppState>,
+    date: String, // ISO date string like "2025-12-30"
+) -> Result<Vec<String>, String> {
+    use chrono::Datelike;
+    
+    let rows = sqlx::query_as::<_, DriverAvailabilityRow>(
+        r#"
+        SELECT name, availability_schedule
+        FROM users
+        WHERE is_deleted = 0
+          AND is_driver = 1
+        ORDER BY name ASC
+        "#
+    )
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // Parse the date to get day of week
+    let parsed_date = chrono::NaiveDate::parse_from_str(&date, "%Y-%m-%d")
+        .map_err(|e| format!("Invalid date format: {}", e))?;
+    
+    let weekday = parsed_date.weekday();
+    let day_name = weekday.to_string().to_lowercase();
+
+    let mut available = Vec::new();
+    for row in rows {
+        if let Some(schedule_json) = row.availability_schedule {
+            if let Ok(schedule) = serde_json::from_str::<std::collections::HashMap<String, bool>>(&schedule_json) {
+                if schedule.get(&day_name).copied().unwrap_or(false) {
+                    available.push(row.name);
+                }
+            } else {
+                // No schedule means always available
+                available.push(row.name);
+            }
+        } else {
+            // No schedule means always available
+            available.push(row.name);
+        }
+    }
+
+    Ok(available)
 }
 
 #[tauri::command]
@@ -1140,6 +1220,7 @@ async fn update_user_flags(
         r#"
         UPDATE users
         SET availability_notes = ?,
+            availability_schedule = ?,
             driver_license_status = ?,
             driver_license_number = ?,
             driver_license_expires_on = ?,
@@ -1151,6 +1232,7 @@ async fn update_user_flags(
         "#,
     )
     .bind(&input.availability_notes)
+    .bind(&input.availability_schedule)
     .bind(&status_clean)
     .bind(&input.driver_license_number)
     .bind(&expiry_clean)
@@ -1493,6 +1575,7 @@ fn main() -> Result<()> {
             list_delivery_events,
             list_users,
             update_user_flags,
+            get_available_drivers,
             list_motd,
             create_motd,
             list_audit_logs

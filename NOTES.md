@@ -1,34 +1,33 @@
-Notable Gaps / Changes Needed (updated for Stage 5.2 completion)
+Notable Gaps / Changes Needed (updated after Stage 5.4 completion)
 
-Completed in Stage 5.2:
-- ✅ Client name split into first/last with auto-generated client numbers
-- ✅ Address/contact validation (phone format, state, ZIP, city formatting)
-- ✅ Wood size and delivery size tracking on work orders
-- ✅ Inventory reservation system (reserved_quantity tracking)
-- ✅ Driver assignment from DB (DL flag required)
-- ✅ Work order creation gated to staff/admin
-- ✅ Worker/helper assignments on deliveries
-- ✅ Created by display name on work orders
+Completed in Stages 5.2-5.4:
+- ✅ Client name split into first/last with auto-generated client numbers (Stage 5.2)
+- ✅ Address/contact validation (phone format, state, ZIP, city formatting) (Stage 5.2)
+- ✅ Wood size and delivery size tracking on work orders (Stage 5.2)
+- ✅ Inventory reservation system (reserved_quantity tracking) (Stage 5.2)
+- ✅ Driver assignment from DB (DL flag required) (Stage 5.2)
+- ✅ Work order creation gated to staff/admin (Stage 5.2)
+- ✅ Worker/helper assignments on deliveries (Stage 5.2)
+- ✅ Created by display name on work orders (Stage 5.2)
+- ✅ Driver availability scheduling with weekly schedule (Stage 5.2)
+- ✅ Worker Directory tab for admin/lead (Stage 5.3)
+- ✅ Reports tab with audit log viewer and time filtering (Stage 5.4)
 
-Remaining Gaps:
-- Stage 2: ✅ COMPLETE - All CRUD UI implemented (update/delete for clients and inventory)
-- Stage 3: ✅ COMPLETE - All onboarding fields in edit flow (client_title is old/unused and should be removed from schema)
-- Stage 4: ✅ COMPLETE - "Needs restock" filter and auto-order messaging implemented
-- Stage 5.1b: ✅ COMPLETE - Worker Directory CRUD fully implemented
-- Stage 5.1c: ✅ COMPLETE - Audit logging infrastructure (audit persisted to audit_logs table). Note: Town derivation was an old mistake and should NOT be implemented - all contact blocks use standard form names.
-- Stage 5.1d: ✅ COMPLETE - Volunteer/driver hours + wood-credit calc (0.75 minutes/mile; displayed on Dashboard for volunteers/drivers)
-- Stage 5.4: ✅ COMPLETE - Reports tab with audit log viewer (filter by day, 7 days, current month, year, all time)
-- Stage 5.2: Driver availability integration with schedule choices (pending).
-- Inventory creation gating to be enforced with user CRUD/users stage.
-
-Notes:
+Remaining Items:
 - client_title field exists in schema but is old/unused - should be removed from database and code
-- Town derivation for volunteer view is NOT needed (old mistake) - standard contact form names should be used
+- Inventory creation gating to be enforced with user CRUD/users stage (if needed)
 
 Current Status:
-- MOTD is surfaced on login (newest first) via list_motd/create_motd.
-- Audit logs persist to audit_logs table.
-- Stage 5.2 mostly complete (driver availability scheduling pending).
+- Stage 5.2: ✅ COMPLETE
+- Stage 5.3: ✅ COMPLETE
+- Stage 5.4: ✅ COMPLETE
+- Next: Stage 6 - Login + Dashboard + Calendar
+
+Notes:
+- MOTD is surfaced on login (newest first) via list_motd/create_motd
+- Audit logs persist to audit_logs table with filtering by day/7days/month/year/all
+- Town derivation for volunteer view is NOT needed (old mistake) - standard contact form names should be used
+- Driver availability is now integrated with weekly schedule tracking
 
 Copyable prompts (Stage 0–5) for next agent:
 Stage 0 prompt

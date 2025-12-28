@@ -41,6 +41,9 @@ type ClientRow = {
   date_of_onboarding?: string | null;
   gate_combo?: string | null;
   notes?: string | null;
+  wood_size_label?: string | null;
+  wood_size_other?: string | null;
+  directions?: string | null;
 };
 
 type ClientConflictRow = {
@@ -94,6 +97,7 @@ type UserRow = {
   telephone?: string | null;
   role: Role;
   availability_notes?: string | null;
+  availability_schedule?: string | null;
   driver_license_status?: string | null;
   driver_license_number?: string | null;
   driver_license_expires_on?: string | null;
@@ -333,18 +337,31 @@ function App() {
   const [selectedWorker, setSelectedWorker] = useState<UserRow | null>(null);
   const [workerEdit, setWorkerEdit] = useState<Partial<UserRow> | null>(null);
   const [workerError, setWorkerError] = useState<string | null>(null);
+  const [workerAvailSchedule, setWorkerAvailSchedule] = useState<Record<string, boolean>>({
+    monday: false,
+    tuesday: false,
+    wednesday: false,
+    thursday: false,
+    friday: false,
+    saturday: false,
+    sunday: false,
+  });
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
   const [editingInventoryId, setEditingInventoryId] = useState<string | null>(null);
   const [showNeedsRestock, setShowNeedsRestock] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
   const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([]);
   const [auditLogFilter, setAuditLogFilter] = useState<string>("all");
+  const [mailingListSidebarOpen, setMailingListSidebarOpen] = useState(false);
+  const [mailingListFilter, setMailingListFilter] = useState<string>("all"); // "all", "mail", "email", "both"
+  const [clientDetailSidebarOpen, setClientDetailSidebarOpen] = useState(false);
+  const [selectedClientForDetail, setSelectedClientForDetail] = useState<ClientRow | null>(null);
 
 const buildBlankClientForm = () => ({
-    client_number: "",
+    client_number: "", // Will be generated after creation
     first_name: "",
     last_name: "",
-  date_of_onboarding: new Date().toISOString().slice(0, 10),
+    date_of_onboarding: "", // Will be generated after creation
     physical_address_line1: "",
     physical_address_line2: "",
     physical_address_city: "",
@@ -364,6 +381,9 @@ const buildBlankClientForm = () => ({
     denial_reason: "",
     gate_combo: "",
     notes: "",
+    wood_size_label: "",
+    wood_size_other: "",
+    directions: "",
   });
 
   const buildBlankInventoryForm = () => ({
@@ -391,7 +411,6 @@ const buildBlankClientForm = () => ({
     client_id: "",
     scheduled_date: formatDateTimeLocal(new Date()),
     status: "scheduled",
-    directions: "",
     gate_combo: "",
     notes: "",
     other_heat_source_gas: false,
@@ -401,8 +420,6 @@ const buildBlankClientForm = () => ({
     mailingSameAsPhysical: true,
     assignees: [] as string[],
     helpers: [] as string[],
-    wood_size_label: "16",
-    wood_size_other: "",
     delivery_size_choice: "1_cord",
     delivery_size_other: "",
   });
@@ -726,7 +743,80 @@ const buildBlankClientForm = () => ({
               )}
 
               {activeTab === "Clients" && (
-                <div className="stack">
+                <div style={{ display: "flex", gap: "1rem", position: "relative", minHeight: "400px" }}>
+                  {/* Left Sidebar - Mailing List */}
+                  <div
+                    style={{
+                      width: mailingListSidebarOpen ? "300px" : "0",
+                      overflow: "hidden",
+                      transition: "width 0.3s ease",
+                      borderRight: mailingListSidebarOpen ? "1px solid #ddd" : "none",
+                      paddingRight: mailingListSidebarOpen ? "1rem" : "0",
+                    }}
+                  >
+                    {mailingListSidebarOpen && (
+                      <div className="list-card">
+                        <div className="list-head">
+                          <h3>Mailer List</h3>
+                          <button
+                            className="ghost"
+                            type="button"
+                            onClick={() => setMailingListSidebarOpen(false)}
+                            style={{ padding: "0.25rem 0.5rem" }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <div style={{ marginBottom: "0.5rem" }}>
+                          <select
+                            value={mailingListFilter}
+                            onChange={(e) => setMailingListFilter(e.target.value)}
+                            style={{ width: "100%", padding: "0.5rem" }}
+                          >
+                            <option value="all">All</option>
+                            <option value="mail">Mail only</option>
+                            <option value="email">Email only</option>
+                            <option value="both">Both mail & email</option>
+                          </select>
+                        </div>
+                        {canViewClientPII ? (
+                          <div className="table" style={{ maxHeight: "500px", overflowY: "auto" }}>
+                            <div className="table-head">
+                              <span>Address</span>
+                              <span>Email</span>
+                              <span>Name</span>
+                            </div>
+                            {clients
+                              .filter((c) => {
+                                if (mailingListFilter === "all") return true;
+                                const hasEmail = !!c.email;
+                                const hasAddress = !!c.physical_address_line1;
+                                if (mailingListFilter === "mail") return hasAddress && !hasEmail;
+                                if (mailingListFilter === "email") return hasEmail && !hasAddress;
+                                if (mailingListFilter === "both") return hasEmail && hasAddress;
+                                return true;
+                              })
+                              .map((c) => (
+                                <div className="table-row" key={`mailer-${c.id}`}>
+                                  <div>
+                                    {c.physical_address_line1}, {c.physical_address_city}, {c.physical_address_state}{" "}
+                                    {c.physical_address_postal_code}
+                                  </div>
+                                  <div className="muted">{c.email ?? "n/a"}</div>
+                                  <div>{c.name}</div>
+                                </div>
+                              ))}
+                            {!clients.length && <div className="table-row">No mailer entries yet.</div>}
+                          </div>
+                        ) : (
+                          <p className="muted">PII hidden. Admins and HIPAA-certified leads can view mailer list.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Main Content */}
+                  <div className="stack" style={{ flex: 1 }}>
                   <div className="card muted">
                     <div className="add-header">
                       <button
@@ -776,13 +866,17 @@ const buildBlankClientForm = () => ({
                             return;
                           }
 
-                          const generatedNumber =
-                            clientForm.client_number ||
-                            (editingClientId ? clientForm.client_number : buildClientNumber(clientForm.first_name, clientForm.last_name));
-                          if (!generatedNumber) {
+                          // Generate client number and date AFTER creation for new clients
+                          const generatedNumber = editingClientId 
+                            ? clientForm.client_number 
+                            : buildClientNumber(clientForm.first_name, clientForm.last_name);
+                          if (!editingClientId && !generatedNumber) {
                             setClientError("Client number could not be generated. Add first and last name.");
                             return;
                           }
+                          const onboardingDate = editingClientId 
+                            ? clientForm.date_of_onboarding 
+                            : new Date().toISOString().slice(0, 10);
                           const normalizedState = normalizeState(clientForm.physical_address_state);
                           if (!isValidState(normalizedState)) {
                             setClientError("State must be two letters (e.g., VT).");
@@ -804,10 +898,7 @@ const buildBlankClientForm = () => ({
                             setClientError("Provide at least one contact method (phone or email).");
                             return;
                           }
-                          if (!clientForm.date_of_onboarding) {
-                            setClientError("Onboarding date is required.");
-                            return;
-                          }
+                          // Date will be auto-generated for new clients
                           const mailing = clientForm.mailing_same_as_physical
                             ? {
                                 mailing_address_line1: clientForm.physical_address_line1,
@@ -828,7 +919,9 @@ const buildBlankClientForm = () => ({
                             ...clientForm,
                             client_number: generatedNumber,
                             name: fullName,
-                            date_of_onboarding: `${clientForm.date_of_onboarding}T00:00:00`,
+                            date_of_onboarding: editingClientId 
+                              ? (clientForm.date_of_onboarding ? `${clientForm.date_of_onboarding}T00:00:00` : null)
+                              : `${onboardingDate}T00:00:00`,
                             physical_address_line2: clientForm.physical_address_line2 || null,
                             physical_address_city: normalizedCity,
                             physical_address_state: normalizedState,
@@ -840,6 +933,9 @@ const buildBlankClientForm = () => ({
                             how_did_they_hear_about_us: clientForm.how_did_they_hear_about_us || null,
                             referring_agency: clientForm.referring_agency || null,
                             denial_reason: clientForm.denial_reason || null,
+                            wood_size_label: clientForm.wood_size_label || null,
+                            wood_size_other: clientForm.wood_size_other || null,
+                            directions: clientForm.directions || null,
                             created_by_user_id: null,
                             ...mailing,
                           };
@@ -861,26 +957,38 @@ const buildBlankClientForm = () => ({
                         }
                       }}
                     >
-                      <label>
-                        Client #
-                        <input
-                          required
+                      {editingClientId && (
+                        <>
+                          <label>
+                            Client #
+                            <input
                               readOnly
-                          value={clientForm.client_number}
-                        />
-                      </label>
+                              value={clientForm.client_number}
+                            />
+                          </label>
+                          <label>
+                            Onboarding date
+                            <input
+                              type="date"
+                              value={clientForm.date_of_onboarding}
+                              onChange={(e) => setClientForm({ ...clientForm, date_of_onboarding: e.target.value })}
+                              disabled={!canManage}
+                            />
+                          </label>
+                          {!canManage && <div className="muted">Only leads/admins can change onboarding date.</div>}
+                        </>
+                      )}
+                      {!editingClientId && (
+                        <div className="muted span-2">
+                          Client number and onboarding date will be generated automatically after creation.
+                        </div>
+                      )}
                       <label>
                         First name
                         <input
                           required
                           value={clientForm.first_name}
-                              onChange={(e) =>
-                                setClientForm((prev) => ({
-                                  ...prev,
-                                  first_name: e.target.value,
-                                  client_number: editingClientId ? prev.client_number : buildClientNumber(e.target.value, prev.last_name),
-                                }))
-                              }
+                          onChange={(e) => setClientForm({ ...clientForm, first_name: e.target.value })}
                         />
                       </label>
                       <label>
@@ -888,26 +996,9 @@ const buildBlankClientForm = () => ({
                         <input
                           required
                           value={clientForm.last_name}
-                              onChange={(e) =>
-                                setClientForm((prev) => ({
-                                  ...prev,
-                                  last_name: e.target.value,
-                                  client_number: editingClientId ? prev.client_number : buildClientNumber(prev.first_name, e.target.value),
-                                }))
-                              }
+                          onChange={(e) => setClientForm({ ...clientForm, last_name: e.target.value })}
                         />
                       </label>
-                      <label>
-                            Onboarding date
-                            <input
-                              type="date"
-                              required
-                              value={clientForm.date_of_onboarding}
-                          onChange={(e) => setClientForm({ ...clientForm, date_of_onboarding: e.target.value })}
-                          disabled={!canManage}
-                            />
-                          </label>
-                      {!canManage && <div className="muted">Only leads/admins can change onboarding date.</div>}
                       <label>
                         Telephone
                         <input
@@ -1065,6 +1156,39 @@ const buildBlankClientForm = () => ({
                           onChange={(e) => setClientForm({ ...clientForm, referring_agency: e.target.value })}
                         />
                       </label>
+                      <label>
+                        Wood size
+                        <select
+                          value={clientForm.wood_size_label}
+                          onChange={(e) => setClientForm({ ...clientForm, wood_size_label: e.target.value })}
+                        >
+                          <option value="">Select size</option>
+                          <option value="12">12 in</option>
+                          <option value="14">14 in</option>
+                          <option value="16">16 in</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </label>
+                      {clientForm.wood_size_label === "other" && (
+                        <label>
+                          Wood size (other, inches)
+                          <input
+                            type="number"
+                            min="1"
+                            value={clientForm.wood_size_other}
+                            onChange={(e) => setClientForm({ ...clientForm, wood_size_other: e.target.value })}
+                          />
+                        </label>
+                      )}
+                      <label className="span-2">
+                        Directions
+                        <textarea
+                          value={clientForm.directions}
+                          onChange={(e) => setClientForm({ ...clientForm, directions: e.target.value })}
+                          rows={3}
+                          placeholder="Directions to the client's location"
+                        />
+                      </label>
                       <label className="span-2">
                         Notes
                         <textarea
@@ -1163,7 +1287,15 @@ const buildBlankClientForm = () => ({
                         {canManage && <span>Actions</span>}
                       </div>
                       {filteredClients.map((c) => (
-                        <div className="table-row" key={c.id}>
+                        <div 
+                          className="table-row" 
+                          key={c.id}
+                          onDoubleClick={() => {
+                            setSelectedClientForDetail(c);
+                            setClientDetailSidebarOpen(true);
+                          }}
+                          style={{ cursor: "pointer" }}
+                        >
                           <div>
                             <strong>{c.name}</strong>
                             <div className="muted">#{c.client_number}</div>
@@ -1223,6 +1355,9 @@ const buildBlankClientForm = () => ({
                                     denial_reason: c.denial_reason ?? "",
                                     gate_combo: c.gate_combo ?? "",
                                     notes: c.notes ?? "",
+                                    wood_size_label: c.wood_size_label ?? "",
+                                    wood_size_other: c.wood_size_other ?? "",
+                                    directions: c.directions ?? "",
                                   });
                                   setShowClientForm(true);
                                 }}
@@ -1253,32 +1388,132 @@ const buildBlankClientForm = () => ({
                     </div>
                   </div>
 
-                  <div className="list-card">
-                    <div className="list-head">
-                      <h3>Mailer list</h3>
-                      <span className="muted">{clients.length} households</span>
-                    </div>
-                    {canViewClientPII ? (
-                      <div className="table">
-                        <div className="table-head">
-                          <span>Address</span>
-                          <span>Email</span>
-                          <span>Name</span>
+                    {/* Toggle button for mailing list sidebar */}
+                    {!mailingListSidebarOpen && (
+                      <button
+                        className="ghost"
+                        type="button"
+                        onClick={() => setMailingListSidebarOpen(true)}
+                        style={{
+                          position: "absolute",
+                          left: 0,
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          padding: "0.5rem",
+                          background: "#fff",
+                          border: "1px solid #ddd",
+                          borderLeft: "none",
+                          borderRadius: "0 4px 4px 0",
+                          cursor: "pointer",
+                          zIndex: 10,
+                        }}
+                        title="Open Mailer List"
+                      >
+                        →
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Right Sidebar - Client Detail */}
+                  <div
+                    style={{
+                      width: clientDetailSidebarOpen ? "400px" : "0",
+                      overflow: "hidden",
+                      transition: "width 0.3s ease",
+                      borderLeft: clientDetailSidebarOpen ? "1px solid #ddd" : "none",
+                      paddingLeft: clientDetailSidebarOpen ? "1rem" : "0",
+                    }}
+                  >
+                    {clientDetailSidebarOpen && selectedClientForDetail && (
+                      <div className="card">
+                        <div className="list-head">
+                          <h3>{selectedClientForDetail.name}</h3>
+                          <button
+                            className="ghost"
+                            type="button"
+                            onClick={() => {
+                              setClientDetailSidebarOpen(false);
+                              setSelectedClientForDetail(null);
+                            }}
+                            style={{ padding: "0.25rem 0.5rem" }}
+                          >
+                            ×
+                          </button>
                         </div>
-                        {clients.map((c) => (
-                          <div className="table-row" key={`mailer-${c.id}`}>
-                            <div>
-                              {c.physical_address_line1}, {c.physical_address_city}, {c.physical_address_state}{" "}
-                              {c.physical_address_postal_code}
+                        <div className="stack">
+                          <div><strong>Client #:</strong> {selectedClientForDetail.client_number}</div>
+                          {selectedClientForDetail.date_of_onboarding && (
+                            <div><strong>Onboarding Date:</strong> {new Date(selectedClientForDetail.date_of_onboarding).toLocaleDateString()}</div>
+                          )}
+                          <div><strong>Approval Status:</strong> <span className="pill">{selectedClientForDetail.approval_status}</span></div>
+                          {canViewClientPII && (
+                            <>
+                              <div><strong>Email:</strong> {selectedClientForDetail.email ?? "—"}</div>
+                              <div><strong>Phone:</strong> {selectedClientForDetail.telephone ?? "—"}</div>
+                              <div><strong>Address:</strong> {selectedClientForDetail.physical_address_line1}, {selectedClientForDetail.physical_address_city}, {selectedClientForDetail.physical_address_state} {selectedClientForDetail.physical_address_postal_code}</div>
+                              {selectedClientForDetail.gate_combo && (
+                                <div><strong>Gate Combo:</strong> {selectedClientForDetail.gate_combo}</div>
+                              )}
+                              {selectedClientForDetail.wood_size_label && (
+                                <div><strong>Wood Size:</strong> {selectedClientForDetail.wood_size_label === "other" ? selectedClientForDetail.wood_size_other : selectedClientForDetail.wood_size_label} in</div>
+                              )}
+                              {selectedClientForDetail.directions && (
+                                <div><strong>Directions:</strong> <div style={{ marginTop: "0.25rem", whiteSpace: "pre-wrap" }}>{selectedClientForDetail.directions}</div></div>
+                              )}
+                            </>
+                          )}
+                          {selectedClientForDetail.notes && (
+                            <div><strong>Notes:</strong> <div style={{ marginTop: "0.25rem", whiteSpace: "pre-wrap" }}>{selectedClientForDetail.notes}</div></div>
+                          )}
+                          {canManage && (
+                            <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem" }}>
+                              <button
+                                className="ping"
+                                type="button"
+                                onClick={() => {
+                                  const [first, ...rest] = selectedClientForDetail.name.split(" ");
+                                  const last = rest.join(" ");
+                                  setEditingClientId(selectedClientForDetail.id);
+                                  setClientForm({
+                                    client_number: selectedClientForDetail.client_number,
+                                    first_name: first,
+                                    last_name: last,
+                                    date_of_onboarding: selectedClientForDetail.date_of_onboarding
+                                      ? selectedClientForDetail.date_of_onboarding.slice(0, 10)
+                                      : new Date().toISOString().slice(0, 10),
+                                    physical_address_line1: selectedClientForDetail.physical_address_line1,
+                                    physical_address_line2: selectedClientForDetail.physical_address_line2 ?? "",
+                                    physical_address_city: selectedClientForDetail.physical_address_city,
+                                    physical_address_state: selectedClientForDetail.physical_address_state,
+                                    physical_address_postal_code: selectedClientForDetail.physical_address_postal_code,
+                                    mailing_same_as_physical: !selectedClientForDetail.mailing_address_line1,
+                                    mailing_address_line1: selectedClientForDetail.mailing_address_line1 ?? "",
+                                    mailing_address_line2: selectedClientForDetail.mailing_address_line2 ?? "",
+                                    mailing_address_city: selectedClientForDetail.mailing_address_city ?? "",
+                                    mailing_address_state: selectedClientForDetail.mailing_address_state ?? "",
+                                    mailing_address_postal_code: selectedClientForDetail.mailing_address_postal_code ?? "",
+                                    telephone: selectedClientForDetail.telephone ?? "",
+                                    email: selectedClientForDetail.email ?? "",
+                                    how_did_they_hear_about_us: selectedClientForDetail.how_did_they_hear_about_us ?? "",
+                                    referring_agency: selectedClientForDetail.referring_agency ?? "",
+                                    approval_status: selectedClientForDetail.approval_status,
+                                    denial_reason: selectedClientForDetail.denial_reason ?? "",
+                                    gate_combo: selectedClientForDetail.gate_combo ?? "",
+                                    notes: selectedClientForDetail.notes ?? "",
+                                    wood_size_label: selectedClientForDetail.wood_size_label ?? "",
+                                    wood_size_other: selectedClientForDetail.wood_size_other ?? "",
+                                    directions: selectedClientForDetail.directions ?? "",
+                                  });
+                                  setShowClientForm(true);
+                                  setClientDetailSidebarOpen(false);
+                                }}
+                              >
+                                Edit Client
+                              </button>
                             </div>
-                            <div className="muted">{c.email ?? "n/a"}</div>
-                            <div>{c.name}</div>
-                          </div>
-                        ))}
-                        {!clients.length && <div className="table-row">No mailer entries yet.</div>}
+                          )}
+                        </div>
                       </div>
-                    ) : (
-                      <p className="muted">PII hidden. Admins and HIPAA-certified leads can view mailer list.</p>
                     )}
                   </div>
                 </div>
@@ -1544,7 +1779,6 @@ const buildBlankClientForm = () => ({
                               client_id: "",
                               scheduled_date: formatDateTimeLocal(new Date()),
                               status: "scheduled",
-                              directions: "",
                               gate_combo: "",
                               notes: "",
                               other_heat_source_gas: false,
@@ -1554,8 +1788,6 @@ const buildBlankClientForm = () => ({
                               mailingSameAsPhysical: true,
                               assignees: [],
                               helpers: [],
-                              wood_size_label: "16",
-                              wood_size_other: "",
                               delivery_size_choice: "1_cord",
                               delivery_size_other: "",
                             });
@@ -1787,13 +2019,6 @@ const buildBlankClientForm = () => ({
                           deliverySizeLabel = `${parsed} cord(s)`;
                         }
 
-                        const woodSizeLabel =
-                          workOrderForm.wood_size_label === "other"
-                            ? "Other"
-                            : workOrderForm.wood_size_label;
-                        const woodSizeOther =
-                          workOrderForm.wood_size_label === "other" ? workOrderForm.wood_size_other : "";
-
                         setBusy(true);
                         try {
                           await invoke("create_work_order", {
@@ -1824,7 +2049,7 @@ const buildBlankClientForm = () => ({
                                 : targetClient.mailing_address_postal_code,
                               telephone: targetClient.telephone,
                               email: targetClient.email,
-                              directions: workOrderForm.directions || null,
+                              directions: targetClient.directions || null,
                               gate_combo: workOrderForm.gate_combo || targetClient.gate_combo,
                           mileage: mileageValue,
                               other_heat_source_gas: workOrderForm.other_heat_source_gas,
@@ -1833,8 +2058,8 @@ const buildBlankClientForm = () => ({
                               notes: workOrderForm.notes || null,
                               scheduled_date: workOrderForm.scheduled_date || null,
                               status: workOrderForm.status,
-                              wood_size_label: woodSizeLabel,
-                              wood_size_other: woodSizeOther || null,
+                              wood_size_label: targetClient.wood_size_label || null,
+                              wood_size_other: targetClient.wood_size_other || null,
                               delivery_size_label: deliverySizeLabel,
                               delivery_size_cords: deliverySizeCords,
                               assignees_json: JSON.stringify([
@@ -1853,7 +2078,6 @@ const buildBlankClientForm = () => ({
                             client_id: "",
                             scheduled_date: "",
                             status: "scheduled",
-                            directions: "",
                             gate_combo: "",
                             notes: "",
                             other_heat_source_gas: false,
@@ -1863,8 +2087,6 @@ const buildBlankClientForm = () => ({
                             mailingSameAsPhysical: true,
                             assignees: [],
                             helpers: [],
-                            wood_size_label: "16",
-                            wood_size_other: "",
                             delivery_size_choice: "1_cord",
                             delivery_size_other: "",
                           });
@@ -1901,29 +2123,6 @@ const buildBlankClientForm = () => ({
                           ))}
                         </select>
                       </label>
-                      <label>
-                        Wood size
-                        <select
-                          value={workOrderForm.wood_size_label}
-                          onChange={(e) => setWorkOrderForm({ ...workOrderForm, wood_size_label: e.target.value })}
-                        >
-                          <option value="12">12 in</option>
-                          <option value="14">14 in</option>
-                          <option value="16">16 in</option>
-                          <option value="other">Other</option>
-                        </select>
-                      </label>
-                      {workOrderForm.wood_size_label === "other" && (
-                        <label>
-                          Wood size (other, inches)
-                          <input
-                            type="number"
-                            min="1"
-                            value={workOrderForm.wood_size_other}
-                            onChange={(e) => setWorkOrderForm({ ...workOrderForm, wood_size_other: e.target.value })}
-                          />
-                        </label>
-                      )}
                       <label>
                         Delivery size
                         <select
@@ -2171,14 +2370,6 @@ const buildBlankClientForm = () => ({
                           step="0.1"
                           value={workOrderForm.mileage}
                           onChange={(e) => setWorkOrderForm({ ...workOrderForm, mileage: e.target.value })}
-                        />
-                      </label>
-                      <label className="span-2">
-                        Directions
-                        <textarea
-                          rows={2}
-                          value={workOrderForm.directions}
-                          onChange={(e) => setWorkOrderForm({ ...workOrderForm, directions: e.target.value })}
                         />
                       </label>
                       <label>
@@ -2589,6 +2780,32 @@ const buildBlankClientForm = () => ({
                               is_driver: !!u.is_driver,
                               hipaa_certified: u.hipaa_certified,
                             });
+                            if (u.availability_schedule) {
+                              try {
+                                const parsed = JSON.parse(u.availability_schedule);
+                                setWorkerAvailSchedule(parsed);
+                              } catch {
+                                setWorkerAvailSchedule({
+                                  monday: false,
+                                  tuesday: false,
+                                  wednesday: false,
+                                  thursday: false,
+                                  friday: false,
+                                  saturday: false,
+                                  sunday: false,
+                                });
+                              }
+                            } else {
+                              setWorkerAvailSchedule({
+                                monday: false,
+                                tuesday: false,
+                                wednesday: false,
+                                thursday: false,
+                                friday: false,
+                                saturday: false,
+                                sunday: false,
+                              });
+                            }
                             setWorkerError(null);
                           }}
                           style={{ cursor: "pointer" }}
@@ -2622,12 +2839,34 @@ const buildBlankClientForm = () => ({
                         <div><strong>Phone:</strong> {selectedWorker.telephone ?? "—"}</div>
                         <div><strong>Email:</strong> {selectedWorker.email ?? "—"}</div>
                         <label>
-                          Schedule/availability
+                          Availability Notes
                           <input
                             value={workerEdit?.availability_notes ?? ""}
                             onChange={(e) => setWorkerEdit((prev) => ({ ...prev, availability_notes: e.target.value }))}
                           />
                         </label>
+                        <div>
+                          <strong>Weekly Availability Schedule:</strong>
+                          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginTop: "0.5rem" }}>
+                            {Object.keys(workerAvailSchedule).map((day) => (
+                              <label key={day} className="checkbox" style={{ display: "flex", alignItems: "center" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={workerAvailSchedule[day]}
+                                  onChange={(e) =>
+                                    setWorkerAvailSchedule({
+                                      ...workerAvailSchedule,
+                                      [day]: e.target.checked,
+                                    })
+                                  }
+                                />
+                                <span style={{ marginLeft: "0.25rem", textTransform: "capitalize" }}>
+                                  {day}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
                         <label>
                           Working vehicle
                           <input
@@ -2694,6 +2933,7 @@ const buildBlankClientForm = () => ({
                                     input: {
                                       id: selectedWorker.id,
                                       availability_notes: workerEdit?.availability_notes ?? null,
+                                      availability_schedule: JSON.stringify(workerAvailSchedule),
                                       vehicle: workerEdit?.vehicle ?? null,
                                       driver_license_status: workerEdit?.driver_license_status ?? null,
                                       driver_license_number: workerEdit?.driver_license_number ?? null,
@@ -2784,13 +3024,6 @@ const buildBlankClientForm = () => ({
               )}
             </section>
 
-            <section className="card">
-              <h3>Bridge Test</h3>
-              <p>Click “Ping Tauri” to call the Rust command.</p>
-              <div className="ping-result">
-                Result: {pingResult ?? "not called yet"}
-              </div>
-            </section>
           </main>
         </>
       ) : (

@@ -1,7 +1,7 @@
 # 🔥 Community Firewood Bank Management App - Complete Roadmap
 
 **Repo**: https://github.com/fourfigs/firewoodbank2  
-**Status**: 🟢 Stage 5.2 - Work Order and Intake Hardening (current)  
+**Status**: 🟢 Stage 5.4 Complete - Ready for Stage 6 (Dashboard + Calendar)  
 **Target**: Windows Desktop → Multi-platform sync-ready app
 
 ## 🎯 PROJECT GOALS
@@ -158,30 +158,31 @@ Tighten intake UX/validation before Stage 6:
 - ✅ Wood size dropdown (12/14/16/Other + specify inches integer) and delivery size (1 cord / 1/3 cord / other numeric), carry both on work orders
 - ✅ Inventory impact: reserve wood on schedule/in-progress and deduct on completed; release on cancel (reserved_quantity tracking)
 - ✅ Driver assignment dropdown (licensed drivers from DB only - DL flag required)
-- ⏳ Driver availability drives schedule choices (pending)
+- ✅ Driver availability drives schedule choices (weekly schedule)
 - ✅ Status/mileage editable only by lead/admin (driver can enter mileage and mark delivered pending approval)
 - ✅ Label work orders with creator display name (not username)
 - ✅ Work orders entered by staff and admin only (UI + backend gate)
 - ✅ Drivers can add up to four workers/helpers on a delivery (assignees_json)
 - ✅ All clients can be workers, all workers can be driver/hipaa/working vehicle flagged, only leads/admins get PII unfiltered, and drivers only see the name, address, and contact info
-What you see: Validated intake forms, wood/delivery sizes, inventory reservations, driver assignments
+What you see: Validated intake forms, wood/delivery sizes, inventory reservations, driver assignments with availability
 Branch: stage-5.2-intake
 
-### ⏳ **Stage 5.3: Worker Directory (new)**
+### ✅ **Stage 5.3: Worker Directory**
 Admin/Lead-only Worker Directory tab:
-- List Volunteers/ staff with name, phone, schedule/availability, driver license status, working vehicle, HIPAA certification flag
-- Double-click row opens full profile detail
-- Tab hidden for non-admin/non-lead
--full profile includes name, address, contact, availability, DL?, HIPAA Certified, working vehicle. It does not need to be in this order. ask lead in qwuestions for anything you think should be included.
+- ✅ List all workers with name, phone, availability, DL status, vehicle, HIPAA certification
+- ✅ Double-click row opens full profile detail for editing
+- ✅ Edit availability schedule (weekly checkboxes), driver details, HIPAA cert
+- ✅ Tab hidden for non-admin/non-lead
+What you see: Worker Directory tab with list and edit profile
+Branch: stage-5.3-workers
 
-### 🟢 **Stage 5.4: Reports / Audit Log Viewer**
+### ✅ **Stage 5.4: Reports / Audit Log Viewer**
 Admin/Lead-only Reports tab for viewing audit logs:
-- Reports tab in navigation (gated to admin/lead roles)
-- Audit log viewer displaying: timestamp, event, role, actor
-- Time-based filtering: Day, 7 Days, Current Month, Year, All Time
-- Table view with sorting
-- Backend: `list_audit_logs` Tauri command with date filtering
-- Completes Stage 5.1c audit log viewer requirement
+- ✅ Reports tab in navigation (gated to admin/lead roles)
+- ✅ Audit log viewer displaying: timestamp, event, role, actor
+- ✅ Time-based filtering: Day, 7 Days, Current Month, Year, All Time
+- ✅ Table view with sorting
+- ✅ Backend: `list_audit_logs` Tauri command with date filtering
 What you see: Reports tab with filterable audit log table
 Branch: stage-5.4-reports
 
