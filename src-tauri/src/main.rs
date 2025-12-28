@@ -55,7 +55,8 @@ fn resolve_database_url() -> String {
 struct ClientInput {
     client_number: String,
     client_title: Option<String>,
-    name: String,
+    first_name: Option<String>, // Frontend field
+    last_name: Option<String>, // Frontend field
     physical_address_line1: String,
     physical_address_line2: Option<String>,
     physical_address_city: String,
@@ -66,8 +67,10 @@ struct ClientInput {
     mailing_address_city: Option<String>,
     mailing_address_state: Option<String>,
     mailing_address_postal_code: Option<String>,
+    mailing_same_as_physical: Option<bool>, // Frontend UI field, ignored
     telephone: Option<String>,
     email: Option<String>,
+    opt_out_email: Option<bool>, // Frontend UI field, already handled in frontend
     date_of_onboarding: Option<String>,
     how_did_they_hear_about_us: Option<String>,
     referring_agency: Option<String>,
@@ -86,7 +89,8 @@ struct ClientUpdateInput {
     id: String,
     client_number: String,
     client_title: Option<String>,
-    name: String,
+    first_name: Option<String>, // Frontend field
+    last_name: Option<String>, // Frontend field
     physical_address_line1: String,
     physical_address_line2: Option<String>,
     physical_address_city: String,
@@ -97,8 +101,10 @@ struct ClientUpdateInput {
     mailing_address_city: Option<String>,
     mailing_address_state: Option<String>,
     mailing_address_postal_code: Option<String>,
+    mailing_same_as_physical: Option<bool>, // Frontend UI field, ignored
     telephone: Option<String>,
     email: Option<String>,
+    opt_out_email: Option<bool>, // Frontend UI field, already handled in frontend
     date_of_onboarding: Option<String>,
     how_did_they_hear_about_us: Option<String>,
     referring_agency: Option<String>,
@@ -138,6 +144,7 @@ struct ClientRow {
     wood_size_label: Option<String>,
     wood_size_other: Option<String>,
     directions: Option<String>,
+    created_at: String,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -310,10 +317,93 @@ fn ping() -> String {
 }
 
 #[tauri::command]
+async fn get_next_client_number(
+    state: State<'_, AppState>,
+    first_name: String,
+    last_name: String,
+    date_str: Option<String>, // Date in YYYY-MM-DD format, or None for today
+) -> Result<String, String> {
+    use chrono::Datelike;
+    
+    // Extract initials (first letter of first and last name, lowercase)
+    let first_initial = first_name
+        .trim()
+        .chars()
+        .next()
+        .unwrap_or('x')
+        .to_lowercase()
+        .next()
+        .unwrap_or('x');
+    let last_initial = last_name
+        .trim()
+        .chars()
+        .next()
+        .unwrap_or('x')
+        .to_lowercase()
+        .next()
+        .unwrap_or('x');
+    
+    // Parse date or use today
+    let date = if let Some(ds) = date_str {
+        chrono::NaiveDate::parse_from_str(&ds, "%Y-%m-%d")
+            .map_err(|_| "Invalid date format".to_string())?
+    } else {
+        chrono::Local::now().date_naive()
+    };
+    
+    // Format as MMDDYY
+    let mm = format!("{:02}", date.month());
+    let dd = format!("{:02}", date.day());
+    let yy = format!("{:02}", date.year() % 100);
+    let date_part = format!("{}{}{}", mm, dd, yy);
+    
+    // Get the highest sequential number across ALL clients (including deleted clients, so numbers are never reused)
+    // The sequential number represents the order of all clients overall
+    let result = sqlx::query_scalar::<_, Option<i64>>(
+        r#"
+        SELECT MAX(CAST(SUBSTR(client_number, -4) AS INTEGER))
+        FROM clients
+        WHERE LENGTH(client_number) >= 4
+          AND SUBSTR(client_number, -4) GLOB '[0-9][0-9][0-9][0-9]'
+        "#
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let next_seq = if let Some(max_num) = result {
+        max_num + 1
+    } else {
+        1
+    };
+
+    // Format: initials-mmddyy[4-digit-sequential]
+    let prefix = format!("{}{}{}", first_initial, last_initial, date_part);
+    let client_number = format!("{}{:04}", prefix, next_seq);
+    Ok(client_number)
+}
+
+#[tauri::command]
 async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
     let approval_status = input.approval_status.unwrap_or_else(|| "pending".to_string());
     audit_db(&state.pool, "create_client", "unknown", "unknown").await;
+
+    // Extract first_name and last_name from input
+    let first_name = input.first_name.as_deref().unwrap_or("").trim().to_string();
+    let last_name = input.last_name.as_deref().unwrap_or("").trim().to_string();
+    
+    // Compute name from first_name + last_name
+    if first_name.is_empty() && last_name.is_empty() {
+        return Err("Both 'first_name' and 'last_name' are required.".to_string());
+    }
+    
+    let name = format!("{} {}", first_name, last_name).trim().to_string();
+    
+    // Ensure name is not empty
+    if name.is_empty() {
+        return Err("Name cannot be empty.".to_string());
+    }
 
     // Enforce: a name can only have one address; check conflicts before insert.
     let conflicts = sqlx::query_as::<_, ClientConflictRow>(
@@ -334,7 +424,7 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
           )
         "#
     )
-    .bind(&input.name)
+    .bind(&name)
     .fetch_all(&state.pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -358,6 +448,7 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
     let query = r#"
         INSERT INTO clients (
             id, client_number, client_title, name,
+            first_name, last_name,
             physical_address_line1, physical_address_line2, physical_address_city,
             physical_address_state, physical_address_postal_code,
             mailing_address_line1, mailing_address_line2, mailing_address_city,
@@ -370,14 +461,15 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
         )
         VALUES (
             ?, ?, ?, ?,
-            ?, ?, ?,
             ?, ?,
             ?, ?, ?,
             ?, ?,
             ?, ?, ?,
+            ?, ?,
             ?, ?, ?,
             ?, ?, ?,
-            ?, ?, ?
+            ?, ?, ?,
+            ?, ?, ?, ?
         )
     "#;
 
@@ -385,7 +477,9 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
         .bind(&id)
         .bind(&input.client_number)
         .bind(&input.client_title)
-        .bind(&input.name)
+        .bind(&name)
+        .bind(&first_name)
+        .bind(&last_name)
         .bind(&input.physical_address_line1)
         .bind(&input.physical_address_line2)
         .bind(&input.physical_address_city)
@@ -451,10 +545,11 @@ async fn list_clients(
             notes,
             wood_size_label,
             wood_size_other,
-            directions
+            directions,
+            created_at
         FROM clients
         WHERE is_deleted = 0
-        ORDER BY created_at DESC
+        ORDER BY COALESCE(date_of_onboarding, created_at) ASC
         "#
     )
     .fetch_all(&state.pool)
@@ -527,11 +622,29 @@ async fn update_client(state: State<'_, AppState>, input: ClientUpdateInput) -> 
     let approval_status = input.approval_status.unwrap_or_else(|| "pending".to_string());
     audit_db(&state.pool, "update_client", "unknown", "unknown").await;
 
+    // Extract first_name and last_name from input
+    let first_name = input.first_name.as_deref().unwrap_or("").trim().to_string();
+    let last_name = input.last_name.as_deref().unwrap_or("").trim().to_string();
+    
+    // Compute name from first_name + last_name
+    if first_name.is_empty() && last_name.is_empty() {
+        return Err("Both 'first_name' and 'last_name' are required.".to_string());
+    }
+    
+    let name = format!("{} {}", first_name, last_name).trim().to_string();
+    
+    // Ensure name is not empty
+    if name.is_empty() {
+        return Err("Name cannot be empty.".to_string());
+    }
+
     let query = r#"
         UPDATE clients
         SET client_number = ?,
             client_title = ?,
             name = ?,
+            first_name = ?,
+            last_name = ?,
             physical_address_line1 = ?,
             physical_address_line2 = ?,
             physical_address_city = ?,
@@ -561,7 +674,9 @@ async fn update_client(state: State<'_, AppState>, input: ClientUpdateInput) -> 
     sqlx::query(query)
         .bind(&input.client_number)
         .bind(&input.client_title)
-        .bind(&input.name)
+        .bind(&name)
+        .bind(&first_name)
+        .bind(&last_name)
         .bind(&input.physical_address_line1)
         .bind(&input.physical_address_line2)
         .bind(&input.physical_address_city)
@@ -1558,6 +1673,7 @@ fn main() -> Result<()> {
         })
         .invoke_handler(tauri::generate_handler![
             ping,
+            get_next_client_number,
             create_client,
             list_clients,
             check_client_conflict,
