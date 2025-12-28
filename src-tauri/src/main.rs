@@ -372,7 +372,7 @@ async fn get_next_client_number(
     .map_err(|e| e.to_string())?;
 
     let next_seq = if let Some(max_num) = result {
-        max_num + 1
+        max_num.unwrap_or(0) + 1
     } else {
         1
     };
