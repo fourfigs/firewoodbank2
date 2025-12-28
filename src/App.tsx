@@ -4,7 +4,7 @@ import Nav from "./components/Nav";
 import logo from "./assets/logo.png";
 import firewoodIcon from "../firewoodBank-icon.png";
 
-const tabs = ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics", "Worker Directory"];
+const tabs = ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics", "Worker Directory", "Reports"];
 
 type Role = "admin" | "lead" | "staff" | "volunteer";
 
@@ -118,6 +118,14 @@ type MotdRow = {
   message: string;
   active_from?: string | null;
   active_to?: string | null;
+  created_at: string;
+};
+
+type AuditLogRow = {
+  id: string;
+  event: string;
+  role?: string | null;
+  actor?: string | null;
   created_at: string;
 };
 
@@ -329,6 +337,8 @@ function App() {
   const [editingInventoryId, setEditingInventoryId] = useState<string | null>(null);
   const [showNeedsRestock, setShowNeedsRestock] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
+  const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([]);
+  const [auditLogFilter, setAuditLogFilter] = useState<string>("all");
 
 const buildBlankClientForm = () => ({
     client_number: "",
@@ -497,12 +507,22 @@ const buildBlankClientForm = () => ({
     setUsers(mapped);
   };
 
+  const loadAuditLogs = async () => {
+    const data = await invoke<AuditLogRow[]>("list_audit_logs", {
+      filter: auditLogFilter,
+    });
+    setAuditLogs(data);
+  };
+
   const loadAll = async () => {
     setBusy(true);
     try {
       const tasks: Promise<unknown>[] = [];
       if (session?.role === "admin" || session?.role === "lead" || session?.role === "staff") {
         tasks.push(loadClients(), loadInventory(), loadUsers());
+      }
+      if (session?.role === "admin" || session?.role === "lead") {
+        tasks.push(loadAuditLogs());
       }
       tasks.push(loadWorkOrders(), loadDeliveries());
       await Promise.all(tasks);
@@ -526,7 +546,7 @@ const buildBlankClientForm = () => ({
     );
   });
   const visibleTabs = useMemo(() => {
-      if (!session) return tabs.filter((t) => t !== "Worker Directory");
+      if (!session) return tabs.filter((t) => t !== "Worker Directory" && t !== "Reports");
       if (session.role === "volunteer") return ["Dashboard", "Work Orders"];
       if (session.role === "staff") return ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics"];
       // admin / lead
@@ -538,6 +558,12 @@ const buildBlankClientForm = () => ({
       loadAll();
     }
   }, [session]);
+
+  useEffect(() => {
+    if (session && (session.role === "admin" || session.role === "lead") && activeTab === "Reports") {
+      loadAuditLogs();
+    }
+  }, [auditLogFilter, activeTab, session]);
 
   const initials = useMemo(() => {
     if (!session?.name) return "FB";
@@ -2701,6 +2727,61 @@ const buildBlankClientForm = () => ({
                   )}
                 </div>
               )}
+
+              {activeTab === "Reports" && session && (session.role === "admin" || session.role === "lead") && (
+                <div className="stack">
+                  <div className="list-card">
+                    <div className="list-head">
+                      <h3>Audit Logs ({auditLogs.length})</h3>
+                      <button className="ghost" onClick={loadAuditLogs} disabled={busy}>
+                        Refresh
+                      </button>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                      {["all", "day", "7days", "month", "year"].map((filter) => (
+                        <button
+                          key={filter}
+                          className={auditLogFilter === filter ? "" : "ghost"}
+                          type="button"
+                          onClick={async () => {
+                            setAuditLogFilter(filter);
+                            setBusy(true);
+                            try {
+                              const data = await invoke<AuditLogRow[]>("list_audit_logs", {
+                                filter: filter,
+                              });
+                              setAuditLogs(data);
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                        >
+                          {filter === "all" ? "All Time" : filter === "7days" ? "7 Days" : filter === "month" ? "Current Month" : filter === "year" ? "Year" : "Today"}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="table">
+                      <div className="table-head">
+                        <span>Timestamp</span>
+                        <span>Event</span>
+                        <span>Role</span>
+                        <span>Actor</span>
+                      </div>
+                      {auditLogs.map((log) => (
+                        <div className="table-row" key={log.id}>
+                          <div className="muted">{new Date(log.created_at).toLocaleString()}</div>
+                          <div>
+                            <strong>{log.event}</strong>
+                          </div>
+                          <div className="muted">{log.role ?? "—"}</div>
+                          <div className="muted">{log.actor ?? "—"}</div>
+                        </div>
+                      ))}
+                      {!auditLogs.length && <div className="table-row">No audit logs found for the selected period.</div>}
+                    </div>
+                  </div>
+                </div>
+              )}
             </section>
 
             <section className="card">
@@ -2765,6 +2846,7 @@ const buildBlankClientForm = () => ({
                 <li><strong>Stage 5.1</strong>: Role gating enforced; PII masked for non-HIPAA; driver/volunteer only see assigned; mileage required on completion; status edits role-checked.</li>
                 <li><strong>Stage 5.2</strong>: Intake hardening pending—expect name split, client # auto-gen, validation, wood/delivery size (track when delivered).</li>
                 <li><strong>Stage 5.3</strong>: Worker Directory tab visible only to admin/lead; rows open detail on double-click.</li>
+                <li><strong>Stage 5.4</strong>: Reports tab with audit log viewer; filter by day, 7 days, month, year, or all time (admin/lead only).</li>
               </ul>
               <p className="muted" style={{ marginTop: 8 }}>
                 This panel will also host a scrolling MOTD feed later; new messages will appear on top and push prior notes down.

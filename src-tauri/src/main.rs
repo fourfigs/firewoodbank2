@@ -1397,6 +1397,72 @@ async fn create_motd(
     Ok(id)
 }
 
+#[derive(Debug, Serialize, FromRow)]
+struct AuditLogRow {
+    id: String,
+    event: String,
+    role: Option<String>,
+    actor: Option<String>,
+    created_at: String,
+}
+
+#[tauri::command]
+async fn list_audit_logs(
+    state: State<'_, AppState>,
+    filter: Option<String>, // "day", "7days", "month", "year", "all"
+) -> Result<Vec<AuditLogRow>, String> {
+    let filter_val = filter.unwrap_or_else(|| "all".to_string());
+    let query = match filter_val.as_str() {
+        "day" => {
+            r#"
+            SELECT id, event, role, actor, created_at
+            FROM audit_logs
+            WHERE date(created_at) = date('now')
+            ORDER BY created_at DESC
+            "#
+        }
+        "7days" => {
+            r#"
+            SELECT id, event, role, actor, created_at
+            FROM audit_logs
+            WHERE created_at >= datetime('now', '-7 days')
+            ORDER BY created_at DESC
+            "#
+        }
+        "month" => {
+            r#"
+            SELECT id, event, role, actor, created_at
+            FROM audit_logs
+            WHERE date(created_at) >= date('now', 'start of month')
+            ORDER BY created_at DESC
+            "#
+        }
+        "year" => {
+            r#"
+            SELECT id, event, role, actor, created_at
+            FROM audit_logs
+            WHERE date(created_at) >= date('now', 'start of year')
+            ORDER BY created_at DESC
+            "#
+        }
+        _ => {
+            // "all" or default
+            r#"
+            SELECT id, event, role, actor, created_at
+            FROM audit_logs
+            ORDER BY created_at DESC
+            "#
+        }
+    };
+
+    let rows = sqlx::query_as::<_, AuditLogRow>(query)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(rows)
+}
+
 fn main() -> Result<()> {
     let app = tauri::Builder::default()
         .setup(|app| {
@@ -1428,7 +1494,8 @@ fn main() -> Result<()> {
             list_users,
             update_user_flags,
             list_motd,
-            create_motd
+            create_motd,
+            list_audit_logs
         ])
         .run(tauri::generate_context!())?;
 

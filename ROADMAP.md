@@ -174,6 +174,17 @@ Admin/Lead-only Worker Directory tab:
 - Tab hidden for non-admin/non-lead
 -full profile includes name, address, contact, availability, DL?, HIPAA Certified, working vehicle. It does not need to be in this order. ask lead in qwuestions for anything you think should be included.
 
+### 🟢 **Stage 5.4: Reports / Audit Log Viewer**
+Admin/Lead-only Reports tab for viewing audit logs:
+- Reports tab in navigation (gated to admin/lead roles)
+- Audit log viewer displaying: timestamp, event, role, actor
+- Time-based filtering: Day, 7 Days, Current Month, Year, All Time
+- Table view with sorting
+- Backend: `list_audit_logs` Tauri command with date filtering
+- Completes Stage 5.1c audit log viewer requirement
+What you see: Reports tab with filterable audit log table
+Branch: stage-5.4-reports
+
 ### ⭕ **Stage 6: Login + Dashboard + Calendar**
 Split/unsplit wood summary
 2-weeks-at-glance + monthly calendar (color-coded)

@@ -15,7 +15,9 @@ Remaining Gaps:
 - Stage 3: ✅ COMPLETE - All onboarding fields in edit flow (client_title is old/unused and should be removed from schema)
 - Stage 4: ✅ COMPLETE - "Needs restock" filter and auto-order messaging implemented
 - Stage 5.1b: ✅ COMPLETE - Worker Directory CRUD fully implemented
-- Stage 5.1c: Audit log viewer/export (audit persisted, but no UI viewer). Note: Town derivation was an old mistake and should NOT be implemented - all contact blocks use standard form names.
+- Stage 5.1c: ✅ COMPLETE - Audit logging infrastructure (audit persisted to audit_logs table). Note: Town derivation was an old mistake and should NOT be implemented - all contact blocks use standard form names.
+- Stage 5.1d: ✅ COMPLETE - Volunteer/driver hours + wood-credit calc (0.75 minutes/mile; displayed on Dashboard for volunteers/drivers)
+- Stage 5.4: ✅ COMPLETE - Reports tab with audit log viewer (filter by day, 7 days, current month, year, all time)
 - Stage 5.2: Driver availability integration with schedule choices (pending).
 - Inventory creation gating to be enforced with user CRUD/users stage.
 
