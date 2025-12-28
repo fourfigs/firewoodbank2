@@ -356,6 +356,8 @@ function App() {
   const [mailingListFilter, setMailingListFilter] = useState<string>("all"); // "all", "mail", "email", "both"
   const [clientDetailSidebarOpen, setClientDetailSidebarOpen] = useState(false);
   const [selectedClientForDetail, setSelectedClientForDetail] = useState<ClientRow | null>(null);
+  const [clientSortField, setClientSortField] = useState<string>("first_name"); // "first_name", "last_name", "phone", "state", "approval_status"
+  const [clientSortDirection, setClientSortDirection] = useState<"asc" | "desc">("asc");
 
 const buildBlankClientForm = () => ({
     client_number: "", // Will be generated after creation
@@ -384,6 +386,7 @@ const buildBlankClientForm = () => ({
     wood_size_label: "",
     wood_size_other: "",
     directions: "",
+    opt_out_email: false, // Opt out of email mailing list
   });
 
   const buildBlankInventoryForm = () => ({
@@ -396,7 +399,7 @@ const buildBlankClientForm = () => ({
     notes: "",
   });
 
-  const [clientForm, setClientForm] = useState(buildBlankClientForm);
+  const [clientForm, setClientForm] = useState(buildBlankClientForm());
 
   const [inventoryForm, setInventoryForm] = useState(buildBlankInventoryForm);
 
@@ -553,15 +556,69 @@ const buildBlankClientForm = () => ({
   const canCreateWorkOrders = session?.role === "admin" || session?.role === "staff";
   const canViewPII = session?.role === "admin" || (session?.role === "lead" && session.hipaaCertified);
   const canViewClientPII = canViewPII || isDriver;
-  const filteredClients = clients.filter((c) => {
-    if (!clientSearch.trim()) return true;
-    const term = clientSearch.toLowerCase();
-    return (
-      c.name.toLowerCase().includes(term) ||
-      c.client_number.toLowerCase().includes(term) ||
-      c.physical_address_city.toLowerCase().includes(term)
-    );
-  });
+  const filteredClients = useMemo(() => {
+    let filtered = clients.filter((c) => {
+      if (!clientSearch.trim()) return true;
+      const term = clientSearch.toLowerCase();
+      return (
+        c.name.toLowerCase().includes(term) ||
+        c.client_number.toLowerCase().includes(term) ||
+        c.physical_address_city.toLowerCase().includes(term)
+      );
+    });
+
+    // Helper to extract first name from full name
+    const getFirstName = (name: string) => {
+      const parts = name.trim().split(" ");
+      return parts[0]?.toLowerCase() || "";
+    };
+    
+    // Helper to extract last name from full name
+    const getLastName = (name: string) => {
+      const parts = name.trim().split(" ");
+      return parts.slice(1).join(" ").toLowerCase() || "";
+    };
+
+    // Apply sorting
+    filtered = [...filtered].sort((a, b) => {
+      let aVal: string | number | null = null;
+      let bVal: string | number | null = null;
+
+      switch (clientSortField) {
+        case "first_name":
+          aVal = getFirstName(a.name);
+          bVal = getFirstName(b.name);
+          break;
+        case "last_name":
+          aVal = getLastName(a.name);
+          bVal = getLastName(b.name);
+          break;
+        case "phone":
+          aVal = (a.telephone || "").toLowerCase();
+          bVal = (b.telephone || "").toLowerCase();
+          break;
+        case "state":
+          aVal = (a.physical_address_state || "").toLowerCase();
+          bVal = (b.physical_address_state || "").toLowerCase();
+          break;
+        case "approval_status":
+          aVal = a.approval_status.toLowerCase();
+          bVal = b.approval_status.toLowerCase();
+          break;
+        default:
+          return 0;
+      }
+
+      if (aVal === null && bVal === null) return 0;
+      if (aVal === null) return 1;
+      if (bVal === null) return -1;
+
+      const comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      return clientSortDirection === "asc" ? comparison : -comparison;
+    });
+
+    return filtered;
+  }, [clients, clientSearch, clientSortField, clientSortDirection]);
   const visibleTabs = useMemo(() => {
       if (!session) return tabs.filter((t) => t !== "Worker Directory" && t !== "Reports");
       if (session.role === "volunteer") return ["Dashboard", "Work Orders"];
@@ -674,12 +731,13 @@ const buildBlankClientForm = () => ({
         <>
     <Nav tabs={visibleTabs} activeTab={activeTab} onSelect={setActiveTab} />
 
-          <main className="main">
-            <section className="card">
-              <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <main className="main" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+            <section className="card" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+              <h2 style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                 {activeTab}
                 {busy && <span className="badge">Loading…</span>}
               </h2>
+              <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
               {activeTab === "Dashboard" && (
                 <div>
                   <div className="hero">
@@ -863,6 +921,7 @@ const buildBlankClientForm = () => ({
                           });
                           if (conflictAtOtherAddress) {
                             setClientError("Name already exists at a different address. Confirm this is not a duplicate household member.");
+                            setBusy(false);
                             return;
                           }
 
@@ -872,6 +931,7 @@ const buildBlankClientForm = () => ({
                             : buildClientNumber(clientForm.first_name, clientForm.last_name);
                           if (!editingClientId && !generatedNumber) {
                             setClientError("Client number could not be generated. Add first and last name.");
+                            setBusy(false);
                             return;
                           }
                           const onboardingDate = editingClientId 
@@ -880,23 +940,53 @@ const buildBlankClientForm = () => ({
                           const normalizedState = normalizeState(clientForm.physical_address_state);
                           if (!isValidState(normalizedState)) {
                             setClientError("State must be two letters (e.g., VT).");
+                            setBusy(false);
                             return;
                           }
                           const normalizedPostal = normalizePostal(clientForm.physical_address_postal_code);
                           if (!isValidPostal(normalizedPostal)) {
                             setClientError("Postal code must be 5 digits or 5+4 (##### or #####-####).");
+                            setBusy(false);
                             return;
                           }
                           const normalizedCity = initCapCity(clientForm.physical_address_city);
                           const normalizedPhone = clientForm.telephone ? normalizePhone(clientForm.telephone) : "";
                           if (normalizedPhone && !isValidPhone(normalizedPhone)) {
                             setClientError("Phone must use (###) ###-#### format.");
+                            setBusy(false);
                             return;
                           }
+                          // Handle email opt-out: if opted out, don't include email in mailing list
+                          // But still require at least one contact method
                           const trimmedEmail = clientForm.email.trim();
+                          const finalEmail = clientForm.opt_out_email ? null : (trimmedEmail || null);
                           if (!normalizedPhone && !trimmedEmail) {
                             setClientError("Provide at least one contact method (phone or email).");
+                            setBusy(false);
                             return;
+                          }
+                          // Validate mailing address: either checkbox is checked OR full mailing address is provided (without line 2)
+                          if (!clientForm.mailing_same_as_physical) {
+                            if (!clientForm.mailing_address_line1?.trim()) {
+                              setClientError("Mailing address line 1 is required if mailing address is different from physical address.");
+                              setBusy(false);
+                              return;
+                            }
+                            if (!clientForm.mailing_address_city?.trim()) {
+                              setClientError("Mailing city is required if mailing address is different from physical address.");
+                              setBusy(false);
+                              return;
+                            }
+                            if (!clientForm.mailing_address_state?.trim()) {
+                              setClientError("Mailing state is required if mailing address is different from physical address.");
+                              setBusy(false);
+                              return;
+                            }
+                            if (!clientForm.mailing_address_postal_code?.trim()) {
+                              setClientError("Mailing postal code is required if mailing address is different from physical address.");
+                              setBusy(false);
+                              return;
+                            }
                           }
                           // Date will be auto-generated for new clients
                           const mailing = clientForm.mailing_same_as_physical
@@ -915,6 +1005,11 @@ const buildBlankClientForm = () => ({
                                 mailing_address_postal_code: clientForm.mailing_address_postal_code || null,
                               };
 
+                          // Default status to "pending" if no referring agency
+                          const defaultStatus = clientForm.referring_agency?.trim() 
+                            ? clientForm.approval_status 
+                            : "pending";
+
                           const payload = {
                             ...clientForm,
                             client_number: generatedNumber,
@@ -927,11 +1022,12 @@ const buildBlankClientForm = () => ({
                             physical_address_state: normalizedState,
                             physical_address_postal_code: normalizedPostal,
                             telephone: normalizedPhone || null,
-                            email: trimmedEmail || null,
+                            email: finalEmail, // null if opted out, otherwise the email
                             gate_combo: clientForm.gate_combo || null,
                             notes: clientForm.notes || null,
                             how_did_they_hear_about_us: clientForm.how_did_they_hear_about_us || null,
                             referring_agency: clientForm.referring_agency || null,
+                            approval_status: defaultStatus,
                             denial_reason: clientForm.denial_reason || null,
                             wood_size_label: clientForm.wood_size_label || null,
                             wood_size_other: clientForm.wood_size_other || null,
@@ -952,6 +1048,11 @@ const buildBlankClientForm = () => ({
                           }
                           await loadClients();
                           resetClientForm();
+                          setShowClientForm(false);
+                          setEditingClientId(null);
+                        } catch (error) {
+                          console.error("Error saving client:", error);
+                          setClientError(error instanceof Error ? error.message : "Failed to save client. Please try again.");
                         } finally {
                           setBusy(false);
                         }
@@ -978,23 +1079,22 @@ const buildBlankClientForm = () => ({
                           {!canManage && <div className="muted">Only leads/admins can change onboarding date.</div>}
                         </>
                       )}
-                      {!editingClientId && (
-                        <div className="muted span-2">
-                          Client number and onboarding date will be generated automatically after creation.
-                        </div>
-                      )}
+                      {/* Row 1: First | Last | telephone | email */}
+                      {/* Tab order: columns 1-2 first, then 3-4 */}
                       <label>
-                        First name
+                        First
                         <input
                           required
+                          tabIndex={1}
                           value={clientForm.first_name}
                           onChange={(e) => setClientForm({ ...clientForm, first_name: e.target.value })}
                         />
                       </label>
                       <label>
-                        Last name
+                        Last
                         <input
                           required
+                          tabIndex={2}
                           value={clientForm.last_name}
                           onChange={(e) => setClientForm({ ...clientForm, last_name: e.target.value })}
                         />
@@ -1002,45 +1102,70 @@ const buildBlankClientForm = () => ({
                       <label>
                         Telephone
                         <input
+                          tabIndex={11}
                           value={clientForm.telephone}
-                              onChange={(e) => setClientForm({ ...clientForm, telephone: e.target.value })}
-                              onBlur={(e) =>
-                                setClientForm((prev) => ({
-                                  ...prev,
-                                  telephone: normalizePhone(e.target.value),
-                                }))
-                              }
+                          onChange={(e) => setClientForm({ ...clientForm, telephone: e.target.value })}
+                          onBlur={(e) =>
+                            setClientForm((prev) => ({
+                              ...prev,
+                              telephone: normalizePhone(e.target.value),
+                            }))
+                          }
                         />
                       </label>
                       <label>
                         Email
                         <input
                           type="email"
+                          tabIndex={12}
                           value={clientForm.email}
                           onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })}
                         />
                       </label>
-                      <label>
-                        Address line 1
+                      {/* Row 2: ADDRESS LINE 1 (spans 2) | How did you hear (spans 2) */}
+                      <label className="span-2">
+                        Address Line 1
                         <input
                           required
+                          tabIndex={3}
                           value={clientForm.physical_address_line1}
                           onChange={(e) =>
                             setClientForm({ ...clientForm, physical_address_line1: e.target.value })
                           }
                         />
                       </label>
-                      <label>
-                        Address line 2
+                      <label className="span-2">
+                        How Did You Hear
                         <input
+                          tabIndex={13}
+                          value={clientForm.how_did_they_hear_about_us}
+                          onChange={(e) => setClientForm({ ...clientForm, how_did_they_hear_about_us: e.target.value })}
+                        />
+                      </label>
+                      {/* Row 3: ADDRESS LINE 2 (spans 2) | NOTES (spans 2, bottom 2 rows) */}
+                      <label className="span-2">
+                        Address Line 2
+                        <input
+                          tabIndex={4}
                           value={clientForm.physical_address_line2}
                           onChange={(e) => setClientForm({ ...clientForm, physical_address_line2: e.target.value })}
                         />
                       </label>
+                      <label className="span-2" style={{ gridRow: "span 2" }}>
+                        Notes
+                        <textarea
+                          tabIndex={14}
+                          value={clientForm.notes}
+                          onChange={(e) => setClientForm({ ...clientForm, notes: e.target.value })}
+                          rows={4}
+                        />
+                      </label>
+                      {/* Row 4: city | state | STILL NOTES BOX (spans 2) */}
                       <label>
                         City
                         <input
                           required
+                          tabIndex={5}
                           value={clientForm.physical_address_city}
                           onChange={(e) =>
                             setClientForm({ ...clientForm, physical_address_city: e.target.value })
@@ -1051,114 +1176,83 @@ const buildBlankClientForm = () => ({
                         State
                         <input
                           required
+                          tabIndex={6}
                           value={clientForm.physical_address_state}
-                          onChange={(e) =>
-                            setClientForm({ ...clientForm, physical_address_state: e.target.value })
-                          }
+                          onChange={(e) => setClientForm({ ...clientForm, physical_address_state: e.target.value })}
                         />
                       </label>
+                      {/* Row 5: ZIP | [mailing the same check] | STILL NOTES BOX (spans 2) */}
                       <label>
-                        Postal code
+                        ZIP
                         <input
                           required
+                          tabIndex={7}
                           value={clientForm.physical_address_postal_code}
-                          onChange={(e) =>
-                            setClientForm({ ...clientForm, physical_address_postal_code: e.target.value })
-                          }
+                          onChange={(e) => setClientForm({ ...clientForm, physical_address_postal_code: e.target.value })}
                         />
                       </label>
                       <label className="checkbox">
                         <input
                           type="checkbox"
+                          tabIndex={8}
                           checked={clientForm.mailing_same_as_physical}
                           onChange={(e) => setClientForm({ ...clientForm, mailing_same_as_physical: e.target.checked })}
                         />
-                        Mailing address same as physical
+                        Mailing The Same
                       </label>
                       {!clientForm.mailing_same_as_physical && (
                         <>
-                          <label>
-                            Mailing line 1
+                          <label className="span-2">
+                            Mailing Line 1
                             <input
+                              required
+                              tabIndex={9}
                               value={clientForm.mailing_address_line1}
                               onChange={(e) => setClientForm({ ...clientForm, mailing_address_line1: e.target.value })}
                             />
                           </label>
-                          <label>
-                            Mailing line 2
+                          <label className="span-2">
+                            Mailing Line 2
                             <input
+                              tabIndex={15}
                               value={clientForm.mailing_address_line2}
                               onChange={(e) => setClientForm({ ...clientForm, mailing_address_line2: e.target.value })}
                             />
                           </label>
                           <label>
-                            Mailing city
+                            Mailing City
                             <input
+                              required
+                              tabIndex={10}
                               value={clientForm.mailing_address_city}
                               onChange={(e) => setClientForm({ ...clientForm, mailing_address_city: e.target.value })}
                             />
                           </label>
                           <label>
-                            Mailing state
+                            Mailing State
                             <input
+                              required
+                              tabIndex={16}
                               value={clientForm.mailing_address_state}
                               onChange={(e) => setClientForm({ ...clientForm, mailing_address_state: e.target.value })}
                             />
                           </label>
                           <label>
-                            Mailing postal
+                            Mailing Postal
                             <input
+                              required
+                              tabIndex={17}
                               value={clientForm.mailing_address_postal_code}
                               onChange={(e) => setClientForm({ ...clientForm, mailing_address_postal_code: e.target.value })}
                             />
                           </label>
                         </>
                       )}
+                      {/* Wood size and gate combo under notes */}
                       <label>
-                        Gate combo
-                        <input
-                          value={clientForm.gate_combo}
-                          onChange={(e) => setClientForm({ ...clientForm, gate_combo: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        Approval status
+                        Wood Size
                         <select
-                          value={clientForm.approval_status}
-                          onChange={(e) => setClientForm({ ...clientForm, approval_status: e.target.value })}
-                        >
-                          <option value="approved">approved</option>
-                          <option value="denied">denied</option>
-                          <option value="pending">pending</option>
-                        </select>
-                      </label>
-                      {clientForm.approval_status === "denied" && (
-                        <label>
-                          Denial reason
-                          <textarea
-                            value={clientForm.denial_reason}
-                            onChange={(e) => setClientForm({ ...clientForm, denial_reason: e.target.value })}
-                            rows={2}
-                          />
-                        </label>
-                      )}
-                      <label>
-                        How did they hear about us?
-                        <input
-                          value={clientForm.how_did_they_hear_about_us}
-                          onChange={(e) => setClientForm({ ...clientForm, how_did_they_hear_about_us: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        Referring agency
-                        <input
-                          value={clientForm.referring_agency}
-                          onChange={(e) => setClientForm({ ...clientForm, referring_agency: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        Wood size
-                        <select
+                          tabIndex={18}
                           value={clientForm.wood_size_label}
                           onChange={(e) => setClientForm({ ...clientForm, wood_size_label: e.target.value })}
                         >
@@ -1171,31 +1265,77 @@ const buildBlankClientForm = () => ({
                       </label>
                       {clientForm.wood_size_label === "other" && (
                         <label>
-                          Wood size (other, inches)
+                          Wood Size (Other, Inches)
                           <input
                             type="number"
                             min="1"
+                            tabIndex={19}
                             value={clientForm.wood_size_other}
                             onChange={(e) => setClientForm({ ...clientForm, wood_size_other: e.target.value })}
                           />
                         </label>
                       )}
-                      <label className="span-2">
+                      <label>
+                        Gate Combo
+                        <input
+                          tabIndex={20}
+                          value={clientForm.gate_combo}
+                          onChange={(e) => setClientForm({ ...clientForm, gate_combo: e.target.value })}
+                        />
+                      </label>
+                      {/* Directions (spans all 4 columns, 2 rows) - above divider */}
+                      <label style={{ gridColumn: "1 / -1", gridRow: "span 2" }}>
                         Directions
                         <textarea
+                          tabIndex={21}
                           value={clientForm.directions}
                           onChange={(e) => setClientForm({ ...clientForm, directions: e.target.value })}
-                          rows={3}
+                          rows={4}
                           placeholder="Directions to the client's location"
                         />
                       </label>
+                      {/* DIVIDER (spans all 4) */}
+                      <div style={{ gridColumn: "1 / -1", borderTop: "1px solid #ddd", margin: "1rem 0" }}></div>
+                      {/* Below divider: Agency, Acceptance (Approval Status), and Reason info */}
                       <label className="span-2">
-                        Notes
-                        <textarea
-                          value={clientForm.notes}
-                          onChange={(e) => setClientForm({ ...clientForm, notes: e.target.value })}
-                          rows={2}
+                        Referring Agency
+                        <input
+                          tabIndex={22}
+                          value={clientForm.referring_agency}
+                          onChange={(e) => setClientForm({ ...clientForm, referring_agency: e.target.value })}
                         />
+                      </label>
+                      <label>
+                        Approval Status
+                        <select
+                          tabIndex={23}
+                          value={clientForm.approval_status}
+                          onChange={(e) => setClientForm({ ...clientForm, approval_status: e.target.value })}
+                        >
+                          <option value="approved">approved</option>
+                          <option value="exception">exception</option>
+                          <option value="pending">pending approval</option>
+                          <option value="volunteer">volunteer</option>
+                          <option value="denied">denied</option>
+                        </select>
+                      </label>
+                      <label>
+                        Reason Qualified Or Not
+                        <textarea
+                          tabIndex={24}
+                          value={clientForm.denial_reason || ""}
+                          onChange={(e) => setClientForm({ ...clientForm, denial_reason: e.target.value })}
+                          rows={2}
+                          placeholder={clientForm.approval_status === "denied" ? "Denial reason" : "Qualification notes"}
+                        />
+                      </label>
+                      <label className="checkbox span-2">
+                        <input
+                          type="checkbox"
+                          checked={clientForm.opt_out_email}
+                          onChange={(e) => setClientForm({ ...clientForm, opt_out_email: e.target.checked })}
+                        />
+                        Opt out of email mailing list (client will still be on mail list)
                       </label>
                       <div className="actions span-2">
                             <button className="ping" type="submit" disabled={busy || !canManage}>
@@ -1280,47 +1420,101 @@ const buildBlankClientForm = () => ({
                     </div>
                     <div className="table">
                       <div className="table-head">
-                        <span>Name</span>
-                        <span>Contact</span>
-                        <span>Approval</span>
-                        <span>Address</span>
+                        <span
+                          style={{ cursor: "pointer", userSelect: "none" }}
+                          onClick={() => {
+                            if (clientSortField === "first_name") {
+                              setClientSortDirection(clientSortDirection === "asc" ? "desc" : "asc");
+                            } else {
+                              setClientSortField("first_name");
+                              setClientSortDirection("asc");
+                            }
+                          }}
+                        >
+                          First {clientSortField === "first_name" && (clientSortDirection === "asc" ? "↑" : "↓")}
+                        </span>
+                        <span
+                          style={{ cursor: "pointer", userSelect: "none" }}
+                          onClick={() => {
+                            if (clientSortField === "last_name") {
+                              setClientSortDirection(clientSortDirection === "asc" ? "desc" : "asc");
+                            } else {
+                              setClientSortField("last_name");
+                              setClientSortDirection("asc");
+                            }
+                          }}
+                        >
+                          Last {clientSortField === "last_name" && (clientSortDirection === "asc" ? "↑" : "↓")}
+                        </span>
+                        <span
+                          style={{ cursor: "pointer", userSelect: "none" }}
+                          onClick={() => {
+                            if (clientSortField === "phone") {
+                              setClientSortDirection(clientSortDirection === "asc" ? "desc" : "asc");
+                            } else {
+                              setClientSortField("phone");
+                              setClientSortDirection("asc");
+                            }
+                          }}
+                        >
+                          Phone {clientSortField === "phone" && (clientSortDirection === "asc" ? "↑" : "↓")}
+                        </span>
+                        <span
+                          style={{ cursor: "pointer", userSelect: "none" }}
+                          onClick={() => {
+                            if (clientSortField === "state") {
+                              setClientSortDirection(clientSortDirection === "asc" ? "desc" : "asc");
+                            } else {
+                              setClientSortField("state");
+                              setClientSortDirection("asc");
+                            }
+                          }}
+                        >
+                          State {clientSortField === "state" && (clientSortDirection === "asc" ? "↑" : "↓")}
+                        </span>
                         {canManage && <span>Actions</span>}
                       </div>
-                      {filteredClients.map((c) => (
-                        <div 
-                          className="table-row" 
-                          key={c.id}
-                          onDoubleClick={() => {
-                            setSelectedClientForDetail(c);
-                            setClientDetailSidebarOpen(true);
-                          }}
-                          style={{ cursor: "pointer" }}
-                        >
-                          <div>
-                            <strong>{c.name}</strong>
-                            <div className="muted">#{c.client_number}</div>
-                          </div>
-                          <div>
-                            <div>{canViewClientPII ? c.email ?? "n/a" : "Hidden (HIPAA)"}</div>
-                            <div className="muted">
-                              {canViewClientPII ? c.telephone ?? "—" : "Hidden (HIPAA)"}
+                      {filteredClients.map((c) => {
+                        const nameParts = c.name.trim().split(" ");
+                        const firstName = nameParts[0] || "";
+                        const lastName = nameParts.slice(1).join(" ") || "";
+                        
+                        // Color coding for approval status - light background colors
+                        const getStatusColor = (status: string) => {
+                          const statusLower = status.toLowerCase();
+                          if (statusLower === "approved") return "#d4edda"; // Light green
+                          if (statusLower === "exception") return "#fff3cd"; // Light yellow/amber
+                          if (statusLower === "pending" || statusLower === "pending approval") return "#d1ecf1"; // Light blue
+                          if (statusLower === "volunteer") return "#e2d9f3"; // Light purple
+                          if (statusLower === "denied") return "#f8d7da"; // Light red
+                          return "#e9ecef"; // Light gray default
+                        };
+                        
+                        const statusColor = getStatusColor(c.approval_status);
+                        
+                        return (
+                          <div 
+                            className="table-row" 
+                            key={c.id}
+                            onDoubleClick={() => {
+                              setSelectedClientForDetail(c);
+                              setClientDetailSidebarOpen(true);
+                            }}
+                            style={{ cursor: "pointer" }}
+                          >
+                            <div>
+                              <strong>{firstName}</strong>
                             </div>
-                          </div>
-                          <div>
-                            <span className="pill">{c.approval_status}</span>
-                          </div>
-                          <div>
-                            {canViewClientPII
-                              ? (
-                                <>
-                                  {c.physical_address_line1}, {c.physical_address_city}, {c.physical_address_state}{" "}
-                                  {c.physical_address_postal_code}
-                                  {c.gate_combo ? <div className="muted">Gate: {c.gate_combo}</div> : null}
-                                </>
-                                )
-                              : "Hidden (HIPAA)"}
-                          </div>
-                          {canManage && (
+                            <div>
+                              <strong>{lastName || "—"}</strong>
+                            </div>
+                            <div>
+                              {canViewClientPII ? (c.telephone ?? "—") : "Hidden (HIPAA)"}
+                            </div>
+                            <div style={{ background: statusColor, padding: "0.25rem 0.5rem", borderRadius: "4px" }}>
+                              <strong>{c.approval_status}</strong>
+                            </div>
+                            {canManage && (
                             <div className="muted" style={{ display: "flex", gap: 8 }}>
                               <button
                                 className="ghost"
@@ -1358,6 +1552,7 @@ const buildBlankClientForm = () => ({
                                     wood_size_label: c.wood_size_label ?? "",
                                     wood_size_other: c.wood_size_other ?? "",
                                     directions: c.directions ?? "",
+                                    opt_out_email: !c.email, // If no email, they're opted out
                                   });
                                   setShowClientForm(true);
                                 }}
@@ -1382,8 +1577,9 @@ const buildBlankClientForm = () => ({
                               </button>
                             </div>
                           )}
-                        </div>
-                      ))}
+                          </div>
+                        );
+                      })}
                       {!filteredClients.length && <div className="table-row">No clients yet.</div>}
                     </div>
                   </div>
@@ -1503,6 +1699,7 @@ const buildBlankClientForm = () => ({
                                     wood_size_label: selectedClientForDetail.wood_size_label ?? "",
                                     wood_size_other: selectedClientForDetail.wood_size_other ?? "",
                                     directions: selectedClientForDetail.directions ?? "",
+                                    opt_out_email: !selectedClientForDetail.email, // If no email, they're opted out
                                   });
                                   setShowClientForm(true);
                                   setClientDetailSidebarOpen(false);
@@ -3022,6 +3219,7 @@ const buildBlankClientForm = () => ({
                   </div>
                 </div>
               )}
+              </div>
             </section>
 
           </main>
