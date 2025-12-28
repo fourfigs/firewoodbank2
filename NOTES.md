@@ -1,16 +1,32 @@
-Notable Gaps / Changes Needed for Stages 1–5.1d (updated)
-- Stage 2: Add update/delete commands to UI for clients/inventory (backend exists).
-- Stage 3: Add missing onboarding fields (mailing address, referral/how-heard, denial reason, onboarding date, createdBy) and an edit/update flow in Clients.
-- Stage 4: Add “needs restock” filtered view and auto-order messaging (currently highlight only).
-- Stage 5.1b: Add user CRUD (availability, vehicle, DL, HIPAA flag) in Worker Directory + commands.
-- Stage 5.1c: Town derivation for volunteer view; add audit log viewer/export (audit persisted). Driver PII to assigned work is enforced.
-- Minor/preview: Worker Directory HIPAA flag UI; users are read-only until CRUD added.
+Notable Gaps / Changes Needed (updated for Stage 5.2 completion)
+
+Completed in Stage 5.2:
+- ✅ Client name split into first/last with auto-generated client numbers
+- ✅ Address/contact validation (phone format, state, ZIP, city formatting)
+- ✅ Wood size and delivery size tracking on work orders
+- ✅ Inventory reservation system (reserved_quantity tracking)
+- ✅ Driver assignment from DB (DL flag required)
+- ✅ Work order creation gated to staff/admin
+- ✅ Worker/helper assignments on deliveries
+- ✅ Created by display name on work orders
+
+Remaining Gaps:
+- Stage 2: ✅ COMPLETE - All CRUD UI implemented (update/delete for clients and inventory)
+- Stage 3: ✅ COMPLETE - All onboarding fields in edit flow (client_title is old/unused and should be removed from schema)
+- Stage 4: ✅ COMPLETE - "Needs restock" filter and auto-order messaging implemented
+- Stage 5.1b: ✅ COMPLETE - Worker Directory CRUD fully implemented
+- Stage 5.1c: Audit log viewer/export (audit persisted, but no UI viewer). Note: Town derivation was an old mistake and should NOT be implemented - all contact blocks use standard form names.
+- Stage 5.2: Driver availability integration with schedule choices (pending).
 - Inventory creation gating to be enforced with user CRUD/users stage.
 
-Prompt for the next agent:
-- Finish Stage 2/3/4/5.1b/5.1c items above.
+Notes:
+- client_title field exists in schema but is old/unused - should be removed from database and code
+- Town derivation for volunteer view is NOT needed (old mistake) - standard contact form names should be used
+
+Current Status:
 - MOTD is surfaced on login (newest first) via list_motd/create_motd.
-- Audit logs now persist to audit_logs.
+- Audit logs persist to audit_logs table.
+- Stage 5.2 mostly complete (driver availability scheduling pending).
 
 Copyable prompts (Stage 0–5) for next agent:
 Stage 0 prompt
@@ -61,7 +77,7 @@ Using the existing Client schema and Tauri commands, build:
 
 Client list with search/filter.
 
-Client detail/edit view with all onboard form fields (title, clientNumber, onboarding date, addresses, phones, email, how heard, referring agency, approvalStatus + denialReason, gateCombo, notes).
+Client detail/edit view with all onboard form fields (clientNumber, onboarding date, addresses, phones, email, how heard, referring agency, approvalStatus + denialReason, gateCombo, notes). Note: client_title is old/unused and should be removed.
 
 Placeholders for delivery metrics (week/month/year/all‑time) derived from DeliveryEvent.
 Wire up create/edit to the backend and update metadata fields automatically.

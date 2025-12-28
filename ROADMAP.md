@@ -1,7 +1,7 @@
 # 🔥 Community Firewood Bank Management App - Complete Roadmap
 
 **Repo**: https://github.com/fourfigs/firewoodbank2  
-**Status**: 🟢 Stage 5 - Work Orders + Deliveries (current)  
+**Status**: 🟢 Stage 5.2 - Work Order and Intake Hardening (current)  
 **Target**: Windows Desktop → Multi-platform sync-ready app
 
 ## 🎯 PROJECT GOALS
@@ -11,8 +11,8 @@
 - Print invoices, driver views, admin tools, change requests
 
 ## 🏗️ ARCHITECTURE
-Frontend: React + TypeScript + Tailwind/Vite
-Backend: Rust + SQLite (SQLx/SeaORM)
+Frontend: React + TypeScript + Vite
+Backend: Rust + SQLite (SQLx)
 Shell: Tauri 2 (Windows → macOS/Linux/Android/iOS)
 Sync: UUIDs + createdAt/updatedAt/isDeleted/lastSyncedAt/version
 
@@ -70,7 +70,7 @@ tax, total, client snapshot, notes, createdAt, updatedAt, isDeleted
 - **DeliveryEvent**: type(delivery/meeting/workday), dates, colorCode
 - **MOTD**, **ChangeRequest** (all with sync metadata)
 
-## 🚀 STAGES (10 total - Current progress tracked here)
+## 🚀 STAGES (12 total - Current progress tracked here)
 
 ### 🟡 **Stage 0: Schema Design** (Planning)
 ✅ Create this Roadmap.md + commit
@@ -130,12 +130,13 @@ Sub-stages to close gaps:
 - 5.1d: Volunteer/driver hours + wood-credit calc wired to persisted events (0.75 minutes/mile; delivery assignments mirrored into delivery_events)
 - Closing a work order to “completed” requires mileage and records the lead/admin who closed it
 - Slice: Audit log persisted (audit_logs table) and MOTD surfaced on login newest→oldest
-- Upcoming slices:
-  - Client/Inventory edit/delete UI (Stage 2)
-  - Full onboarding fields + client edit flow (Stage 3)
-  - “Needs restock” filter + auto-order messaging (Stage 4)
-  - User CRUD (availability/vehicle/DL/HIPAA) in Worker Directory (Stage 5.1b)
-  - Town derivation for volunteer view + audit log viewer/export (Stage 5.1c)
+- ✅ Completed slices:
+  - ✅ Client/Inventory edit/delete UI (Stage 2) - COMPLETE
+  - ✅ Full onboarding fields + client edit flow (Stage 3) - COMPLETE (client_title is old/unused and should be removed)
+  - ✅ "Needs restock" filter + auto-order messaging (Stage 4) - COMPLETE
+  - ✅ User CRUD (availability/vehicle/DL/HIPAA) in Worker Directory (Stage 5.1b) - COMPLETE
+  - ⚠️ Audit log viewer/export (Stage 5.1c) - Audit persists but no UI viewer yet
+  - Note: Town derivation is NOT needed (was an old mistake) - all contact blocks use standard form names
 
 ### ✅ Stage Prompts Reference (used and implemented across stages 0–5)
 - Stage 0 prompt: Windows desktop–first Tauri 2 + React + TypeScript + SQLite; sync-ready schema/DTOs for User, Client, InventoryItem, WorkOrder, DeliveryEvent, Invoice, MOTD, ChangeRequest; UUID + audit/sync fields; infer fields from Onboard/Order/Invoice; output Rust/SQL + TS DTOs; call out missing/ambiguous.
@@ -145,18 +146,26 @@ Sub-stages to close gaps:
 - Stage 4 prompt: Inventory module with list/detail, CRUD for operational items, fields (name, category, currentQuantity, unit, reorderThreshold, isActive), derived belowThreshold + orderMessage, “Needs restock” view for dashboard/admin.
 - Stage 5 prompt: Work Orders + DeliveryEvents with full Order fields, client snapshot/link, addresses/directions/gate combo/heat sources/notes/dateOfOnboarding/scheduledDate/status; DeliveryEvent tied to WorkOrder (type/title/notes/start/end/colorCode); create WorkOrder from Client and auto-create DeliveryEvent when scheduled.
 
-### ⏳ **Stage 5.2: Work Order and Intake Hardening (new)**
+### ✅ **Stage 5.2: Work Order and Intake Hardening**
 Tighten intake UX/validation before Stage 6:
-- Split client name into first/last; auto-generate client number from name + entry month + 2 random digits; lock edit to admin
-- Enforce required: name, address, at least one contact (phone/email/other+specify); format phone `(###) ###-####`; city init-cap; state 2-letter uppercase and validated; ZIP `#####` or `#####-####`
-- Add wood size dropdown (12/14/16/Other + specify inches integer) and delivery size (1 cord / 1/3 cord / other numeric), carry both on work orders — **implemented**
-- Inventory impact: reserve wood on schedule/in-progress and deduct on completed; release on cancel — **implemented with reserved_quantity tracking**
-- Driver assignment dropdown (licensed drivers from DB) unlocks scheduling; driver availability drives schedule choices; status/mileage editable only by lead/admin (driver can enter mileage and mark delivered pending approval)
--only poeople with the DL flag are populated to the driver list for deliveries — **implemented**
-- Label work orders with creator display name (not username)
--orders are to be entered by staff and admin only. — **implemented (UI + backend gate)**
-- Drivers can add up to four workers/helpers on a delivery — **implemented**
--all clients can be workers, all workers can be driver/hipaa/working vehicle flagged, only leads get PII unfiltered, and drivers only see the name, address, and contact info
+- ✅ Split client name into first/last; auto-generate client number from name + entry month + 2 random digits (format: LAST-FIRST-MMYY-RR)
+- ✅ Client edit locked to admin/lead (canManage gate)
+- ✅ Enforce required: name, address, at least one contact (phone/email/other+specify)
+- ✅ Format phone `(###) ###-####` with validation
+- ✅ City init-cap formatting
+- ✅ State 2-letter uppercase validation
+- ✅ ZIP validation `#####` or `#####-####`
+- ✅ Wood size dropdown (12/14/16/Other + specify inches integer) and delivery size (1 cord / 1/3 cord / other numeric), carry both on work orders
+- ✅ Inventory impact: reserve wood on schedule/in-progress and deduct on completed; release on cancel (reserved_quantity tracking)
+- ✅ Driver assignment dropdown (licensed drivers from DB only - DL flag required)
+- ⏳ Driver availability drives schedule choices (pending)
+- ✅ Status/mileage editable only by lead/admin (driver can enter mileage and mark delivered pending approval)
+- ✅ Label work orders with creator display name (not username)
+- ✅ Work orders entered by staff and admin only (UI + backend gate)
+- ✅ Drivers can add up to four workers/helpers on a delivery (assignees_json)
+- ✅ All clients can be workers, all workers can be driver/hipaa/working vehicle flagged, only leads/admins get PII unfiltered, and drivers only see the name, address, and contact info
+What you see: Validated intake forms, wood/delivery sizes, inventory reservations, driver assignments
+Branch: stage-5.2-intake
 
 ### ⏳ **Stage 5.3: Worker Directory (new)**
 Admin/Lead-only Worker Directory tab:

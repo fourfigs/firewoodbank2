@@ -492,7 +492,7 @@ const buildBlankClientForm = () => ({
     const mapped = data.map((u) => ({
       ...u,
       is_driver: !!u.is_driver,
-      hipaa_certified: u.hipaa_certified ? 1 : 0,
+      // hipaa_certified is already a number (0 or 1) from backend
     }));
     setUsers(mapped);
   };

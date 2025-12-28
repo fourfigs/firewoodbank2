@@ -961,7 +961,14 @@ async fn adjust_inventory_for_transition_tx(
     let prev_reserved = reserve_states.contains(&prev_status_lower.as_str());
     let next_reserved = reserve_states.contains(&next_status_lower.as_str());
 
-    let inventory_row = sqlx::query!(
+    #[derive(sqlx::FromRow)]
+    struct InventoryRecord {
+        id: String,
+        quantity_on_hand: f64,
+        reserved_quantity: f64,
+    }
+
+    let inventory_row = sqlx::query_as::<_, InventoryRecord>(
         r#"
         SELECT id, quantity_on_hand, reserved_quantity
         FROM inventory_items
@@ -974,7 +981,7 @@ async fn adjust_inventory_for_transition_tx(
         LIMIT 1
         "#
     )
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?;
 
     if let Some(record) = inventory_row {
@@ -1216,12 +1223,17 @@ async fn update_work_order_status(
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
 
     let existing = sqlx::query!(
-        r#"SELECT status, delivery_size_cords FROM work_orders WHERE id = ?"#,
+        r#"SELECT status, delivery_size_cords FROM work_orders WHERE id = ? AND is_deleted = 0"#,
         input.work_order_id
     )
-    .fetch_one(&mut *tx)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|e| e.to_string())?;
+
+    let existing = match existing {
+        Some(e) => e,
+        None => return Err("Work order not found or has been deleted".to_string()),
+    };
 
     let current_status = existing.status;
     let next_status = input.status.clone().unwrap_or_else(|| current_status.clone());
@@ -1247,7 +1259,7 @@ async fn update_work_order_status(
         SET status = ?,
             mileage = COALESCE(?, mileage),
             updated_at = datetime('now')
-        WHERE id = ?
+        WHERE id = ? AND is_deleted = 0
         "#
     )
     .bind(&next_status)
