@@ -402,3 +402,28 @@ body {
   }
 }
 
+/* Client List Specific Styles */
+.client-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.2fr 1fr 0.5fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.client-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .client-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  
+  .hide-on-mobile {
+    display: none !important;
+  }
+}
+

@@ -2,7 +2,7 @@
 
 A desktop-first Tauri application for managing Community Firewood Bank operations including client onboarding, inventory tracking, work orders, deliveries, and invoicing.
 
-**Current Status**: Stage 5.2 - Work Order and Intake Hardening  
+**Current Status**: Stage 5.4 - Reports / Audit Log Viewer  
 **Repository**: https://github.com/fourfigs/firewoodbank2
 
 ---
@@ -207,7 +207,7 @@ The application exposes Tauri commands that can be invoked from the frontend. Se
 
 ## 🛣️ Development Roadmap
 
-See `ROADMAP.md` for the complete development roadmap. Current stage: **Stage 5.2**
+See `ROADMAP.md` for the complete development roadmap. Current stage: **Stage 5.4**
 
 **Completed Stages:**
 - ✅ Stage 0: Schema Design
@@ -217,7 +217,7 @@ See `ROADMAP.md` for the complete development roadmap. Current stage: **Stage 5.
 - ✅ Stage 4: Inventory Module
 - ✅ Stage 5: Work Orders + Deliveries
 - ✅ Stage 5.1: Tuning Forms & Access
-- ✅ Stage 5.2: Work Order and Intake Hardening (mostly complete)
+- ✅ Stage 5.2: Work Order and Intake Hardening - COMPLETE
 
 **Upcoming Stages:**
 - ⏳ Stage 5.3: Worker Directory

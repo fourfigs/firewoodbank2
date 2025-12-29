@@ -90,8 +90,8 @@ if (!Number.isFinite(threshold) || threshold < 0) {
 }
 ```
 
-**Status**: ⚠️ Minor issue - should be fixed but low priority  
-**Last Checked**: 2025-01-27 - Still unresolved
+**Status**: ✅ Fixed (2025-12-28) - adjusted `adjust_inventory_for_transition_tx` to validate availability and prevent over-reserving; now returns an error when insufficient inventory and clamps reserved to available as a safety measure.  
+**Last Checked**: 2025-12-28 - Fix implemented (see `src-tauri/src/main.rs`)
 
 ---
 
@@ -165,21 +165,14 @@ if let Some(record) = inventory_row {
 
 ---
 
-### 5. Missing Client Number Uniqueness Constraint
+### 5. Client number field removed from schema
 
-**Location**: Database schema (`src-tauri/migrations/0001_init.sql`)
+**Location**: Database schema (`src-tauri/migrations/0001_init.sql` and `0010_remove_client_number.sql`)
 
-**Issue**: The `client_number` field has no UNIQUE constraint in the database schema, even though client numbers are auto-generated and should be unique.
+**Note**: The `client_number` field has been intentionally removed from the schema and the frontend UI. As a result, adding a UNIQUE constraint is no longer necessary.
 
-**Risk**: Low-Medium - If there's a bug in client number generation or manual entry, duplicate client numbers could be created, causing confusion. Create check for duplicate wehen generating. can change the format to iniotials-(month number as ##)(day as ##)(year as ##)(4 random digits as ####) so it would be for myself sketch ius user kenneth hanks is first last. if generated today my user would be kh-122725#### (last 4 being randomly generated integers)
-
-**Recommendation**: Add a UNIQUE constraint to the client_number field:
-```sql
-ALTER TABLE clients ADD CONSTRAINT unique_client_number UNIQUE (client_number);
-```
-
-**Status**: ⚠️ Data integrity - consider adding constraint  
-**Last Checked**: 2025-01-27 - Still unresolved, should be fixed for data integrity
+**Status**: ✅ Resolved (field removed)  
+**Last Checked**: 2025-12-28
 
 ---
 
@@ -307,7 +300,7 @@ ALTER TABLE clients ADD CONSTRAINT unique_client_number UNIQUE (client_number);
 | #2 | Inventory quantity NaN validation | Medium | ⚠️ Unresolved | 2025-01-27 |
 | #3 | Reserved quantity can exceed available | Medium | ⚠️ Design decision needed | 2025-01-27 |
 | #4 | Missing wood inventory silently succeeds | Medium | ⚠️ Design decision needed | 2025-01-27 |
-| #5 | Missing UNIQUE constraint on client_number | Medium | ⚠️ Unresolved | 2025-01-27 |
+| #5 | `client_number` removed from schema | Medium | ✅ Resolved | 2025-12-28 |
 
 ---
 

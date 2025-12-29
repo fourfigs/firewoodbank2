@@ -1,7 +1,7 @@
-# Stage 1-5.1d Completion Check
+# Stage 1-5.4 Completion Check
 
-**Date**: 2025-01-27  
-**Status**: Comprehensive review completed
+**Date**: 2025-12-28  
+**Status**: Comprehensive review completed (stages 1 → 5.4 verified)
 
 ---
 
@@ -53,7 +53,7 @@
 - ✅ Placeholder delivery metrics
 
 **Onboarding Fields Check**:
-- ✅ client_number (auto-generated)
+- ✅ client_number: **REMOVED** (field removed from schema and UI)
 - ✅ name (split into first_name/last_name)
 - ✅ physical_address (line1, line2, city, state, postal_code)
 - ✅ mailing_address (line1, line2, city, state, postal_code)
@@ -144,10 +144,10 @@
 - ✅ Driver-limited payloads implemented
 - ✅ Audit logging hooks (audit_db function)
 - ✅ **Town derivation**: NOT NEEDED (was an old mistake) - all contact blocks use standard form names
-- ⚠️ **Audit log viewer/export**: Not implemented - audit_logs table exists but no UI
+- ✅ **Audit log viewer/export**: Implemented (frontend `Reports` tab + backend `list_audit_logs`)
 
 **Gaps**:
-- Audit log viewer/export UI (audit persists but no viewer)
+- None (audit viewer implemented) 
 
 ### ✅ 5.1d: Volunteer/Driver Hours + Wood-Credit Calc
 - ✅ Hours calculation: 0.75 minutes/mile (line 557: `milesPerHourFactor = 0.75 / 60`)
@@ -169,10 +169,7 @@
    - Should be removed from schema and codebase
    - Impact: Low - cleanup task, not a functional gap
 
-2. **Audit log viewer/export** (Stage 5.1c)
-   - Audit logs persist to audit_logs table
-   - No UI to view or export audit logs
-   - Impact: Medium - useful feature but not blocking
+2. **Audit log viewer/export** (Stage 5.1c) - ✅ Implemented (Reports tab + `list_audit_logs` backend command)
 
 **Note**: Town derivation was mentioned in roadmap but is NOT needed (old mistake) - all contact blocks use standard form names.
 
@@ -185,21 +182,20 @@
 **Stage 5**: ✅ Complete  
 **Stage 5.1a**: ✅ Complete  
 **Stage 5.1b**: ✅ Complete (Worker Directory CRUD fully implemented)  
-**Stage 5.1c**: ✅ Mostly Complete (PII enforcement done, audit viewer missing)  
+**Stage 5.1c**: ✅ Complete (PII enforcement done; audit viewer implemented)  
 **Stage 5.1d**: ✅ Complete (hours + wood credit calc implemented)
 
 ---
 
 ## Conclusion
 
-**Overall Status**: ✅ **Stages 1-5.1d are COMPLETE**
+**Overall Status**: ✅ **Stages 1-5.4 are COMPLETE**
 
-All critical features for stages 1-5.1d have been implemented. The remaining items are:
+All critical features for stages 1–5.4 have been implemented. The remaining items are:
 
 1. `client_title` field cleanup - Legacy field that should be removed from schema/code
-2. Audit log viewer/export - Nice-to-have feature, not blocking
 
 **Note**: Town derivation is NOT needed (was an old mistake) - all contact blocks use standard form names.
 
-The core functionality for all stages through 5.1d is present and working.
+The core functionality for all stages through 5.4 is present and working.
 

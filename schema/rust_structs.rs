@@ -43,7 +43,6 @@ pub enum ApprovalStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Client {
     pub meta: SyncMeta,
-    pub client_number: String,              // “Client #” on onboarding form
     pub client_title: Option<String>,       // Mr/Ms/Dr, etc.
     pub name: String,                       // Full name from onboarding form
     pub physical_address: Address,
@@ -79,7 +78,6 @@ pub enum WorkOrderStatus {
 pub struct WorkOrder {
     pub meta: SyncMeta,
     pub client_id: Uuid,
-    pub client_number: String,
     pub client_title: Option<String>,
     pub client_name: String,
     pub physical_address: Address,
@@ -106,7 +104,6 @@ pub struct InvoiceLineItem {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientSnapshot {
     pub client_id: Uuid,
-    pub client_number: String,
     pub client_title: Option<String>,
     pub client_name: String,
     pub physical_address: Address,

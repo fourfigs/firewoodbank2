@@ -53,7 +53,6 @@ fn resolve_database_url() -> String {
 
 #[derive(Debug, Deserialize)]
 struct ClientInput {
-    client_number: String,
     client_title: Option<String>,
     first_name: Option<String>, // Frontend field
     last_name: Option<String>, // Frontend field
@@ -87,7 +86,6 @@ struct ClientInput {
 #[derive(Debug, Deserialize)]
 struct ClientUpdateInput {
     id: String,
-    client_number: String,
     client_title: Option<String>,
     first_name: Option<String>, // Frontend field
     last_name: Option<String>, // Frontend field
@@ -121,7 +119,6 @@ struct ClientUpdateInput {
 struct ClientRow {
     id: String,
     name: String,
-    client_number: String,
     email: Option<String>,
     telephone: Option<String>,
     approval_status: String,
@@ -151,7 +148,6 @@ struct ClientRow {
 struct ClientConflictRow {
     id: String,
     name: String,
-    client_number: String,
     physical_address_line1: String,
     physical_address_city: String,
     physical_address_state: String,
@@ -197,7 +193,6 @@ struct InventoryUpdateInput {
 #[derive(Debug, Deserialize)]
 struct WorkOrderInput {
     client_id: String,
-    client_number: String,
     client_title: Option<String>,
     client_name: String,
     physical_address_line1: String,
@@ -234,7 +229,6 @@ struct WorkOrderInput {
 struct WorkOrderRow {
     id: String,
     client_name: String,
-    client_number: String,
     status: String,
     scheduled_date: Option<String>,
     gate_combo: Option<String>,
@@ -311,77 +305,32 @@ struct MotdInput {
     created_by_user_id: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ChangeRequestInput {
+    title: String,
+    description: String,
+    requested_by_user_id: String,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct ChangeRequestRow {
+    id: String,
+    title: String,
+    description: String,
+    requested_by_user_id: String,
+    status: String,
+    resolution_notes: Option<String>,
+    resolved_by_user_id: Option<String>,
+    created_at: String,
+}
+
 #[tauri::command]
 fn ping() -> String {
     "pong".to_string()
 }
 
-#[tauri::command]
-async fn get_next_client_number(
-    state: State<'_, AppState>,
-    first_name: String,
-    last_name: String,
-    date_str: Option<String>, // Date in YYYY-MM-DD format, or None for today
-) -> Result<String, String> {
-    use chrono::Datelike;
-    
-    // Extract initials (first letter of first and last name, lowercase)
-    let first_initial = first_name
-        .trim()
-        .chars()
-        .next()
-        .unwrap_or('x')
-        .to_lowercase()
-        .next()
-        .unwrap_or('x');
-    let last_initial = last_name
-        .trim()
-        .chars()
-        .next()
-        .unwrap_or('x')
-        .to_lowercase()
-        .next()
-        .unwrap_or('x');
-    
-    // Parse date or use today
-    let date = if let Some(ds) = date_str {
-        chrono::NaiveDate::parse_from_str(&ds, "%Y-%m-%d")
-            .map_err(|_| "Invalid date format".to_string())?
-    } else {
-        chrono::Local::now().date_naive()
-    };
-    
-    // Format as MMDDYY
-    let mm = format!("{:02}", date.month());
-    let dd = format!("{:02}", date.day());
-    let yy = format!("{:02}", date.year() % 100);
-    let date_part = format!("{}{}{}", mm, dd, yy);
-    
-    // Get the highest sequential number across ALL clients (including deleted clients, so numbers are never reused)
-    // The sequential number represents the order of all clients overall
-    let result = sqlx::query_scalar::<_, Option<i64>>(
-        r#"
-        SELECT MAX(CAST(SUBSTR(client_number, -4) AS INTEGER))
-        FROM clients
-        WHERE LENGTH(client_number) >= 4
-          AND SUBSTR(client_number, -4) GLOB '[0-9][0-9][0-9][0-9]'
-        "#
-    )
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|e| e.to_string())?;
-
-    let next_seq = if let Some(max_num) = result {
-        max_num.unwrap_or(0) + 1
-    } else {
-        1
-    };
-
-    // Format: initials-mmddyy[4-digit-sequential]
-    let prefix = format!("{}{}{}", first_initial, last_initial, date_part);
-    let client_number = format!("{}{:04}", prefix, next_seq);
-    Ok(client_number)
-}
+// `get_next_client_number` removed: client numbers are no longer used.
+// Generation and storage of client numbers has been removed per project decision.
 
 #[tauri::command]
 async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result<String, String> {
@@ -411,7 +360,6 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
         SELECT
             id,
             name,
-            client_number,
             physical_address_line1,
             physical_address_city,
             physical_address_state
@@ -439,15 +387,15 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
                 .eq_ignore_ascii_case(&input.physical_address_state);
         if !same_address {
             return Err(format!(
-                "Name '{}' already exists at a different address (#{}, {} {})",
-                existing.name, existing.client_number, existing.physical_address_line1, existing.physical_address_city
+                "Name '{}' already exists at a different address (id {}, {} {})",
+                existing.name, existing.id, existing.physical_address_line1, existing.physical_address_city
             ));
         }
     }
 
     let query = r#"
         INSERT INTO clients (
-            id, client_number, client_title, name,
+            id, client_title, name,
             first_name, last_name,
             physical_address_line1, physical_address_line2, physical_address_city,
             physical_address_state, physical_address_postal_code,
@@ -469,13 +417,12 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
             ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?,
-            ?, ?, ?, ?
+            ?, ?, ?
         )
     "#;
 
     sqlx::query(query)
         .bind(&id)
-        .bind(&input.client_number)
         .bind(&input.client_title)
         .bind(&name)
         .bind(&first_name)
@@ -523,7 +470,6 @@ async fn list_clients(
         SELECT
             id,
             name,
-            client_number,
             email,
             telephone,
             approval_status,
@@ -640,8 +586,7 @@ async fn update_client(state: State<'_, AppState>, input: ClientUpdateInput) -> 
 
     let query = r#"
         UPDATE clients
-        SET client_number = ?,
-            client_title = ?,
+        SET client_title = ?,
             name = ?,
             first_name = ?,
             last_name = ?,
@@ -672,7 +617,6 @@ async fn update_client(state: State<'_, AppState>, input: ClientUpdateInput) -> 
     "#;
 
     sqlx::query(query)
-        .bind(&input.client_number)
         .bind(&input.client_title)
         .bind(&name)
         .bind(&first_name)
@@ -735,7 +679,6 @@ async fn check_client_conflict(
         SELECT
             id,
             name,
-            client_number,
             physical_address_line1,
             physical_address_city,
             physical_address_state
@@ -884,7 +827,7 @@ async fn create_work_order(
 
     let query = r#"
         INSERT INTO work_orders (
-            id, client_id, client_number, client_title, client_name,
+            id, client_id, client_title, client_name,
             physical_address_line1, physical_address_line2, physical_address_city,
             physical_address_state, physical_address_postal_code,
             mailing_address_line1, mailing_address_line2, mailing_address_city,
@@ -919,7 +862,6 @@ async fn create_work_order(
     sqlx::query(query)
         .bind(&id)
         .bind(&input.client_id)
-        .bind(&input.client_number)
         .bind(&input.client_title)
         .bind(&input.client_name)
         .bind(&input.physical_address_line1)
@@ -1009,7 +951,6 @@ async fn list_work_orders(
         SELECT
             id,
             client_name,
-            client_number,
             status,
             scheduled_date,
             gate_combo,
@@ -1090,7 +1031,7 @@ async fn adjust_inventory_for_transition_tx(
     previous_status: &str,
     next_status: &str,
     delivery_size_cords: f64,
-) -> Result<(), sqlx::Error> {
+) -> Result<(), String> {
     if delivery_size_cords <= 0.0 {
         return Ok(());
     }
@@ -1122,41 +1063,61 @@ async fn adjust_inventory_for_transition_tx(
         "#
     )
     .fetch_optional(&mut **tx)
-    .await?;
+    .await
+    .map_err(|e| e.to_string())?;
 
-    if let Some(record) = inventory_row {
-        let mut reserved = record.reserved_quantity;
-        let mut on_hand = record.quantity_on_hand;
-        if !prev_reserved && next_reserved {
-            reserved += delivery_size_cords;
-        } else if prev_reserved && !next_reserved {
-            reserved -= delivery_size_cords;
-        }
+    // If no wood inventory item found, treat as an error to avoid silent no-op transitions
+    let record = match inventory_row {
+        Some(r) => r,
+        None => return Err("No wood inventory item found to adjust (add a wood inventory item).".to_string()),
+    };
 
-        if next_status.eq_ignore_ascii_case("completed") {
-            on_hand -= delivery_size_cords;
-        }
+    let mut reserved = record.reserved_quantity;
+    let mut on_hand = record.quantity_on_hand;
 
-        if reserved < 0.0 {
-            reserved = 0.0;
+    // If moving into a reserved state, ensure availability before reserving
+    if !prev_reserved && next_reserved {
+        let available = on_hand - reserved;
+        if available < delivery_size_cords {
+            return Err(format!(
+                "Insufficient inventory to reserve {} cords (available: {}).",
+                delivery_size_cords, available
+            ));
         }
-        if on_hand < 0.0 {
-            on_hand = 0.0;
-        }
-
-        sqlx::query(
-            r#"
-            UPDATE inventory_items
-            SET reserved_quantity = ?, quantity_on_hand = ?, updated_at = datetime('now')
-            WHERE id = ?
-            "#
-        )
-        .bind(reserved)
-        .bind(on_hand)
-        .bind(&record.id)
-        .execute(&mut **tx)
-        .await?;
+        reserved += delivery_size_cords;
+    } else if prev_reserved && !next_reserved {
+        reserved -= delivery_size_cords;
     }
+
+    if next_status.eq_ignore_ascii_case("completed") {
+        on_hand -= delivery_size_cords;
+    }
+
+    if reserved < 0.0 {
+        reserved = 0.0;
+    }
+    if on_hand < 0.0 {
+        on_hand = 0.0;
+    }
+
+    // Ensure reserved never exceeds on-hand after adjustments (concurrency safety)
+    if reserved > on_hand {
+        reserved = on_hand;
+    }
+
+    sqlx::query(
+        r#"
+        UPDATE inventory_items
+        SET reserved_quantity = ?, quantity_on_hand = ?, updated_at = datetime('now')
+        WHERE id = ?
+        "#
+    )
+    .bind(reserved)
+    .bind(on_hand)
+    .bind(&record.id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -1594,6 +1555,112 @@ async fn create_motd(
     Ok(id)
 }
 
+#[tauri::command]
+async fn delete_motd(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    audit_db(&state.pool, "delete_motd", "unknown", "unknown").await;
+    sqlx::query(
+        r#"
+        UPDATE motd
+        SET is_deleted = 1, updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+    )
+    .bind(&id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn create_change_request(
+    state: State<'_, AppState>,
+    input: ChangeRequestInput,
+) -> Result<String, String> {
+    let id = Uuid::new_v4().to_string();
+    audit_db(&state.pool, "create_change_request", "unknown", "unknown").await;
+    sqlx::query(
+        r#"
+        INSERT INTO change_requests (id, title, description, requested_by_user_id, status)
+        VALUES (?, ?, ?, ?, 'open')
+        "#,
+    )
+    .bind(&id)
+    .bind(&input.title)
+    .bind(&input.description)
+    .bind(&input.requested_by_user_id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(id)
+}
+
+#[tauri::command]
+async fn list_change_requests(
+    state: State<'_, AppState>,
+    status: Option<String>,
+) -> Result<Vec<ChangeRequestRow>, String> {
+    let status_filter = status.unwrap_or_else(|| "open".to_string());
+    // If "all", fetch all, else filter
+    let query_str = if status_filter == "all" {
+        r#"
+        SELECT id, title, description, requested_by_user_id, status, resolution_notes, resolved_by_user_id, created_at
+        FROM change_requests
+        WHERE is_deleted = 0
+        ORDER BY created_at DESC
+        "#
+    } else {
+        r#"
+        SELECT id, title, description, requested_by_user_id, status, resolution_notes, resolved_by_user_id, created_at
+        FROM change_requests
+        WHERE is_deleted = 0 AND status = ?
+        ORDER BY created_at DESC
+        "#
+    };
+    
+    let rows = if status_filter == "all" {
+        sqlx::query_as::<_, ChangeRequestRow>(query_str)
+            .fetch_all(&state.pool)
+            .await
+            .map_err(|e| e.to_string())?
+    } else {
+        sqlx::query_as::<_, ChangeRequestRow>(query_str)
+            .bind(status_filter)
+            .fetch_all(&state.pool)
+            .await
+            .map_err(|e| e.to_string())?
+    };
+
+    audit_db(&state.pool, "list_change_requests", "unknown", "unknown").await;
+    Ok(rows)
+}
+
+#[tauri::command]
+async fn resolve_change_request(
+    state: State<'_, AppState>,
+    id: String,
+    status: String,
+    resolution_notes: Option<String>,
+    resolved_by_user_id: String,
+) -> Result<(), String> {
+    audit_db(&state.pool, "resolve_change_request", "unknown", "unknown").await;
+    sqlx::query(
+        r#"
+        UPDATE change_requests
+        SET status = ?, resolution_notes = ?, resolved_by_user_id = ?, updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+    )
+    .bind(&status)
+    .bind(&resolution_notes)
+    .bind(&resolved_by_user_id)
+    .bind(&id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[derive(Debug, Serialize, FromRow)]
 struct AuditLogRow {
     id: String,
@@ -1673,7 +1740,6 @@ fn main() -> Result<()> {
         })
         .invoke_handler(tauri::generate_handler![
             ping,
-            get_next_client_number,
             create_client,
             list_clients,
             check_client_conflict,
@@ -1694,6 +1760,10 @@ fn main() -> Result<()> {
             get_available_drivers,
             list_motd,
             create_motd,
+            delete_motd,
+            create_change_request,
+            list_change_requests,
+            resolve_change_request,
             list_audit_logs
         ])
         .run(tauri::generate_context!())?;

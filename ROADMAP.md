@@ -1,7 +1,7 @@
 # 🔥 Community Firewood Bank Management App - Complete Roadmap
 
 **Repo**: https://github.com/fourfigs/firewoodbank2  
-**Status**: 🟢 Stage 5.4 Complete - Ready for Stage 6 (Dashboard + Calendar)  
+**Status**: 🟢 Stage 6 Complete - Ready for Stage 7 (Users + Change Requests + MOTD)  
 **Target**: Windows Desktop → Multi-platform sync-ready app
 
 ## 🎯 PROJECT GOALS
@@ -142,13 +142,13 @@ Sub-stages to close gaps:
 - Stage 0 prompt: Windows desktop–first Tauri 2 + React + TypeScript + SQLite; sync-ready schema/DTOs for User, Client, InventoryItem, WorkOrder, DeliveryEvent, Invoice, MOTD, ChangeRequest; UUID + audit/sync fields; infer fields from Onboard/Order/Invoice; output Rust/SQL + TS DTOs; call out missing/ambiguous.
 - Stage 1 prompt: Scaffold Tauri 2 app (Windows), React+TS frontend, nav shell (Dashboard, Clients, Inventory, Work Orders, Admin, Driver placeholder), Tauri `ping` command and React caller; include run commands.
 - Stage 2 prompt: Add SQLite/migrations for all entities with sync fields; Rust CRUD for Client/Inventory; Tauri commands create/update/list for both; handle createdAt/updatedAt/isDeleted/UUID.
-- Stage 3 prompt: Clients module with search/filter, detail/edit with all onboard fields (title, clientNumber, onboarding date, addresses, phones, email, how heard, referring agency, approvalStatus+denialReason, gateCombo, notes), delivery metrics placeholders, backend wiring.
+- Stage 3 prompt: Clients module with search/filter, detail/edit with all onboard fields (title, onboarding date, addresses, phones, email, how heard, referring agency, approvalStatus+denialReason, gateCombo, notes). Note: numeric client identifiers (formerly `client_number`) were removed from the schema and UI.
 - Stage 4 prompt: Inventory module with list/detail, CRUD for operational items, fields (name, category, currentQuantity, unit, reorderThreshold, isActive), derived belowThreshold + orderMessage, “Needs restock” view for dashboard/admin.
 - Stage 5 prompt: Work Orders + DeliveryEvents with full Order fields, client snapshot/link, addresses/directions/gate combo/heat sources/notes/dateOfOnboarding/scheduledDate/status; DeliveryEvent tied to WorkOrder (type/title/notes/start/end/colorCode); create WorkOrder from Client and auto-create DeliveryEvent when scheduled.
 
 ### ✅ **Stage 5.2: Work Order and Intake Hardening**
 Tighten intake UX/validation before Stage 6:
-- ✅ Split client name into first/last; auto-generate client number from name + entry month + 2 random digits (format: LAST-FIRST-MMYY-RR)
+- ✅ Split client name into first/last; numeric client identifiers (formerly auto-generated `client_number`) have been removed
 - ✅ Client edit locked to admin/lead (canManage gate)
 - ✅ Enforce required: name, address, at least one contact (phone/email/other+specify)
 - ✅ Format phone `(###) ###-####` with validation
@@ -186,7 +186,7 @@ Admin/Lead-only Reports tab for viewing audit logs:
 What you see: Reports tab with filterable audit log table
 Branch: stage-5.4-reports
 
-### ⭕ **Stage 6: Login + Dashboard + Calendar**
+### ✅ **Stage 6: Login + Dashboard + Calendar**
 Split/unsplit wood summary
 2-weeks-at-glance + monthly calendar (color-coded)
 Upcoming list + MOTD

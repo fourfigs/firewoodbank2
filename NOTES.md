@@ -1,7 +1,7 @@
 Notable Gaps / Changes Needed (updated after Stage 5.4 completion)
 
 Completed in Stages 5.2-5.4:
-- ✅ Client name split into first/last with auto-generated client numbers (Stage 5.2)
+- ✅ Client name split into first/last (Stage 5.2). Numeric client identifiers (formerly `client_number`) have been removed.
 - ✅ Address/contact validation (phone format, state, ZIP, city formatting) (Stage 5.2)
 - ✅ Wood size and delivery size tracking on work orders (Stage 5.2)
 - ✅ Inventory reservation system (reserved_quantity tracking) (Stage 5.2)
@@ -16,6 +16,7 @@ Completed in Stages 5.2-5.4:
 Remaining Items:
 - client_title field exists in schema but is old/unused - should be removed from database and code
 - Inventory creation gating to be enforced with user CRUD/users stage (if needed)
+- ✅ Inventory reservation validation added (2025-12-28) - prevents reserved_quantity exceeding available on-hand (backend validation in `adjust_inventory_for_transition_tx`).
 
 Current Status:
 - Stage 5.2: ✅ COMPLETE
@@ -78,7 +79,7 @@ Using the existing Client schema and Tauri commands, build:
 
 Client list with search/filter.
 
-Client detail/edit view with all onboard form fields (clientNumber, onboarding date, addresses, phones, email, how heard, referring agency, approvalStatus + denialReason, gateCombo, notes). Note: client_title is old/unused and should be removed.
+Client detail/edit view with all onboard form fields (onboarding date, addresses, phones, email, how heard, referring agency, approvalStatus + denialReason, gateCombo, notes). Note: client_title is old/unused and should be removed. Numeric client identifiers (formerly `client_number`) have been removed from schema and UI.
 
 Placeholders for delivery metrics (week/month/year/all‑time) derived from DeliveryEvent.
 Wire up create/edit to the backend and update metadata fields automatically.

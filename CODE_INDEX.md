@@ -298,7 +298,7 @@ All commands are invoked from the frontend using `invoke()` from `@tauri-apps/ap
 
 ## 📝 Development Status
 
-**Current Stage**: Stage 5.2 - Work Order and Intake Hardening  
+**Current Stage**: Stage 5.4 - Reports / Audit Log Viewer  
 **Branch Pattern**: `stage-X-[name]`
 
 See `ROADMAP.md` for detailed stage information.
