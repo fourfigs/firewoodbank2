@@ -22,7 +22,9 @@ Current Status:
 - Stage 5.2: ✅ COMPLETE
 - Stage 5.3: ✅ COMPLETE
 - Stage 5.4: ✅ COMPLETE
-- Next: Stage 6 - Login + Dashboard + Calendar
+- Stage 6: ✅ COMPLETE (Dashboard + Calendar + Metrics)
+- Stage 7: ✅ COMPLETE (Users, Change Requests, MOTD, Login Refinement)
+- Next: Stage 8 - Invoices + Printing
 
 Notes:
 - MOTD is surfaced on login (newest first) via list_motd/create_motd

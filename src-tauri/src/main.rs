@@ -44,10 +44,7 @@ fn resolve_database_url() -> String {
     }
     format!(
         "sqlite://{}",
-        root_db
-            .canonicalize()
-            .unwrap_or(root_db)
-            .to_string_lossy()
+        root_db.canonicalize().unwrap_or(root_db).to_string_lossy()
     )
 }
 
@@ -55,7 +52,7 @@ fn resolve_database_url() -> String {
 struct ClientInput {
     client_title: Option<String>,
     first_name: Option<String>, // Frontend field
-    last_name: Option<String>, // Frontend field
+    last_name: Option<String>,  // Frontend field
     physical_address_line1: String,
     physical_address_line2: Option<String>,
     physical_address_city: String,
@@ -66,10 +63,10 @@ struct ClientInput {
     mailing_address_city: Option<String>,
     mailing_address_state: Option<String>,
     mailing_address_postal_code: Option<String>,
-    mailing_same_as_physical: Option<bool>, // Frontend UI field, ignored
+
     telephone: Option<String>,
     email: Option<String>,
-    opt_out_email: Option<bool>, // Frontend UI field, already handled in frontend
+
     date_of_onboarding: Option<String>,
     how_did_they_hear_about_us: Option<String>,
     referring_agency: Option<String>,
@@ -88,7 +85,7 @@ struct ClientUpdateInput {
     id: String,
     client_title: Option<String>,
     first_name: Option<String>, // Frontend field
-    last_name: Option<String>, // Frontend field
+    last_name: Option<String>,  // Frontend field
     physical_address_line1: String,
     physical_address_line2: Option<String>,
     physical_address_city: String,
@@ -99,10 +96,10 @@ struct ClientUpdateInput {
     mailing_address_city: Option<String>,
     mailing_address_state: Option<String>,
     mailing_address_postal_code: Option<String>,
-    mailing_same_as_physical: Option<bool>, // Frontend UI field, ignored
+
     telephone: Option<String>,
     email: Option<String>,
-    opt_out_email: Option<bool>, // Frontend UI field, already handled in frontend
+
     date_of_onboarding: Option<String>,
     how_did_they_hear_about_us: Option<String>,
     referring_agency: Option<String>,
@@ -335,20 +332,22 @@ fn ping() -> String {
 #[tauri::command]
 async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
-    let approval_status = input.approval_status.unwrap_or_else(|| "pending".to_string());
+    let approval_status = input
+        .approval_status
+        .unwrap_or_else(|| "pending".to_string());
     audit_db(&state.pool, "create_client", "unknown", "unknown").await;
 
     // Extract first_name and last_name from input
     let first_name = input.first_name.as_deref().unwrap_or("").trim().to_string();
     let last_name = input.last_name.as_deref().unwrap_or("").trim().to_string();
-    
+
     // Compute name from first_name + last_name
     if first_name.is_empty() && last_name.is_empty() {
         return Err("Both 'first_name' and 'last_name' are required.".to_string());
     }
-    
+
     let name = format!("{} {}", first_name, last_name).trim().to_string();
-    
+
     // Ensure name is not empty
     if name.is_empty() {
         return Err("Name cannot be empty.".to_string());
@@ -370,7 +369,7 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
             OR lower(name) LIKE '%' || lower(?1) || '%'
             OR lower(?1) LIKE '%' || lower(name) || '%'
           )
-        "#
+        "#,
     )
     .bind(&name)
     .fetch_all(&state.pool)
@@ -378,7 +377,9 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
     .map_err(|e| e.to_string())?;
 
     for existing in conflicts {
-        let same_address = existing.physical_address_line1.eq_ignore_ascii_case(&input.physical_address_line1)
+        let same_address = existing
+            .physical_address_line1
+            .eq_ignore_ascii_case(&input.physical_address_line1)
             && existing
                 .physical_address_city
                 .eq_ignore_ascii_case(&input.physical_address_city)
@@ -388,7 +389,10 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
         if !same_address {
             return Err(format!(
                 "Name '{}' already exists at a different address (id {}, {} {})",
-                existing.name, existing.id, existing.physical_address_line1, existing.physical_address_city
+                existing.name,
+                existing.id,
+                existing.physical_address_line1,
+                existing.physical_address_city
             ));
         }
     }
@@ -496,7 +500,7 @@ async fn list_clients(
         FROM clients
         WHERE is_deleted = 0
         ORDER BY COALESCE(date_of_onboarding, created_at) ASC
-        "#
+        "#,
     )
     .fetch_all(&state.pool)
     .await
@@ -526,8 +530,9 @@ async fn list_clients(
         for row in assignments {
             let client_id = row.client_id.clone();
             if !client_id.is_empty() {
-                let assignees: Vec<String> = serde_json::from_str(row.assignees_json.as_deref().unwrap_or("[]"))
-                    .unwrap_or_default();
+                let assignees: Vec<String> =
+                    serde_json::from_str(row.assignees_json.as_deref().unwrap_or("[]"))
+                        .unwrap_or_default();
                 let matched = assignees
                     .iter()
                     .map(|a| a.to_lowercase())
@@ -565,20 +570,22 @@ async fn list_clients(
 
 #[tauri::command]
 async fn update_client(state: State<'_, AppState>, input: ClientUpdateInput) -> Result<(), String> {
-    let approval_status = input.approval_status.unwrap_or_else(|| "pending".to_string());
+    let approval_status = input
+        .approval_status
+        .unwrap_or_else(|| "pending".to_string());
     audit_db(&state.pool, "update_client", "unknown", "unknown").await;
 
     // Extract first_name and last_name from input
     let first_name = input.first_name.as_deref().unwrap_or("").trim().to_string();
     let last_name = input.last_name.as_deref().unwrap_or("").trim().to_string();
-    
+
     // Compute name from first_name + last_name
     if first_name.is_empty() && last_name.is_empty() {
         return Err("Both 'first_name' and 'last_name' are required.".to_string());
     }
-    
+
     let name = format!("{} {}", first_name, last_name).trim().to_string();
-    
+
     // Ensure name is not empty
     if name.is_empty() {
         return Err("Name cannot be empty.".to_string());
@@ -689,7 +696,7 @@ async fn check_client_conflict(
             OR lower(name) LIKE '%' || lower(?1) || '%'
             OR lower(?1) LIKE '%' || lower(name) || '%'
           )
-        "#
+        "#,
     )
     .bind(&name)
     .fetch_all(&state.pool)
@@ -748,7 +755,7 @@ async fn list_inventory_items(state: State<'_, AppState>) -> Result<Vec<Inventor
         FROM inventory_items
         WHERE is_deleted = 0
         ORDER BY name ASC
-        "#
+        "#,
     )
     .fetch_all(&state.pool)
     .await
@@ -970,7 +977,7 @@ async fn list_work_orders(
         FROM work_orders
         WHERE is_deleted = 0
         ORDER BY (scheduled_date IS NULL), datetime(scheduled_date) DESC, created_at DESC
-        "#
+        "#,
     )
     .fetch_all(&state.pool)
     .await
@@ -1060,7 +1067,7 @@ async fn adjust_inventory_for_transition_tx(
           )
         ORDER BY created_at ASC
         LIMIT 1
-        "#
+        "#,
     )
     .fetch_optional(&mut **tx)
     .await
@@ -1069,7 +1076,11 @@ async fn adjust_inventory_for_transition_tx(
     // If no wood inventory item found, treat as an error to avoid silent no-op transitions
     let record = match inventory_row {
         Some(r) => r,
-        None => return Err("No wood inventory item found to adjust (add a wood inventory item).".to_string()),
+        None => {
+            return Err(
+                "No wood inventory item found to adjust (add a wood inventory item).".to_string(),
+            )
+        }
     };
 
     let mut reserved = record.reserved_quantity;
@@ -1110,7 +1121,7 @@ async fn adjust_inventory_for_transition_tx(
         UPDATE inventory_items
         SET reserved_quantity = ?, quantity_on_hand = ?, updated_at = datetime('now')
         WHERE id = ?
-        "#
+        "#,
     )
     .bind(reserved)
     .bind(on_hand)
@@ -1175,7 +1186,7 @@ async fn list_users(state: State<'_, AppState>) -> Result<Vec<UserRow>, String> 
         FROM users
         WHERE is_deleted = 0
         ORDER BY name ASC
-        "#
+        "#,
     )
     .fetch_all(&state.pool)
     .await
@@ -1224,7 +1235,7 @@ async fn get_available_drivers(
     date: String, // ISO date string like "2025-12-30"
 ) -> Result<Vec<String>, String> {
     use chrono::Datelike;
-    
+
     let rows = sqlx::query_as::<_, DriverAvailabilityRow>(
         r#"
         SELECT name, availability_schedule
@@ -1232,7 +1243,7 @@ async fn get_available_drivers(
         WHERE is_deleted = 0
           AND is_driver = 1
         ORDER BY name ASC
-        "#
+        "#,
     )
     .fetch_all(&state.pool)
     .await
@@ -1241,14 +1252,16 @@ async fn get_available_drivers(
     // Parse the date to get day of week
     let parsed_date = chrono::NaiveDate::parse_from_str(&date, "%Y-%m-%d")
         .map_err(|e| format!("Invalid date format: {}", e))?;
-    
+
     let weekday = parsed_date.weekday();
     let day_name = weekday.to_string().to_lowercase();
 
     let mut available = Vec::new();
     for row in rows {
         if let Some(schedule_json) = row.availability_schedule {
-            if let Ok(schedule) = serde_json::from_str::<std::collections::HashMap<String, bool>>(&schedule_json) {
+            if let Ok(schedule) =
+                serde_json::from_str::<std::collections::HashMap<String, bool>>(&schedule_json)
+            {
                 if schedule.get(&day_name).copied().unwrap_or(false) {
                     available.push(row.name);
                 }
@@ -1323,6 +1336,53 @@ async fn update_user_flags(
     Ok(())
 }
 
+#[derive(Debug, Deserialize)]
+struct CreateUserInput {
+    name: String,
+    email: Option<String>,
+    telephone: Option<String>,
+    role: String,
+    is_driver: Option<bool>,
+}
+
+#[tauri::command]
+async fn create_user(
+    state: State<'_, AppState>,
+    input: CreateUserInput,
+    role: Option<String>,
+) -> Result<String, String> {
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    if role_val != "admin" && role_val != "lead" {
+        return Err("Only admins or leads can create users".to_string());
+    }
+    audit_db(&state.pool, "create_user", &role_val, &input.name).await;
+
+    let id = Uuid::new_v4().to_string();
+    let is_driver = if input.is_driver.unwrap_or(false) {
+        1
+    } else {
+        0
+    };
+
+    sqlx::query(
+        r#"
+        INSERT INTO users (id, name, email, telephone, role, is_driver, created_at, updated_at, is_deleted)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+        "#
+    )
+    .bind(&id)
+    .bind(&input.name)
+    .bind(&input.email)
+    .bind(&input.telephone)
+    .bind(&input.role)
+    .bind(is_driver)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(id)
+}
+
 #[tauri::command]
 async fn update_work_order_assignees(
     state: State<'_, AppState>,
@@ -1333,7 +1393,13 @@ async fn update_work_order_assignees(
     if role_val != "admin" && role_val != "lead" {
         return Err("Only admins or leads can assign drivers/helpers".to_string());
     }
-    audit_db(&state.pool, "update_work_order_assignees", &role_val, "unknown").await;
+    audit_db(
+        &state.pool,
+        "update_work_order_assignees",
+        &role_val,
+        "unknown",
+    )
+    .await;
 
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
 
@@ -1342,7 +1408,7 @@ async fn update_work_order_assignees(
         UPDATE work_orders
         SET assignees_json = ?, updated_at = datetime('now')
         WHERE id = ?
-        "#
+        "#,
     )
     .bind(&input.assignees_json)
     .bind(&input.work_order_id)
@@ -1355,7 +1421,7 @@ async fn update_work_order_assignees(
         UPDATE delivery_events
         SET assigned_user_ids_json = COALESCE(?, '[]'), updated_at = datetime('now')
         WHERE work_order_id = ?
-        "#
+        "#,
     )
     .bind(&input.assignees_json)
     .bind(&input.work_order_id)
@@ -1376,7 +1442,13 @@ async fn update_work_order_status(
 ) -> Result<(), String> {
     let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
     let driver_capable = input.is_driver.unwrap_or(false);
-    audit_db(&state.pool, "update_work_order_status", &role_val, "unknown").await;
+    audit_db(
+        &state.pool,
+        "update_work_order_status",
+        &role_val,
+        "unknown",
+    )
+    .await;
 
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
 
@@ -1394,7 +1466,10 @@ async fn update_work_order_status(
     };
 
     let current_status = existing.status;
-    let next_status = input.status.clone().unwrap_or_else(|| current_status.clone());
+    let next_status = input
+        .status
+        .clone()
+        .unwrap_or_else(|| current_status.clone());
     let delivery_size = existing.delivery_size_cords.unwrap_or(0.0);
 
     // Simple validation: mileage required if status completed
@@ -1418,7 +1493,7 @@ async fn update_work_order_status(
             mileage = COALESCE(?, mileage),
             updated_at = datetime('now')
         WHERE id = ? AND is_deleted = 0
-        "#
+        "#,
     )
     .bind(&next_status)
     .bind(&input.mileage)
@@ -1473,7 +1548,13 @@ async fn list_delivery_events(
     let username_val = username.unwrap_or_default();
     let is_hipaa = hipaa_certified.unwrap_or(false);
     let driver_capable = is_driver.unwrap_or(false);
-    audit_db(&state.pool, "list_delivery_events", &role_val, &username_val).await;
+    audit_db(
+        &state.pool,
+        "list_delivery_events",
+        &role_val,
+        &username_val,
+    )
+    .await;
 
     if driver_capable || role_val == "volunteer" {
         let uname = username_val.to_lowercase();
@@ -1531,10 +1612,7 @@ async fn list_motd(
 }
 
 #[tauri::command]
-async fn create_motd(
-    state: State<'_, AppState>,
-    input: MotdInput,
-) -> Result<String, String> {
+async fn create_motd(state: State<'_, AppState>, input: MotdInput) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
     sqlx::query(
         r#"
@@ -1617,7 +1695,7 @@ async fn list_change_requests(
         ORDER BY created_at DESC
         "#
     };
-    
+
     let rows = if status_filter == "all" {
         sqlx::query_as::<_, ChangeRequestRow>(query_str)
             .fetch_all(&state.pool)
@@ -1764,10 +1842,10 @@ fn main() -> Result<()> {
             create_change_request,
             list_change_requests,
             resolve_change_request,
-            list_audit_logs
+            list_audit_logs,
+            create_user
         ])
         .run(tauri::generate_context!())?;
 
     Ok(app)
 }
-

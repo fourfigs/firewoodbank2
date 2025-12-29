@@ -198,6 +198,15 @@ function LoginCard({
 
   const isMounted = useRef(true);
 
+  // Toggle login-mode class on body
+  useEffect(() => {
+    document.body.classList.add("login-mode");
+    return () => {
+      document.body.classList.remove("login-mode");
+      isMounted.current = false;
+    };
+  }, []);
+
   const resolveRole = (input: string): Role => {
     const normalized = input.trim().toLowerCase();
     if (normalized === "admin") return "admin";
@@ -208,12 +217,6 @@ function LoginCard({
     return "staff";
   };
 
-  useEffect(() => {
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -221,16 +224,20 @@ function LoginCard({
     const normalized = username.trim().toUpperCase();
     const sampleName = normalized || "USER";
     const role: Role = resolveRole(username);
-    onLogin({
-      name: sampleName,
-      username: normalized,
-      role,
-      hipaaCertified: hipaaCertified || role === "admin" || role === "lead",
-      isDriver: isDriverLogin,
-    });
-    if (isMounted.current) {
-      setSubmitting(false);
-    }
+    
+    // Simulate network delay for effect
+    setTimeout(() => {
+        onLogin({
+        name: sampleName,
+        username: normalized,
+        role,
+        hipaaCertified: hipaaCertified || role === "admin" || role === "lead",
+        isDriver: isDriverLogin,
+        });
+        if (isMounted.current) {
+        setSubmitting(false);
+        }
+    }, 800);
   };
 
   const handleForgotSubmit = (e: React.FormEvent) => {
@@ -244,103 +251,115 @@ function LoginCard({
     }, 1000);
   };
 
-  if (isForgot) {
-    return (
-      <section className="card login-card">
-        <div className="badge">Account Recovery</div>
-        <h3>Lost Password</h3>
-        <p className="subtitle">
-          Enter your username or email address and we will send you a reset code.
-        </p>
-        {resetMessage && <div className="pill" style={{ display: "block", marginBottom: 12, background: "#f1f8f1", color: "#2d6b3d" }}>{resetMessage}</div>}
-        <form onSubmit={handleForgotSubmit}>
-          <div className="field">
-            <label>Username or Email</label>
-            <input
-              required
-              value={forgotEmail}
-              onChange={e => setForgotEmail(e.target.value)}
-              placeholder="user@example.com"
-            />
-          </div>
-          <div className="actions" style={{ marginTop: 12, justifyContent: "space-between" }}>
-            <button className="ping" type="submit" disabled={submitting}>
+  return (
+    <div className="login-card-content">
+      {isForgot ? (
+        // Forgot Password View
+        <div className="fade-in">
+          <h2>Lost Password</h2>
+          <p className="subtitle" style={{ marginBottom: 20 }}>
+            Enter your username or email address and we will send you a reset code.
+          </p>
+          {resetMessage && (
+            <div className="pill" style={{ display: "block", marginBottom: 20, background: "#f1f8f1", color: "#2d6b3d" }}>
+              {resetMessage}
+            </div>
+          )}
+          <form onSubmit={handleForgotSubmit}>
+            <div className="login-field">
+              <label>Username or Email</label>
+              <input
+                required
+                value={forgotEmail}
+                onChange={e => setForgotEmail(e.target.value)}
+                placeholder="user@example.com"
+              />
+            </div>
+            <button className="login-btn" type="submit" disabled={submitting}>
               {submitting ? "Sending..." : "Send Reset Code"}
             </button>
-            <button className="ghost" type="button" onClick={() => { setIsForgot(false); setResetMessage(null); }}>
-              Back to Login
-            </button>
+            <div className="login-options" style={{ justifyContent: 'center', marginTop: 16 }}>
+              <button 
+                className="login-link" 
+                type="button" 
+                onClick={() => { setIsForgot(false); setResetMessage(null); }}
+              >
+                Back to Login
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : (
+        // Login View
+        <div className="fade-in">
+          <h2>Sign In</h2>
+          <div className="badge" style={{ marginBottom: 24, background: "#e8f5e9", color: "var(--brand-green)", textAlign: "center", display: "block" }}>
+            💡 Demo: admin/admin, lead/lead, staff/staff
           </div>
-        </form>
-      </section>
-    );
-  }
+          <form onSubmit={handleSubmit}>
+            <div className="login-field">
+              <label htmlFor="username">Username</label>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                required
+                placeholder="Enter your username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
+            </div>
+            <div className="login-field">
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                required
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            
+            <div className="login-options">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={isDriverLogin}
+                  onChange={(e) => setIsDriverLogin(e.target.checked)}
+                />
+                Driver Mode
+              </label>
+              <label>
+              <input
+                  type="checkbox"
+                  checked={hipaaCertified}
+                  onChange={(e) => setHipaaCertified(e.target.checked)}
+                />
+                HIPAA
+              </label>
+            </div>
 
-  return (
-    <section className="card login-card" style={{ boxShadow: "0 20px 60px rgba(66, 47, 33, 0.2)", border: "2px solid #e6d8c8" }}>
-      <div style={{ textAlign: "center", marginBottom: 20 }}>
-        <div className="badge" style={{ marginBottom: 12 }}>Welcome Back</div>
-        <h2 style={{ margin: "0 0 8px", color: "var(--brand-brown)", fontSize: "1.8rem" }}>Sign In</h2>
-        <p className="subtitle" style={{ margin: 0, fontSize: "0.95rem" }}>
-          Access the Firewood Bank console
-        </p>
+            <button className="login-btn" type="submit" disabled={submitting}>
+              {submitting ? "Signing in..." : "Sign In"}
+            </button>
+            
+            <div className="login-options" style={{ justifyContent: "center", marginTop: 16 }}>
+                 <button className="login-link" type="button" onClick={() => setIsForgot(true)}>
+                    Lost Password?
+                 </button>
+            </div>
+          </form>
+        </div>
+      )}
+      
+      <div className="login-footer-links">
+          <a href="https://nm-era.org" target="_blank" rel="noreferrer">nm-era.org</a>
+          <span className="separator">•</span>
+          <a href="mailto:organize@nm-era.org">organize@nm-era.org</a>
       </div>
-      <div className="badge" style={{ marginBottom: 16, background: "#e8f5e9", color: "var(--brand-green)", textAlign: "center" }}>
-        💡 Demo: admin/admin, lead/lead, staff/staff
-      </div>
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div className="field">
-          <label htmlFor="username" style={{ fontSize: "0.9rem", marginBottom: 6 }}>Username</label>
-          <input
-            id="username"
-            name="username"
-            type="text"
-            required
-            placeholder="Enter your username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            style={{ padding: "12px 14px", fontSize: "1rem", borderRadius: "12px" }}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="password" style={{ fontSize: "0.9rem", marginBottom: 6 }}>Password</label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            required
-            placeholder="Enter your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{ padding: "12px 14px", fontSize: "1rem", borderRadius: "12px" }}
-          />
-        </div>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", marginTop: 4 }}>
-          <label className="checkbox" style={{ fontSize: "0.9rem" }}>
-            <input
-              type="checkbox"
-              checked={isDriverLogin}
-              onChange={(e) => setIsDriverLogin(e.target.checked)}
-            />
-            Driver Mode
-          </label>
-          <label className="checkbox" style={{ fontSize: "0.9rem" }}>
-            <input
-              type="checkbox"
-              checked={hipaaCertified}
-              onChange={(e) => setHipaaCertified(e.target.checked)}
-            />
-            HIPAA (Demo)
-          </label>
-        </div>
-        <button className="ping" type="submit" disabled={submitting} style={{ width: "100%", padding: "14px", fontSize: "1.05rem", marginTop: 8, borderRadius: "12px" }}>
-          {submitting ? "Signing in..." : "Sign In"}
-        </button>
-        <button className="ghost" type="button" onClick={() => setIsForgot(true)} style={{ width: "100%", padding: "12px", fontSize: "0.95rem", borderRadius: "12px" }}>
-          Lost Password?
-        </button>
-      </form>
-    </section>
+    </div>
   );
 }
 
@@ -2022,7 +2041,7 @@ function App() {
                               setWorkOrderForm({
                                 client_id: "",
                                 scheduled_date: formatDateTimeLocal(new Date()),
-                                status: "scheduled",
+                                status: "received",
                                 gate_combo: "",
                                 notes: "",
                                 other_heat_source_gas: false,
@@ -2061,7 +2080,7 @@ function App() {
                         <>
                           {workOrderError && <div className="pill" style={{ background: "#fbe2e2", color: "#b3261e" }}>{workOrderError}</div>}
                           <form
-                            className="form-grid"
+                            className="stack"
                             onSubmit={async (e) => {
                               e.preventDefault();
                               setWorkOrderError(null);
@@ -2261,62 +2280,68 @@ function App() {
 
                               setBusy(true);
                               try {
-                                await invoke("create_work_order", {
-                                  input: {
-                                    client_id: targetClient.id,
-                                    client_title: null,
-                                    client_name: targetClient.name,
-                                    physical_address_line1: targetClient.physical_address_line1,
-                                    physical_address_line2: targetClient.physical_address_line2,
-                                    physical_address_city: targetClient.physical_address_city,
-                                    physical_address_state: targetClient.physical_address_state,
-                                    physical_address_postal_code: targetClient.physical_address_postal_code,
-                                    mailing_address_line1: workOrderForm.mailingSameAsPhysical
-                                      ? targetClient.physical_address_line1
-                                      : targetClient.mailing_address_line1,
-                                    mailing_address_line2: workOrderForm.mailingSameAsPhysical
-                                      ? targetClient.physical_address_line2
-                                      : targetClient.mailing_address_line2,
-                                    mailing_address_city: workOrderForm.mailingSameAsPhysical
-                                      ? targetClient.physical_address_city
-                                      : targetClient.mailing_address_city,
-                                    mailing_address_state: workOrderForm.mailingSameAsPhysical
-                                      ? targetClient.physical_address_state
-                                      : targetClient.mailing_address_state,
-                                    mailing_address_postal_code: workOrderForm.mailingSameAsPhysical
-                                      ? targetClient.physical_address_postal_code
-                                      : targetClient.mailing_address_postal_code,
-                                    telephone: targetClient.telephone,
-                                    email: targetClient.email,
-                                    directions: targetClient.directions || null,
-                                    gate_combo: workOrderForm.gate_combo || targetClient.gate_combo,
-                                    mileage: mileageValue,
-                                    other_heat_source_gas: workOrderForm.other_heat_source_gas,
-                                    other_heat_source_electric: workOrderForm.other_heat_source_electric,
-                                    other_heat_source_other: workOrderForm.other_heat_source_other || null,
-                                    notes: workOrderForm.notes || null,
-                                    scheduled_date: workOrderForm.scheduled_date || null,
-                                    status: workOrderForm.status,
-                                    wood_size_label: targetClient.wood_size_label || null,
-                                    wood_size_other: targetClient.wood_size_other || null,
-                                    delivery_size_label: deliverySizeLabel,
-                                    delivery_size_cords: deliverySizeCords,
-                                    assignees_json: JSON.stringify([
-                                      ...workOrderForm.assignees,
-                                      ...workOrderForm.helpers
-                                        .map((h) => h.trim())
-                                        .filter((h) => h.length > 0),
-                                    ]),
-                                    created_by_user_id: null,
-                                    created_by_display: session?.name ?? session?.username ?? null,
-                                  },
-                                  role: session?.role ?? null,
-                                });
+                                try {
+                                  await invoke("create_work_order", {
+                                    input: {
+                                      client_id: targetClient.id,
+                                      client_title: null,
+                                      client_name: targetClient.name,
+                                      physical_address_line1: targetClient.physical_address_line1,
+                                      physical_address_line2: targetClient.physical_address_line2,
+                                      physical_address_city: targetClient.physical_address_city,
+                                      physical_address_state: targetClient.physical_address_state,
+                                      physical_address_postal_code: targetClient.physical_address_postal_code,
+                                      mailing_address_line1: workOrderForm.mailingSameAsPhysical
+                                        ? targetClient.physical_address_line1
+                                        : targetClient.mailing_address_line1,
+                                      mailing_address_line2: workOrderForm.mailingSameAsPhysical
+                                        ? targetClient.physical_address_line2
+                                        : targetClient.mailing_address_line2,
+                                      mailing_address_city: workOrderForm.mailingSameAsPhysical
+                                        ? targetClient.physical_address_city
+                                        : targetClient.mailing_address_city,
+                                      mailing_address_state: workOrderForm.mailingSameAsPhysical
+                                        ? targetClient.physical_address_state
+                                        : targetClient.mailing_address_state,
+                                      mailing_address_postal_code: workOrderForm.mailingSameAsPhysical
+                                        ? targetClient.physical_address_postal_code
+                                        : targetClient.mailing_address_postal_code,
+                                      telephone: targetClient.telephone,
+                                      email: targetClient.email,
+                                      directions: targetClient.directions || null,
+                                      gate_combo: workOrderForm.gate_combo || targetClient.gate_combo,
+                                      mileage: mileageValue,
+                                      other_heat_source_gas: workOrderForm.other_heat_source_gas,
+                                      other_heat_source_electric: workOrderForm.other_heat_source_electric,
+                                      other_heat_source_other: workOrderForm.other_heat_source_other || null,
+                                      notes: workOrderForm.notes || null,
+                                      scheduled_date: workOrderForm.scheduled_date || null,
+                                      status: workOrderForm.status,
+                                      wood_size_label: targetClient.wood_size_label || null,
+                                      wood_size_other: targetClient.wood_size_other || null,
+                                      delivery_size_label: deliverySizeLabel,
+                                      delivery_size_cords: deliverySizeCords,
+                                      assignees_json: JSON.stringify([
+                                        ...workOrderForm.assignees,
+                                        ...workOrderForm.helpers
+                                          .map((h) => h.trim())
+                                          .filter((h) => h.length > 0),
+                                      ]),
+                                      created_by_user_id: null,
+                                      created_by_display: session?.name ?? session?.username ?? null,
+                                    },
+                                    role: session?.role ?? null,
+                                  });
+                                } catch (e: any) {
+                                  console.error(e);
+                                  setWorkOrderError(typeof e === "string" ? e : "Failed to create work order: " + JSON.stringify(e));
+                                  return;
+                                }
                                 await loadWorkOrders();
                                 setWorkOrderForm({
                                   client_id: "",
                                   scheduled_date: "",
-                                  status: "scheduled",
+                                  status: "received",
                                   gate_combo: "",
                                   notes: "",
                                   other_heat_source_gas: false,
@@ -2346,6 +2371,7 @@ function App() {
                               }
                             }}
                           >
+                            <div className="form-grid">
                             <label className="span-2">
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span>Client</span>
@@ -2574,6 +2600,11 @@ function App() {
                                 </label>
                               </>
                             )}
+                            </div>
+
+                            <hr style={{ borderTop: "1px solid #e6d8c8", borderBottom: 0, margin: "20px 0", opacity: 0.6 }} />
+
+                            <div className="form-grid">
                             <label>
                               Scheduled date/time
                               <input
@@ -2706,6 +2737,7 @@ function App() {
                               >
                                 Cancel
                               </button>
+                            </div>
                             </div>
                           </form>
                         </>
@@ -3423,112 +3455,61 @@ function App() {
           </main>
         </>
       ) : (
-        <div style={{ display: "flex", width: "100vw", height: "100vh", overflow: "hidden", background: "var(--brand-cream)" }}>
-
-          {/* Left Column: Branding, Mission, MOTD */}
-          <div style={{
-            flex: 1,
-            background: "linear-gradient(135deg, #fdf8ee 0%, var(--brand-cream) 100%)",
-            color: "var(--brand-brown)",
-            padding: "24px",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            alignItems: "center",
-            textAlign: "center",
-            position: "relative",
-            overflow: "hidden"
-          }}>
-            {/* Background Texture/Overlay could go here */}
-
-            <div style={{ position: "relative", zIndex: 1, width: "100%", maxWidth: 600, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16, height: "100%", justifyContent: "center", alignItems: "center" }}>
-
-              {/* Header Logos & Title */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 0 }}>
-                <div style={{ background: "#fff", padding: 6, borderRadius: "50%", boxShadow: "0 8px 25px rgba(107, 59, 31, 0.1)" }}>
-                  <img src={logo} alt="NM-ERA Logo" style={{ height: 70, width: 70, objectFit: "contain" }} />
+      <div className="login-page-container">
+          {/* Header (100%) */}
+          <div className="login-header">
+             <div className="header-brand">
+                <img src={logo} className="header-logo" alt="NMERA Logo" />
+                <div className="header-text">
+                   <h1>Northern Mendocino</h1>
+                   <h1>Ecosystem Recovery Alliance</h1>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                  <h1 style={{
-                    fontFamily: "'Outfit', sans-serif",
-                    fontSize: "1.6rem",
-                    fontWeight: 700,
-                    lineHeight: 1.2,
-                    letterSpacing: "0.5px",
-                    textTransform: "uppercase",
-                    maxWidth: 400,
-                    color: "var(--brand-brown)",
-                    margin: 0
-                  }}>
-                    Northern Mendocino Ecosystem Recovery Alliance
-                  </h1>
-                </div>
-                <div style={{ background: "#fff", padding: 6, borderRadius: "50%", boxShadow: "0 8px 25px rgba(107, 59, 31, 0.1)" }}>
-                  <img src={firewoodIcon} alt="Firewood Bank" style={{ height: 70, width: 70, objectFit: "cover", borderRadius: "50%" }} />
-                </div>
-              </div>
+             </div>
+          </div>
 
-              {/* Mission Statement */}
-              <div style={{ background: "rgba(255, 255, 255, 0.6)", padding: "16px", borderRadius: "12px", border: "1px solid #e6d8c8" }}>
-
-                <p style={{ fontSize: "1.15rem", lineHeight: 1.4, margin: 0, fontStyle: "italic", fontFamily: "serif", color: "#4a3b32" }}>
-                  "Keeping Eachother Warm"
-                </p>
-              </div>
-
-              {/* Welcome Message */}
-              <div style={{ textAlign: "left" }}>
-                <h2 style={{ fontSize: "1.4rem", marginBottom: 8, color: "var(--brand-brown)" }}>Welcome</h2>
-                <p style={{ fontSize: "1rem", lineHeight: 1.5, color: "var(--text-muted)" }}>
-                  Please sign in to access the management console.
-                </p>
-              </div>
-
-              {/* MOTD History */}
-              <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: "#fff", borderRadius: "12px", padding: "16px", border: "1px solid #e6d8c8", boxShadow: "inset 0 2px 6px rgba(0,0,0,0.03)" }}>
-                <h3 style={{ margin: "0 0 12px", color: "var(--brand-green)", borderBottom: "1px solid #f0e6d6", paddingBottom: 6, textAlign: "left", fontSize: "1rem" }}>Updates & Announcements</h3>
-                <div style={{ overflowY: "auto", paddingRight: 8, flex: 1 }}>
-                  {motdItems.length === 0 ? (
-                    <p style={{ opacity: 0.6, fontStyle: "italic", fontSize: "0.9rem" }}>No recent announcements.</p>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                      {motdItems.map(item => (
-                        <div key={item.id} style={{ textAlign: "left" }}>
-                          <div style={{ fontSize: "0.8rem", opacity: 0.7, marginBottom: 3, color: "var(--brand-orange)" }}>
-                            {new Date(item.created_at).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                          </div>
-                          <div style={{ fontSize: "0.95rem", lineHeight: 1.3, color: "var(--text-main)" }}>{item.message}</div>
-                        </div>
-                      ))}
+          <div className="login-content">
+             {/* Left Column (60%) */}
+             <div className="login-left-panel">
+                <div className="intro-section">
+                    <img src={firewoodIcon} className="intro-logo" alt="Firewood Bank" />
+                    <div className="intro-text">
+                        <h2>Welcome</h2>
+                        <p className="tagline">"Keeping eachother warm"</p>
                     </div>
-                  )}
                 </div>
-              </div>
+                
+                <div className="motd-section">
+                    <h3>Updates & Announcements</h3>
+                    <div className="motd-scroll-container">
+                       {motdItems.length === 0 ? (
+                         <p className="muted">No recent announcements.</p>
+                       ) : (
+                         <div className="motd-list">
+                           {motdItems.map(item => (
+                             <div key={item.id} className="motd-item">
+                               <div className="motd-date">
+                                 {new Date(item.created_at).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                               </div>
+                               <div className="motd-msg">{item.message}</div>
+                             </div>
+                           ))}
+                         </div>
+                       )}
+                    </div>
+                </div>
+             </div>
 
-            </div>
+             {/* Right Column (40%) */}
+             <div className="login-right-panel">
+                <div className="login-form-container">
+                   <LoginCard onLogin={setSession} />
+                   <div style={{ marginTop: 32, textAlign: "center", fontSize: "0.85rem", color: "#888" }}>
+                     &copy; {new Date().getFullYear()} NM-ERA Firewood Bank
+                   </div>
+                </div>
+             </div>
           </div>
-
-          {/* Right Column: Sign In */}
-          <div style={{
-            flex: "0 0 450px",
-            background: "#fff",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "40px",
-            boxShadow: "-10px 0 30px rgba(0,0,0,0.05)",
-            zIndex: 2
-          }}>
-            <div style={{ width: "100%", maxWidth: 360 }}>
-              <LoginCard onLogin={setSession} />
-
-              <div style={{ marginTop: 32, textAlign: "center", fontSize: "0.85rem", color: "#888" }}>
-                &copy; {new Date().getFullYear()} NM-ERA Firewood Bank
-              </div>
-            </div>
-          </div>
-
-        </div>
+      </div>
       )
       }
       {
