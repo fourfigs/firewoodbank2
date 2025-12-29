@@ -5,7 +5,8 @@ import Dashboard from "./components/Dashboard";
 import AdminPanel from "./components/AdminPanel";
 import ChangeRequestModal from "./components/ChangeRequestModal";
 import logo from "./assets/logo.png";
-import firewoodIcon from "../firewoodBank-icon.png";
+import firewoodIcon from "./assets/firewoodBank-icon.png";
+import "./index.css";
 
 const tabs = ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics", "Worker Directory", "Reports", "Admin"];
 
@@ -168,6 +169,17 @@ const initCapCity = (value: string) =>
     .map((part) => part[0].toUpperCase() + part.slice(1).toLowerCase())
     .join(" ");
 
+const safeDate = (dateStr: string | null | undefined) => {
+  if (!dateStr) return "Unknown Date";
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return "Invalid Date";
+    return date.toLocaleDateString();
+  } catch {
+    return "Error Date";
+  }
+};
+
 function LoginCard({
   onLogin,
 }: {
@@ -178,6 +190,12 @@ function LoginCard({
   const [submitting, setSubmitting] = useState(false);
   const [isDriverLogin, setIsDriverLogin] = useState(false);
   const [hipaaCertified, setHipaaCertified] = useState(false);
+
+  // Forgot Password State
+  const [isForgot, setIsForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+
   const isMounted = useRef(true);
 
   const resolveRole = (input: string): Role => {
@@ -215,75 +233,112 @@ function LoginCard({
     }
   };
 
+  const handleForgotSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setTimeout(() => {
+      if (isMounted.current) {
+        setResetMessage(`If an account exists for "${forgotEmail}", a reset code has been sent.`);
+        setSubmitting(false);
+      }
+    }, 1000);
+  };
+
+  if (isForgot) {
+    return (
+      <section className="card login-card">
+        <div className="badge">Account Recovery</div>
+        <h3>Lost Password</h3>
+        <p className="subtitle">
+          Enter your username or email address and we will send you a reset code.
+        </p>
+        {resetMessage && <div className="pill" style={{ display: "block", marginBottom: 12, background: "#f1f8f1", color: "#2d6b3d" }}>{resetMessage}</div>}
+        <form onSubmit={handleForgotSubmit}>
+          <div className="field">
+            <label>Username or Email</label>
+            <input
+              required
+              value={forgotEmail}
+              onChange={e => setForgotEmail(e.target.value)}
+              placeholder="user@example.com"
+            />
+          </div>
+          <div className="actions" style={{ marginTop: 12, justifyContent: "space-between" }}>
+            <button className="ping" type="submit" disabled={submitting}>
+              {submitting ? "Sending..." : "Send Reset Code"}
+            </button>
+            <button className="ghost" type="button" onClick={() => { setIsForgot(false); setResetMessage(null); }}>
+              Back to Login
+            </button>
+          </div>
+        </form>
+      </section>
+    );
+  }
+
   return (
-    <section className="card login-card">
-      <div className="badge">Login</div>
-      <h3>Welcome back</h3>
-      <p className="subtitle">
-        Access the Firewood Bank console to manage clients, orders, and
-        inventory.
-      </p>
-      <div className="badge" style={{ marginBottom: 8 }}>
-        Demo accounts: admin/admin, lead/lead, staff/staff, driver/driver, volunteer/volunteer
+    <section className="card login-card" style={{ boxShadow: "0 20px 60px rgba(66, 47, 33, 0.2)", border: "2px solid #e6d8c8" }}>
+      <div style={{ textAlign: "center", marginBottom: 20 }}>
+        <div className="badge" style={{ marginBottom: 12 }}>Welcome Back</div>
+        <h2 style={{ margin: "0 0 8px", color: "var(--brand-brown)", fontSize: "1.8rem" }}>Sign In</h2>
+        <p className="subtitle" style={{ margin: 0, fontSize: "0.95rem" }}>
+          Access the Firewood Bank console
+        </p>
       </div>
-      <form onSubmit={handleSubmit} className="two-up">
+      <div className="badge" style={{ marginBottom: 16, background: "#e8f5e9", color: "var(--brand-green)", textAlign: "center" }}>
+        💡 Demo: admin/admin, lead/lead, staff/staff
+      </div>
+      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div className="field">
-          <label htmlFor="username">Username</label>
+          <label htmlFor="username" style={{ fontSize: "0.9rem", marginBottom: 6 }}>Username</label>
           <input
             id="username"
             name="username"
             type="text"
             required
-            placeholder="KH-1207"
+            placeholder="Enter your username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
+            style={{ padding: "12px 14px", fontSize: "1rem", borderRadius: "12px" }}
           />
         </div>
         <div className="field">
-          <label htmlFor="password">Password</label>
+          <label htmlFor="password" style={{ fontSize: "0.9rem", marginBottom: 6 }}>Password</label>
           <input
             id="password"
             name="password"
             type="password"
             required
-            placeholder="••••••••"
+            placeholder="Enter your password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            style={{ padding: "12px 14px", fontSize: "1rem", borderRadius: "12px" }}
           />
         </div>
-        <div className="login-actions" style={{ gridColumn: "1 / -1" }}>
-          <label className="checkbox">
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", marginTop: 4 }}>
+          <label className="checkbox" style={{ fontSize: "0.9rem" }}>
             <input
               type="checkbox"
               checked={isDriverLogin}
               onChange={(e) => setIsDriverLogin(e.target.checked)}
             />
-            Driver-capable (demo flag; requires valid DL in Worker Directory)
+            Driver Mode
           </label>
-          <label className="checkbox">
+          <label className="checkbox" style={{ fontSize: "0.9rem" }}>
             <input
               type="checkbox"
               checked={hipaaCertified}
               onChange={(e) => setHipaaCertified(e.target.checked)}
             />
-            HIPAA certified (demo)
+            HIPAA (Demo)
           </label>
-          <button className="ping" type="submit" disabled={submitting}>
-            {submitting ? "Signing in..." : "Sign in"}
-          </button>
-          <button
-            className="ghost"
-            type="button"
-            onClick={() => {
-              setUsername("");
-              setPassword("");
-              setIsDriverLogin(false);
-              setHipaaCertified(false);
-            }}
-          >
-            Clear
-          </button>
         </div>
+        <button className="ping" type="submit" disabled={submitting} style={{ width: "100%", padding: "14px", fontSize: "1.05rem", marginTop: 8, borderRadius: "12px" }}>
+          {submitting ? "Signing in..." : "Sign In"}
+        </button>
+        <button className="ghost" type="button" onClick={() => setIsForgot(true)} style={{ width: "100%", padding: "12px", fontSize: "0.95rem", borderRadius: "12px" }}>
+          Lost Password?
+        </button>
       </form>
     </section>
   );
@@ -291,9 +346,12 @@ function LoginCard({
 
 function App() {
   const [activeTab, setActiveTab] = useState<string>("Dashboard");
-  const [pingResult, setPingResult] = useState<string | null>(null);
-  const [pinging, setPinging] = useState(false);
   const [session, setSession] = useState<UserSession | null>(null);
+
+  useEffect(() => {
+    console.log("App mounted");
+  }, []);
+
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [inventory, setInventory] = useState<InventoryRow[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrderRow[]>([]);
@@ -335,6 +393,27 @@ function App() {
 
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [showChangeRequestModal, setShowChangeRequestModal] = useState(false);
+
+  // Worker form state (for adding new workers in Worker Directory tab)
+  const [showWorkerForm, setShowWorkerForm] = useState(false);
+  const [workerForm, setWorkerForm] = useState<{
+    name: string;
+    email: string;
+    telephone: string;
+    role: string;
+    is_driver: boolean;
+  }>({
+    name: "",
+    email: "",
+    telephone: "",
+    role: "volunteer",
+    is_driver: false,
+  });
+  const [workerFormError, setWorkerFormError] = useState<string | null>(null);
+
+  // User creation modal state
+  // (Removed UserFormModal)
+
   const [revisionSidebarOpen, setRevisionSidebarOpen] = useState(false);
 
   const buildBlankClientForm = () => ({
@@ -440,18 +519,7 @@ function App() {
     setShowInventoryForm(false);
   };
 
-  const handlePing = async () => {
-    try {
-      setPinging(true);
-      const response = await invoke<string>("ping");
-      setPingResult(response);
-    } catch (error) {
-      setPingResult("Ping failed");
-      console.error(error);
-    } finally {
-      setPinging(false);
-    }
-  };
+
 
   const loadClients = async () => {
     const data = await invoke<ClientRow[]>("list_clients", {
@@ -691,41 +759,41 @@ function App() {
 
   return (
     <div className="app">
-      <header className="header">
-        <div className="brand-lockup">
-          <div className="brand-mark">
-            <img
-              src={firewoodIcon}
-              alt="Firewood Bank"
-              style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }}
-            />
-          </div>
-          <div className="brand-text">
-            <h1>Community Firewood Bank</h1>
-            <p className="subtitle">Keeping Eachother Warm</p>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="ping" onClick={handlePing} disabled={pinging}>
-            {pinging ? "Pinging..." : "Ping Tauri"}
-          </button>
-          {session && (
-            <div className="badge" style={{ alignSelf: "center" }}>
-              User: {session.username ?? session.name}
+      {session && (
+        <header className="header">
+          <div className="brand-lockup">
+            <div className="brand-mark">
+              <img
+                src={firewoodIcon}
+                alt="Firewood Bank"
+                style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }}
+              />
             </div>
-          )}
-          {session && (
-            <button className="ghost" onClick={() => setSession(null)}>
-              Sign out
-            </button>
-          )}
-          {session && (
-            <button className="ghost" onClick={() => setShowChangeRequestModal(true)}>
-              Request Change
-            </button>
-          )}
-        </div>
-      </header>
+            <div className="brand-text">
+              <h1>Community Firewood Bank</h1>
+              <p className="subtitle">Keeping Eachother Warm</p>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+
+            {session && (
+              <div className="badge" style={{ alignSelf: "center" }}>
+                User: {session.username ?? session.name}
+              </div>
+            )}
+            {session && (
+              <button className="ghost" onClick={() => setSession(null)}>
+                Sign out
+              </button>
+            )}
+            {session && (
+              <button className="ghost" onClick={() => setShowChangeRequestModal(true)}>
+                Request Change
+              </button>
+            )}
+          </div>
+        </header>
+      )}
 
       {session ? (
         <>
@@ -1635,6 +1703,26 @@ function App() {
                               <div><strong>Onboarding Date:</strong> {new Date(selectedClientForDetail.date_of_onboarding).toLocaleDateString()}</div>
                             )}
                             <div><strong>Approval Status:</strong> <span className="pill">{selectedClientForDetail.approval_status}</span></div>
+                            {canManage && (
+                              <button
+                                className="ghost"
+                                style={{ fontSize: "0.8rem", width: "100%", textAlign: "left", justifyContent: "flex-start", marginTop: "0.5rem" }}
+                                onClick={() => {
+                                  setWorkerForm({
+                                    name: selectedClientForDetail.name,
+                                    email: selectedClientForDetail.email || "",
+                                    telephone: selectedClientForDetail.telephone || "",
+                                    role: "volunteer",
+                                    is_driver: false,
+                                  });
+                                  setShowWorkerForm(true);
+                                  setActiveTab("Worker Directory");
+                                  setClientDetailSidebarOpen(false);
+                                }}
+                              >
+                                + Create user account from this client
+                              </button>
+                            )}
                             {canViewClientPII && (
                               <>
                                 <div><strong>Email:</strong> {selectedClientForDetail.email ?? "—"}</div>
@@ -2919,11 +3007,152 @@ function App() {
                 {activeTab === "Worker Directory" && session && (session.role === "admin" || session.role === "lead") && (
                   <div className="stack">
                     <div className="list-card">
-                      <div className="list-head">
-                        <h3>Workers & Drivers ({users.length})</h3>
-                        <button className="ghost" onClick={loadUsers} disabled={busy}>
-                          Refresh
-                        </button>
+                      <div className="list-head" style={{ flexDirection: "column", alignItems: "flex-start", gap: "0.5rem" }}>
+                        <div style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center" }}>
+                          <h3>Workers & Drivers ({users.length})</h3>
+                          <div style={{ display: "flex", gap: "0.5rem" }}>
+                            <button className="ghost" onClick={loadUsers} disabled={busy}>
+                              Refresh
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Inline Worker Form */}
+                        {canManage && (
+                          <div className="card muted" style={{ width: "100%", marginTop: "0.5rem", padding: "1rem" }}>
+                            <div className="add-header" style={{ marginBottom: "1rem" }}>
+                              <button
+                                type="button"
+                                className="icon-button"
+                                title={showWorkerForm ? "Cancel Adding Worker" : "Add Worker"}
+                                onClick={() => {
+                                  if (showWorkerForm) {
+                                    setShowWorkerForm(false);
+                                    setWorkerFormError(null);
+                                  } else {
+                                    setWorkerForm({
+                                      name: "",
+                                      email: "",
+                                      telephone: "",
+                                      role: "volunteer",
+                                      is_driver: false,
+                                    });
+                                    setWorkerFormError(null);
+                                    setShowWorkerForm(true);
+                                  }
+                                }}
+                              >
+                                {showWorkerForm ? "×" : "+"}
+                              </button>
+                              <h3>{showWorkerForm ? "Add New Worker" : "Add Worker"}</h3>
+                            </div>
+
+                            {showWorkerForm && (
+                              <form
+                                className="form-grid"
+                                onSubmit={async (e) => {
+                                  e.preventDefault();
+                                  setWorkerFormError(null);
+                                  setBusy(true);
+                                  try {
+                                    await invoke("create_user", {
+                                      input: {
+                                        name: workerForm.name,
+                                        email: workerForm.email || null,
+                                        telephone: workerForm.telephone || null,
+                                        role: workerForm.role,
+                                        is_driver: workerForm.is_driver,
+                                      }
+                                    });
+                                    await loadUsers();
+                                    setWorkerForm({
+                                      name: "",
+                                      email: "",
+                                      telephone: "",
+                                      role: "volunteer",
+                                      is_driver: false,
+                                    });
+                                    setShowWorkerForm(false);
+                                  } catch (err: any) {
+                                    console.error(err);
+                                    setWorkerFormError(typeof err === "string" ? err : "Failed to create user");
+                                  } finally {
+                                    setBusy(false);
+                                  }
+                                }}
+                              >
+                                {workerFormError && <div className="pill" style={{ gridColumn: "1/-1", background: "#fbe2e2", color: "#b3261e" }}>{workerFormError}</div>}
+
+                                <label>
+                                  Full Name *
+                                  <input
+                                    required
+                                    value={workerForm.name}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, name: e.target.value })}
+                                    placeholder="e.g. Jane Doe"
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label>
+                                  Role *
+                                  <select
+                                    value={workerForm.role}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, role: e.target.value })}
+                                    disabled={busy}
+                                  >
+                                    <option value="volunteer">Volunteer</option>
+                                    <option value="staff">Staff</option>
+                                    <option value="lead">Lead</option>
+                                    <option value="admin">Admin</option>
+                                  </select>
+                                </label>
+                                <label>
+                                  Email
+                                  <input
+                                    type="email"
+                                    value={workerForm.email}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, email: e.target.value })}
+                                    placeholder="jane@example.com"
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label>
+                                  Phone
+                                  <input
+                                    type="tel"
+                                    value={workerForm.telephone}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, telephone: e.target.value })}
+                                    placeholder="(505) 555-0100"
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label className="checkbox span-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={workerForm.is_driver}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, is_driver: e.target.checked })}
+                                    disabled={busy}
+                                  />
+                                  Is Driver (Check if this person can drive for deliveries)
+                                </label>
+
+                                <div className="actions span-2">
+                                  <button className="ping" type="submit" disabled={busy}>
+                                    {busy ? "Creating..." : "Create Worker"}
+                                  </button>
+                                  <button
+                                    className="ghost"
+                                    type="button"
+                                    onClick={() => setShowWorkerForm(false)}
+                                    disabled={busy}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </form>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div className="table">
                         <div className="table-head">
@@ -3176,7 +3405,7 @@ function App() {
                         </div>
                         {auditLogs.map((log) => (
                           <div className="table-row" key={log.id}>
-                            <div className="muted">{new Date(log.created_at).toLocaleString()}</div>
+                            <div className="muted">{safeDate(log.created_at) + " " + new Date(log.created_at).toLocaleTimeString()}</div>
                             <div>
                               <strong>{log.event}</strong>
                             </div>
@@ -3191,119 +3420,127 @@ function App() {
                 )}
               </div>
             </section>
-
           </main>
         </>
       ) : (
-        <div style={{ display: "flex", flex: 1 }}>
-          <div
-            style={{
-              width: revisionSidebarOpen ? "300px" : "0",
-              overflow: "hidden",
-              transition: "width 0.3s ease",
-              borderRight: revisionSidebarOpen ? "1px solid #ddd" : "none",
-              padding: revisionSidebarOpen ? "1rem" : "0",
-              background: "#f9f9f9",
-              position: "relative"
-            }}
-          >
-            {revisionSidebarOpen && (
-              <>
-                <button
-                  className="ghost"
-                  onClick={() => setRevisionSidebarOpen(false)}
-                  style={{ position: "absolute", top: "0.5rem", right: "0.5rem" }}
-                >
-                  ×
-                </button>
-                <h3>Revision Checklist</h3>
-                <ul className="list" style={{ fontSize: "0.85rem", marginTop: "1rem" }}>
-                  <li><strong>Stage 1</strong>: App boots (Tauri window), nav buttons present, Ping returns “pong”.</li>
-                  <li><strong>Stage 7</strong>: Users, Change Requests, MOTD implemented.</li>
-                </ul>
-              </>
-            )}
-          </div>
-          <button
-            className="ghost"
-            onClick={() => setRevisionSidebarOpen(!revisionSidebarOpen)}
-            style={{
-              position: "absolute",
-              left: revisionSidebarOpen ? "300px" : "0",
-              top: "50%",
-              transform: "translateY(-50%)",
-              zIndex: 10,
-              background: "#fff",
-              border: "1px solid #ddd",
-              borderLeft: "none",
-              borderRadius: "0 4px 4px 0",
-              padding: "0.5rem 0.25rem",
-              cursor: "pointer"
-            }}
-          >
-            {revisionSidebarOpen ? "‹" : "›"}
-          </button>
+        <div style={{ display: "flex", width: "100vw", height: "100vh", overflow: "hidden", background: "var(--brand-cream)" }}>
 
-          <main className="main" style={{ flex: 1 }}>
-            <section className="card">
-              <div className="hero">
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-                  <div className="brand-mark big">
-                    <img
-                      src={firewoodIcon}
-                      alt="Firewood Bank"
-                      style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }}
-                    />
-                  </div>
-                  <div>
-                    <h2>Welcome to Firewood Bank</h2>
-                    <p>
-                      Sign in to manage clients, work orders, inventory, and invoices.
-                    </p>
-                  </div>
-                  <div className="brand-mark big" style={{ marginLeft: "auto" }}>
-                    <img
-                      src={logo}
-                      alt="NM-ERA"
-                      style={{ width: "100%", height: "100%", objectFit: "contain" }}
-                    />
-                  </div>
+          {/* Left Column: Branding, Mission, MOTD */}
+          <div style={{
+            flex: 1,
+            background: "linear-gradient(135deg, #fdf8ee 0%, var(--brand-cream) 100%)",
+            color: "var(--brand-brown)",
+            padding: "24px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            textAlign: "center",
+            position: "relative",
+            overflow: "hidden"
+          }}>
+            {/* Background Texture/Overlay could go here */}
+
+            <div style={{ position: "relative", zIndex: 1, width: "100%", maxWidth: 600, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16, height: "100%", justifyContent: "center", alignItems: "center" }}>
+
+              {/* Header Logos & Title */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 0 }}>
+                <div style={{ background: "#fff", padding: 6, borderRadius: "50%", boxShadow: "0 8px 25px rgba(107, 59, 31, 0.1)" }}>
+                  <img src={logo} alt="NM-ERA Logo" style={{ height: 70, width: 70, objectFit: "contain" }} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                  <h1 style={{
+                    fontFamily: "'Outfit', sans-serif",
+                    fontSize: "1.6rem",
+                    fontWeight: 700,
+                    lineHeight: 1.2,
+                    letterSpacing: "0.5px",
+                    textTransform: "uppercase",
+                    maxWidth: 400,
+                    color: "var(--brand-brown)",
+                    margin: 0
+                  }}>
+                    Northern Mendocino Ecosystem Recovery Alliance
+                  </h1>
+                </div>
+                <div style={{ background: "#fff", padding: 6, borderRadius: "50%", boxShadow: "0 8px 25px rgba(107, 59, 31, 0.1)" }}>
+                  <img src={firewoodIcon} alt="Firewood Bank" style={{ height: 70, width: 70, objectFit: "cover", borderRadius: "50%" }} />
                 </div>
               </div>
-              <div className="card" style={{ background: "#fdf7ed", marginBottom: "1rem" }}>
-                <h3>Mission</h3>
-                <p className="subtitle">
-                  Revitalizing our ecosystems by empowering our community. We promote the real work of the restoration economy by inspiring, educating, entertaining, training and facilitating employment.
+
+              {/* Mission Statement */}
+              <div style={{ background: "rgba(255, 255, 255, 0.6)", padding: "16px", borderRadius: "12px", border: "1px solid #e6d8c8" }}>
+
+                <p style={{ fontSize: "1.15rem", lineHeight: 1.4, margin: 0, fontStyle: "italic", fontFamily: "serif", color: "#4a3b32" }}>
+                  "Keeping Eachother Warm"
                 </p>
               </div>
 
-              <div className="card">
-                <h3>Notes from the Team</h3>
-                <div className="stack" style={{ maxHeight: "300px", overflowY: "auto", gap: "0.5rem", marginTop: "0.5rem" }}>
-                  {motdItems.length === 0 && <div className="muted">No messages.</div>}
-                  {motdItems.map(m => (
-                    <div key={m.id} style={{ borderBottom: "1px solid #eee", paddingBottom: "0.5rem" }}>
-                      <div style={{ fontSize: "0.9rem" }}>{m.message}</div>
-                      <div style={{ fontSize: "0.75rem", color: "#999", marginTop: "0.25rem" }}>
-                        {new Date(m.created_at).toLocaleDateString()}
-                      </div>
+              {/* Welcome Message */}
+              <div style={{ textAlign: "left" }}>
+                <h2 style={{ fontSize: "1.4rem", marginBottom: 8, color: "var(--brand-brown)" }}>Welcome</h2>
+                <p style={{ fontSize: "1rem", lineHeight: 1.5, color: "var(--text-muted)" }}>
+                  Please sign in to access the management console.
+                </p>
+              </div>
+
+              {/* MOTD History */}
+              <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: "#fff", borderRadius: "12px", padding: "16px", border: "1px solid #e6d8c8", boxShadow: "inset 0 2px 6px rgba(0,0,0,0.03)" }}>
+                <h3 style={{ margin: "0 0 12px", color: "var(--brand-green)", borderBottom: "1px solid #f0e6d6", paddingBottom: 6, textAlign: "left", fontSize: "1rem" }}>Updates & Announcements</h3>
+                <div style={{ overflowY: "auto", paddingRight: 8, flex: 1 }}>
+                  {motdItems.length === 0 ? (
+                    <p style={{ opacity: 0.6, fontStyle: "italic", fontSize: "0.9rem" }}>No recent announcements.</p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {motdItems.map(item => (
+                        <div key={item.id} style={{ textAlign: "left" }}>
+                          <div style={{ fontSize: "0.8rem", opacity: 0.7, marginBottom: 3, color: "var(--brand-orange)" }}>
+                            {new Date(item.created_at).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                          </div>
+                          <div style={{ fontSize: "0.95rem", lineHeight: 1.3, color: "var(--text-main)" }}>{item.message}</div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
-            </section>
-            <LoginCard onLogin={setSession} />
-          </main>
+
+            </div>
+          </div>
+
+          {/* Right Column: Sign In */}
+          <div style={{
+            flex: "0 0 450px",
+            background: "#fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "40px",
+            boxShadow: "-10px 0 30px rgba(0,0,0,0.05)",
+            zIndex: 2
+          }}>
+            <div style={{ width: "100%", maxWidth: 360 }}>
+              <LoginCard onLogin={setSession} />
+
+              <div style={{ marginTop: 32, textAlign: "center", fontSize: "0.85rem", color: "#888" }}>
+                &copy; {new Date().getFullYear()} NM-ERA Firewood Bank
+              </div>
+            </div>
+          </div>
+
         </div>
-      )}
-      {session && (
-        <ChangeRequestModal
-          isOpen={showChangeRequestModal}
-          onClose={() => setShowChangeRequestModal(false)}
-          userId={session.username}
-        />
-      )}
-    </div>
+      )
+      }
+      {
+        session && (
+          <ChangeRequestModal
+            isOpen={showChangeRequestModal}
+            onClose={() => setShowChangeRequestModal(false)}
+            userId={session.username}
+          />
+        )
+      }
+    </div >
   );
 }
 

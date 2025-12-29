@@ -5,17 +5,18 @@
 **Target**: Windows Desktop → Multi-platform sync-ready app
 
 ## 🎯 PROJECT GOALS
+
 - Windows desktop-first Tauri 2 app for Firewood Bank operations
 - Client onboarding, inventory tracking, work orders, invoices, dashboard
 - Sync-ready schema for future cloud + mobile expansion
 - Print invoices, driver views, admin tools, change requests
 
 ## 🏗️ ARCHITECTURE
+
 Frontend: React + TypeScript + Vite
 Backend: Rust + SQLite (SQLx)
 Shell: Tauri 2 (Windows → macOS/Linux/Android/iOS)
 Sync: UUIDs + createdAt/updatedAt/isDeleted/lastSyncedAt/version
-
 
 ## 📋 DEVELOPMENT WORKFLOW (MANDATORY - Follow Exactly)
 
@@ -42,29 +43,29 @@ Test all new UI flows
 git add . && git commit -m "feat(stage-X): [name]"
 git push origin stage-X-[name]
 
-
 ## 🗄️ CORE ENTITIES (From your PDF forms + sync-ready)
 
 ### **Client** (Onboard.pdf)
+
 id(UUID), clientNumber(55+), clientTitle, name, physicalAddress,
 mailingAddress, telephone, email, dateOfOnboarding, howDidTheyHearAboutUs,
 referringAgency, approvalStatus(approved/denied/pending), denialReason,
 gateCombo, notes, createdAt, updatedAt, createdByUserId, isDeleted
 
+### **WorkOrder** (Order.pdf)
 
-### **WorkOrder** (Order.pdf)  
 id(UUID), clientId, clientNumber, clientTitle, clientName, physicalAddress,
 mailingAddress, telephone, email, directions, gateCombo,
 otherHeatSourceGas/Electric/Other(+text), notes, scheduledDate, status,
 createdAt, updatedAt, createdByUserId, isDeleted
 
-
 ### **Invoice** (Invoice.pdf)
+
 id(UUID), workOrderId, invoiceNumber, invoiceDate, lineItems[], subtotal,
 tax, total, client snapshot, notes, createdAt, updatedAt, isDeleted
 
-
 ### **Other Entities**
+
 - **User**: name, role(admin/lead/staff/driver), availability, DL status, vehicle
 - **InventoryItem**: chainsaws, bar oil, gas, 2-stroke oil, files, helmets, etc + thresholds
 - **DeliveryEvent**: type(delivery/meeting/workday), dates, colorCode
@@ -73,36 +74,37 @@ tax, total, client snapshot, notes, createdAt, updatedAt, isDeleted
 ## 🚀 STAGES (12 total - Current progress tracked here)
 
 ### 🟡 **Stage 0: Schema Design** (Planning)
+
 ✅ Create this Roadmap.md + commit
 ✅ Design sync-ready schema from PDFs
 ✅ Output: Rust structs + TS DTOs
 What you see: Schema definitions ready
 
-
 ### ✅ **Stage 1: Tauri + React Skeleton**
+
 Scaffold Tauri 2 Windows app + React nav shell
 Add ping command (test Rust↔React bridge)
 What you see: Desktop window w/ Dashboard/Clients/Inventory nav
 Branch: stage-1-skeleton
 
-
 ### ✅ **Stage 2: SQLite + Sync Tables**
+
 SQLite migrations for ALL entities w/ sync fields
 Rust CRUD for Client/InventoryItem
 Tauri commands: createClient/listClients/etc
 What you see: DB connection + test commands work
 Branch: stage-2-db
 
-
 ### ✅ **Stage 3: Clients Module**
+
 Client list + onboard form aligned to PDFs
 Create + approval status + gate combo capture
 Placeholder delivery metrics
 What you see: Add/edit clients w/ full form
 Branch: stage-3-clients
 
-
 ### ✅ **Stage 4: Inventory Module**
+
 chainsaws/bar oil/gas/files/helmets etc + thresholds
 Below-threshold warnings + auto order messages
 CRUD + "needs restock" view
@@ -110,6 +112,7 @@ What you see: Inventory list w/ low-stock alerts
 Branch: stage-4-inventory
 
 ### 🟢 **Stage 5: Work Orders + Deliveries**
+
 Full Order.pdf form → WorkOrder entity
 Auto-create DeliveryEvent on schedule
 Client→WorkOrder linking
@@ -117,6 +120,7 @@ What you see: Create work orders from clients
 Branch: stage-5-workorders
 
 ### ✅ **Stage 5.1: Tuning Forms & Access**
+
 Role-based gating for client/workorder/inventory creation
 HIPAA-aware PII masking (only admins + certified leads; drivers get address/phone for assigned work)
 Volunteer/driver limited views; mileage required to close work orders
@@ -124,6 +128,7 @@ Mailer list view; + toggles and icon updates; login role/username flow
 What you see: Forms gated by role, PII masked per policy, mileage field on work orders
 Branch: stage-5.1-tuningForms
 Sub-stages to close gaps:
+
 - 5.1a: Driver delivery-only view (address/contact for assigned deliveries; strip non-delivery workorder PII)
 - 5.1b: Persist assignments/mileage/availability/vehicle in backend schema + commands
 - 5.1c: Server-side PII enforcement (role checks, driver-limited payloads, audit logging hooks; town and mileage initially derived from client address)
@@ -139,6 +144,7 @@ Sub-stages to close gaps:
   - Note: Town derivation is NOT needed (was an old mistake) - all contact blocks use standard form names
 
 ### ✅ Stage Prompts Reference (used and implemented across stages 0–5)
+
 - Stage 0 prompt: Windows desktop–first Tauri 2 + React + TypeScript + SQLite; sync-ready schema/DTOs for User, Client, InventoryItem, WorkOrder, DeliveryEvent, Invoice, MOTD, ChangeRequest; UUID + audit/sync fields; infer fields from Onboard/Order/Invoice; output Rust/SQL + TS DTOs; call out missing/ambiguous.
 - Stage 1 prompt: Scaffold Tauri 2 app (Windows), React+TS frontend, nav shell (Dashboard, Clients, Inventory, Work Orders, Admin, Driver placeholder), Tauri `ping` command and React caller; include run commands.
 - Stage 2 prompt: Add SQLite/migrations for all entities with sync fields; Rust CRUD for Client/Inventory; Tauri commands create/update/list for both; handle createdAt/updatedAt/isDeleted/UUID.
@@ -147,7 +153,9 @@ Sub-stages to close gaps:
 - Stage 5 prompt: Work Orders + DeliveryEvents with full Order fields, client snapshot/link, addresses/directions/gate combo/heat sources/notes/dateOfOnboarding/scheduledDate/status; DeliveryEvent tied to WorkOrder (type/title/notes/start/end/colorCode); create WorkOrder from Client and auto-create DeliveryEvent when scheduled.
 
 ### ✅ **Stage 5.2: Work Order and Intake Hardening**
+
 Tighten intake UX/validation before Stage 6:
+
 - ✅ Split client name into first/last; numeric client identifiers (formerly auto-generated `client_number`) have been removed
 - ✅ Client edit locked to admin/lead (canManage gate)
 - ✅ Enforce required: name, address, at least one contact (phone/email/other+specify)
@@ -164,29 +172,34 @@ Tighten intake UX/validation before Stage 6:
 - ✅ Work orders entered by staff and admin only (UI + backend gate)
 - ✅ Drivers can add up to four workers/helpers on a delivery (assignees_json)
 - ✅ All clients can be workers, all workers can be driver/hipaa/working vehicle flagged, only leads/admins get PII unfiltered, and drivers only see the name, address, and contact info
-What you see: Validated intake forms, wood/delivery sizes, inventory reservations, driver assignments with availability
-Branch: stage-5.2-intake
+  What you see: Validated intake forms, wood/delivery sizes, inventory reservations, driver assignments with availability
+  Branch: stage-5.2-intake
 
 ### ✅ **Stage 5.3: Worker Directory**
+
 Admin/Lead-only Worker Directory tab:
+
 - ✅ List all workers with name, phone, availability, DL status, vehicle, HIPAA certification
 - ✅ Double-click row opens full profile detail for editing
 - ✅ Edit availability schedule (weekly checkboxes), driver details, HIPAA cert
 - ✅ Tab hidden for non-admin/non-lead
-What you see: Worker Directory tab with list and edit profile
-Branch: stage-5.3-workers
+  What you see: Worker Directory tab with list and edit profile
+  Branch: stage-5.3-workers
 
 ### ✅ **Stage 5.4: Reports / Audit Log Viewer**
+
 Admin/Lead-only Reports tab for viewing audit logs:
+
 - ✅ Reports tab in navigation (gated to admin/lead roles)
 - ✅ Audit log viewer displaying: timestamp, event, role, actor
 - ✅ Time-based filtering: Day, 7 Days, Current Month, Year, All Time
 - ✅ Table view with sorting
 - ✅ Backend: `list_audit_logs` Tauri command with date filtering
-What you see: Reports tab with filterable audit log table
-Branch: stage-5.4-reports
+  What you see: Reports tab with filterable audit log table
+  Branch: stage-5.4-reports
 
 ### ✅ **Stage 6: Login + Dashboard + Calendar**
+
 Split/unsplit wood summary
 2-weeks-at-glance + monthly calendar (color-coded)
 Upcoming list + MOTD
@@ -195,41 +208,50 @@ Dashboard MOTD panel uses the scrollable notes area (like login checklist); newe
 What you see: Operational dashboard w/ calendar
 Branch: stage-6-dashboard
 
-### ⭕ **Stage 7: Users + Change Requests + MOTD**
-User profiles + "Request change" modal
-Admin change request queue (approve/reject)
-MOTD management
-What you see: User change workflow + MOTD on dashboard
-Branch: stage-7-users-admin
+### ✅ **Stage 7: Users + Change Requests + MOTD**
 
+- ✅ User profiles + "Request change" modal
+- ✅ Admin change request queue (approve/reject)
+- ✅ MOTD management
+- ✅ Login screen overhaul (Mission, Sidebar Checklist, MOTD feed)
+  - ✅ Two-column layout: left (logos, org name, mission, MOTD history) + right (sign-in form)
+  - ✅ Light/cream theme styling for left column
+  - ✅ Removed "Ping Tauri" debugging feature
+  - ✅ MOTD history displayed newest-to-oldest in scrollable area
+  - ✅ Mission statement without heading, clean presentation
+    What you see: User change workflow + MOTD on dashboard/login with redesigned two-column layout
+    Branch: stage-7-users-admin
 
 ### ⭕ **Stage 8: Invoices + Printing**
+
 Invoice.pdf → Invoice entity
 Generate from completed WorkOrder
 Tauri print dialog integration
 What you see: Print invoices from app
 Branch: stage-8-invoices
 
-
 ### ⭕ **Stage 9: Driver Mode (Desktop)**
+
 Today's deliveries list for drivers
 Status updates (en route/delivered/issue)
 Touch-friendly (mobile-ready)
 What you see: Driver view w/ today's route
 Branch: stage-9-driver
 
-
 ### ⭕ **Stage 10: HIPAA Compliance Check**
+
 PII masking rules, audit/logging, role verification, release checklist
 What you see: Compliance checklist + PII masking confirmed
 Branch: stage-10-hipaa
 
 ### ⭕ **Stage 11: Desktop Rollout**
+
 Windows packaging hardening; installer/signing checks; smoke tests
 What you see: Desktop build ready for field use
 Branch: stage-11-desktop
 
 ### ⭕ **Stage 12: Sync Hooks**
+
 SyncService abstraction (getPendingChanges/etc)
 lastSyncedAt/version fields
 Future cloud-ready comments
