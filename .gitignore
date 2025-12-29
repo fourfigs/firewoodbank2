@@ -19,3 +19,5 @@ firewoodBank-icon.png
 CommunityFirewoodBank_*.pdf
 
 
+/firewoodbank.db-shm
+/firewoodbank.db-wal
