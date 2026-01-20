@@ -365,9 +365,12 @@ function App() {
     opt_out_email: false, // Opt out of email mailing list
   });
 
+  const INVENTORY_CATEGORIES = ["Wood", "Tools", "Gas", "Other"] as const;
+
   const buildBlankInventoryForm = () => ({
     name: "",
     category: "",
+    customCategory: "",
     quantity_on_hand: 0,
     unit: "pcs",
     reorder_threshold: 0,
@@ -2267,15 +2270,24 @@ function App() {
 
                             setBusy(true);
                             try {
+                              // Resolve category: use customCategory if "Other" selected or if category is custom
+                              const resolvedCategory =
+                                inventoryForm.category === "Other"
+                                  ? inventoryForm.customCategory || ""
+                                  : inventoryForm.category;
+
                               const payload = {
-                                ...inventoryForm,
+                                name: inventoryForm.name,
+                                category: resolvedCategory,
                                 quantity_on_hand: qty,
+                                unit: inventoryForm.unit,
                                 reorder_threshold: threshold,
                                 reorder_amount:
                                   inventoryForm.reorder_amount === null ||
                                   inventoryForm.reorder_amount === undefined
                                     ? null
                                     : Number(inventoryForm.reorder_amount),
+                                notes: inventoryForm.notes,
                                 created_by_user_id: null,
                               };
                               if (editingInventoryId) {
@@ -2321,13 +2333,60 @@ function App() {
                           </label>
                           <label>
                             Category
-                            <input
-                              value={inventoryForm.category}
-                              onChange={(e) =>
-                                setInventoryForm({ ...inventoryForm, category: e.target.value })
+                            <select
+                              value={
+                                INVENTORY_CATEGORIES.includes(
+                                  inventoryForm.category as (typeof INVENTORY_CATEGORIES)[number]
+                                )
+                                  ? inventoryForm.category
+                                  : inventoryForm.category
+                                    ? "Other"
+                                    : ""
                               }
-                            />
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === "Other") {
+                                  setInventoryForm({
+                                    ...inventoryForm,
+                                    category: "Other",
+                                    customCategory: "",
+                                  });
+                                } else {
+                                  setInventoryForm({
+                                    ...inventoryForm,
+                                    category: val,
+                                    customCategory: "",
+                                  });
+                                }
+                              }}
+                            >
+                              <option value="">Select category...</option>
+                              {INVENTORY_CATEGORIES.map((cat) => (
+                                <option key={cat} value={cat}>
+                                  {cat}
+                                </option>
+                              ))}
+                            </select>
                           </label>
+                          {(inventoryForm.category === "Other" ||
+                            (!INVENTORY_CATEGORIES.includes(
+                              inventoryForm.category as (typeof INVENTORY_CATEGORIES)[number]
+                            ) &&
+                              inventoryForm.category !== "")) && (
+                            <label>
+                              Custom Category
+                              <input
+                                placeholder="Enter new category name"
+                                value={inventoryForm.customCategory || inventoryForm.category === "Other" ? inventoryForm.customCategory : inventoryForm.category}
+                                onChange={(e) =>
+                                  setInventoryForm({
+                                    ...inventoryForm,
+                                    customCategory: e.target.value,
+                                  })
+                                }
+                              />
+                            </label>
+                          )}
                           <label>
                             Qty on hand
                             <input
@@ -2487,9 +2546,14 @@ function App() {
                                       type="button"
                                       onClick={() => {
                                         setEditingInventoryId(item.id);
+                                        const existingCat = item.category ?? "";
+                                        const isStandardCategory = INVENTORY_CATEGORIES.includes(
+                                          existingCat as (typeof INVENTORY_CATEGORIES)[number]
+                                        );
                                         setInventoryForm({
                                           name: item.name,
-                                          category: item.category ?? "",
+                                          category: isStandardCategory ? existingCat : (existingCat ? "Other" : ""),
+                                          customCategory: isStandardCategory ? "" : existingCat,
                                           quantity_on_hand: item.quantity_on_hand,
                                           unit: item.unit,
                                           reorder_threshold: item.reorder_threshold,
