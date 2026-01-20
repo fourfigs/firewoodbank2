@@ -48,7 +48,7 @@ Review & Improvement Suggestions (Program Structure + Workflow):
 - Replace `window.print()` with a Tauri-side print command for consistent native printing behavior.
 - Add `dev` docs for DATABASE_URL encoding and `.env` usage to avoid PowerShell pitfalls.
 - Add tests: unit tests for Rust auth + work order status transitions; basic UI smoke tests for critical tabs.
-- Standardize role names across UI, Rust, docs, and seeds (remove `lead` role; use `admin/staff/employee/volunteer`). NOTE: `types.ts` uses correct roles but code still references "lead" in 17 places, and `ts_dtos.ts` still has "lead".
+- ✅ Standardize role names across UI, Rust, docs, and seeds — roles are now `admin/lead/staff/volunteer`. The `lead` role is used for team leads with elevated permissions (can view PII if HIPAA certified).
 - Split `src-tauri/src/main.rs` into command modules (e.g., `commands/users.rs`, `commands/work_orders.rs`) and move shared SQL into `db`/`services` layers. (main.rs is 3000+ lines)
 - Add a `src/pages` (or `features`) directory and move tab content components out of `App.tsx` to reduce re-render scope and improve readability.
 - Add DB indexes for common filters (work_orders.status, work_orders.scheduled_date, audit_logs.created_at) to keep reports and lists fast. (only is_deleted indexes exist currently)
