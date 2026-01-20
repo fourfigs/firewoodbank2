@@ -2190,8 +2190,10 @@ async fn login_user(state: State<'_, AppState>, input: LoginInput) -> Result<Log
     })
 }
 
-#[tauri::command]
-async fn change_password(state: State<'_, AppState>, input: ChangePasswordInput) -> Result<(), String> {
+async fn change_password_with_pool(
+    pool: &SqlitePool,
+    input: ChangePasswordInput,
+) -> Result<(), String> {
     let username = input.username.trim().to_lowercase();
     let current_password = input.current_password.trim();
     let new_password = input.new_password.trim();
@@ -2209,7 +2211,7 @@ async fn change_password(state: State<'_, AppState>, input: ChangePasswordInput)
         "#,
         username
     )
-    .fetch_optional(&state.pool)
+    .fetch_optional(pool)
     .await
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "User not found".to_string())?;
@@ -2228,17 +2230,21 @@ async fn change_password(state: State<'_, AppState>, input: ChangePasswordInput)
     )
     .bind(&hashed)
     .bind(&row.id)
-    .execute(&state.pool)
+    .execute(pool)
     .await
     .map_err(|e| e.to_string())?;
 
-    audit_db(&state.pool, "change_password", "unknown", &username).await;
+    audit_db(pool, "change_password", "unknown", &username).await;
     Ok(())
 }
 
 #[tauri::command]
-async fn reset_password(
-    state: State<'_, AppState>,
+async fn change_password(state: State<'_, AppState>, input: ChangePasswordInput) -> Result<(), String> {
+    change_password_with_pool(&state.pool, input).await
+}
+
+async fn reset_password_with_pool(
+    pool: &SqlitePool,
     input: ResetPasswordInput,
     role: Option<String>,
 ) -> Result<(), String> {
@@ -2261,12 +2267,21 @@ async fn reset_password(
     )
     .bind(&hashed)
     .bind(&input.user_id)
-    .execute(&state.pool)
+    .execute(pool)
     .await
     .map_err(|e| e.to_string())?;
 
-    audit_db(&state.pool, "reset_password", &role_val, &input.user_id).await;
+    audit_db(pool, "reset_password", &role_val, &input.user_id).await;
     Ok(())
+}
+
+#[tauri::command]
+async fn reset_password(
+    state: State<'_, AppState>,
+    input: ResetPasswordInput,
+    role: Option<String>,
+) -> Result<(), String> {
+    reset_password_with_pool(&state.pool, input, role).await
 }
 
 #[tauri::command]
@@ -2692,6 +2707,134 @@ async fn list_audit_logs(
         .map_err(|e| e.to_string())?;
 
     Ok(rows)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn setup_auth_tables(pool: &SqlitePool) {
+        sqlx::query(
+            r#"
+            CREATE TABLE auth_users (
+                id TEXT PRIMARY KEY NOT NULL,
+                user_id TEXT NOT NULL,
+                username TEXT NOT NULL,
+                password TEXT NOT NULL,
+                created_at TEXT,
+                updated_at TEXT,
+                is_deleted INTEGER NOT NULL DEFAULT 0
+            )
+            "#,
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            r#"
+            CREATE TABLE audit_logs (
+                id TEXT PRIMARY KEY NOT NULL,
+                event TEXT NOT NULL,
+                role TEXT,
+                actor TEXT,
+                created_at TEXT NOT NULL
+            )
+            "#,
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn setup_inventory_table(pool: &SqlitePool) {
+        sqlx::query(
+            r#"
+            CREATE TABLE inventory_items (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                unit TEXT NOT NULL,
+                quantity_on_hand REAL NOT NULL,
+                reserved_quantity REAL NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                is_deleted INTEGER NOT NULL DEFAULT 0
+            )
+            "#,
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn change_password_updates_hash() {
+        let pool = SqlitePool::connect(":memory:").await.unwrap();
+        setup_auth_tables(&pool).await;
+
+        let hashed = hash("oldpass", DEFAULT_COST).unwrap();
+        sqlx::query(
+            r#"
+            INSERT INTO auth_users (id, user_id, username, password, created_at, updated_at, is_deleted)
+            VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+            "#,
+        )
+        .bind("auth-id")
+        .bind("user-id")
+        .bind("tester")
+        .bind(&hashed)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let input = ChangePasswordInput {
+            username: "tester".to_string(),
+            current_password: "oldpass".to_string(),
+            new_password: "newpass".to_string(),
+        };
+        change_password_with_pool(&pool, input).await.unwrap();
+
+        let row = sqlx::query!("SELECT password FROM auth_users WHERE username = ?", "tester")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert!(verify("newpass", &row.password).unwrap());
+    }
+
+    #[tokio::test]
+    async fn adjust_inventory_reserves_on_schedule() {
+        let pool = SqlitePool::connect(":memory:").await.unwrap();
+        setup_inventory_table(&pool).await;
+
+        sqlx::query(
+            r#"
+            INSERT INTO inventory_items (id, name, unit, quantity_on_hand, reserved_quantity, created_at, is_deleted)
+            VALUES (?, ?, ?, ?, ?, datetime('now'), 0)
+            "#,
+        )
+        .bind("inv-1")
+        .bind("Firewood")
+        .bind("cords")
+        .bind(10.0)
+        .bind(0.0)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        adjust_inventory_for_transition_tx(&mut tx, "received", "scheduled", 2.0)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        let row = sqlx::query!(
+            "SELECT reserved_quantity FROM inventory_items WHERE id = ?",
+            "inv-1"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(row.reserved_quantity, 2.0);
+    }
 }
 
 fn main() -> Result<()> {
