@@ -33,6 +33,7 @@ type UserRow = {
   id: string;
   name: string;
   role: string;
+  telephone?: string | null;
   availability_schedule?: string | null;
 };
 
@@ -63,6 +64,7 @@ interface DashboardProps {
   users: UserRow[];
   userDeliveryHours: { hours: number; deliveries: number; woodCreditCords: number };
   workOrders: WorkOrderRow[];
+  onWorkerSelect?: (user: UserRow) => void;
 }
 
 // Helper to check if a date is today
@@ -88,6 +90,7 @@ export default function Dashboard({
   users,
   userDeliveryHours,
   workOrders,
+  onWorkerSelect,
 }: DashboardProps) {
   const [calendarView, setCalendarView] = useState<"2weeks" | "month">("2weeks");
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -539,16 +542,42 @@ export default function Dashboard({
 
               <div className="card">
                 <h3>Staff Available Today</h3>
-                <ul className="list" style={{ marginTop: "0.5rem" }}>
+                <div style={{ marginTop: "0.5rem" }}>
                   {availableStaff.length === 0 && (
-                    <li className="muted">No staff scheduled for today.</li>
+                    <div className="muted">No staff scheduled for today.</div>
                   )}
-                  {availableStaff.map((u) => (
-                    <li key={u.id}>
-                      <strong>{u.name}</strong> <span className="muted">({u.role})</span>
-                    </li>
-                  ))}
-                </ul>
+                  {availableStaff.map((u) => {
+                    const nameParts = u.name.split(" ");
+                    const firstName = nameParts[0] || "";
+                    const lastName = nameParts.slice(1).join(" ") || "";
+                    return (
+                      <div
+                        key={u.id}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          padding: "0.5rem 0",
+                          borderBottom: "1px solid #eee",
+                          cursor: onWorkerSelect ? "pointer" : "default",
+                        }}
+                        onDoubleClick={() => onWorkerSelect?.(u)}
+                        title={onWorkerSelect ? "Double-click to view/edit profile" : undefined}
+                      >
+                        <div>
+                          <strong>{firstName}</strong>{" "}
+                          <span style={{ color: "#666" }}>{lastName}</span>
+                          <span className="muted" style={{ marginLeft: "0.5rem" }}>
+                            ({u.role})
+                          </span>
+                        </div>
+                        <div style={{ color: "#666", fontSize: "0.9rem" }}>
+                          {u.telephone || "—"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </>
           )}

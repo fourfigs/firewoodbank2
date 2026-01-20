@@ -888,6 +888,13 @@ function App() {
                     users={users}
                     userDeliveryHours={userDeliveryHours}
                     workOrders={workOrders}
+                    onWorkerSelect={(user) => {
+                      if (session?.role === "admin" || session?.role === "staff" || session?.role === "lead") {
+                        setSelectedWorker(user);
+                        setWorkerEdit({ ...user });
+                        setActiveTab("Worker Directory");
+                      }
+                    }}
                   />
                 )}
 
