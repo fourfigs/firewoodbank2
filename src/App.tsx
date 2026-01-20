@@ -2018,7 +2018,18 @@ function App() {
                         paddingLeft: clientDetailSidebarOpen ? "1rem" : "0",
                       }}
                     >
-                      {clientDetailSidebarOpen && selectedClientForDetail && (
+                      {clientDetailSidebarOpen && selectedClientForDetail && (() => {
+                        // Calculate delivery stats
+                        const lastDelivery = deliveredOrdersForClient.length > 0
+                          ? deliveredOrdersForClient.sort((a, b) => 
+                              (b.scheduled_date ?? "").localeCompare(a.scheduled_date ?? "")
+                            )[0]
+                          : null;
+                        const totalCords = deliveredOrdersForClient.reduce((sum, wo) => 
+                          sum + (wo.delivery_size_cords ?? 0), 0
+                        );
+                        
+                        return (
                         <div className="card">
                           <div className="list-head">
                             <h3>{selectedClientForDetail.name}</h3>
@@ -2035,102 +2046,25 @@ function App() {
                             </button>
                           </div>
                           <div className="stack">
-                            {canManage && (
-                              <div
-                                style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}
-                              >
-                                <button
-                                  className="ghost"
-                                  type="button"
-                                  onClick={() => {
-                                    const [first, ...rest] =
-                                      selectedClientForDetail.name.split(" ");
-                                    const last = rest.join(" ");
-                                    setEditingClientId(selectedClientForDetail.id);
-                                    setClientForm({
-                                      first_name: first,
-                                      last_name: last,
-                                      date_of_onboarding: selectedClientForDetail.date_of_onboarding
-                                        ? selectedClientForDetail.date_of_onboarding.slice(0, 10)
-                                        : new Date().toISOString().slice(0, 10),
-                                      physical_address_line1:
-                                        selectedClientForDetail.physical_address_line1,
-                                      physical_address_line2:
-                                        selectedClientForDetail.physical_address_line2 ?? "",
-                                      physical_address_city:
-                                        selectedClientForDetail.physical_address_city,
-                                      physical_address_state:
-                                        selectedClientForDetail.physical_address_state,
-                                      physical_address_postal_code:
-                                        selectedClientForDetail.physical_address_postal_code,
-                                      mailing_same_as_physical:
-                                        !selectedClientForDetail.mailing_address_line1,
-                                      mailing_address_line1:
-                                        selectedClientForDetail.mailing_address_line1 ?? "",
-                                      mailing_address_line2:
-                                        selectedClientForDetail.mailing_address_line2 ?? "",
-                                      mailing_address_city:
-                                        selectedClientForDetail.mailing_address_city ?? "",
-                                      mailing_address_state:
-                                        selectedClientForDetail.mailing_address_state ?? "",
-                                      mailing_address_postal_code:
-                                        selectedClientForDetail.mailing_address_postal_code ?? "",
-                                      telephone: selectedClientForDetail.telephone ?? "",
-                                      email: selectedClientForDetail.email ?? "",
-                                      how_did_they_hear_about_us:
-                                        selectedClientForDetail.how_did_they_hear_about_us ?? "",
-                                      referring_agency:
-                                        selectedClientForDetail.referring_agency ?? "",
-                                      approval_status: selectedClientForDetail.approval_status,
-                                      denial_reason: selectedClientForDetail.denial_reason ?? "",
-                                      gate_combo: selectedClientForDetail.gate_combo ?? "",
-                                      notes: selectedClientForDetail.notes ?? "",
-                                      wood_size_label:
-                                        selectedClientForDetail.wood_size_label ?? "",
-                                      wood_size_other:
-                                        selectedClientForDetail.wood_size_other ?? "",
-                                      directions: selectedClientForDetail.directions ?? "",
-                                      opt_out_email: !selectedClientForDetail.email, // If no email, they're opted out
-                                    });
-                                    setShowClientForm(true);
-                                    setClientDetailSidebarOpen(false);
-                                  }}
-                                  style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem" }}
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  className="ghost"
-                                  type="button"
-                                  onClick={async () => {
-                                    if (
-                                      !window.confirm(
-                                        `Delete client ${selectedClientForDetail.name}? This marks them deleted.`,
-                                      )
-                                    )
-                                      return;
-                                    setBusy(true);
-                                    try {
-                                      await invokeTauri("delete_client", {
-                                        id: selectedClientForDetail.id,
-                                      });
-                                      await loadClients();
-                                      setClientDetailSidebarOpen(false);
-                                      setSelectedClientForDetail(null);
-                                    } finally {
-                                      setBusy(false);
-                                    }
-                                  }}
-                                  style={{
-                                    padding: "0.25rem 0.5rem",
-                                    fontSize: "0.85rem",
-                                    color: "#b3261e",
-                                  }}
-                                >
-                                  Delete
-                                </button>
+                            {/* Delivery Stats at TOP */}
+                            <div style={{ 
+                              background: "#fff9f0", 
+                              padding: "0.75rem", 
+                              borderRadius: "6px",
+                              marginBottom: "0.5rem"
+                            }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem" }}>
+                                <strong>Last Delivery:</strong>
+                                <span>{lastDelivery ? safeDate(lastDelivery.scheduled_date) : "Never"}</span>
                               </div>
-                            )}
+                              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                <strong>Total Delivered:</strong>
+                                <span style={{ color: "#e67f1e", fontWeight: "bold" }}>
+                                  {totalCords.toFixed(1)} cords ({deliveredOrdersForClient.length} orders)
+                                </span>
+                              </div>
+                            </div>
+
                             {canCreateWorkOrders && (
                               <button
                                 className="ghost"
@@ -2188,54 +2122,6 @@ function App() {
                                 {selectedClientForDetail.approval_status}
                               </span>
                             </div>
-                            {canManage && (
-                              <button
-                                className="ghost"
-                                style={{
-                                  fontSize: "0.8rem",
-                                  width: "100%",
-                                  textAlign: "left",
-                                  justifyContent: "flex-start",
-                                  marginTop: "0.5rem",
-                                }}
-                                onClick={() => {
-                                  setWorkerForm({
-                                    name: selectedClientForDetail.name,
-                                    email: selectedClientForDetail.email || "",
-                                    telephone: selectedClientForDetail.telephone || "",
-                                    username: "",
-                                    password: "",
-                                    physical_address_line1:
-                                      selectedClientForDetail.physical_address_line1 || "",
-                                    physical_address_line2:
-                                      selectedClientForDetail.physical_address_line2 || "",
-                                    physical_address_city:
-                                      selectedClientForDetail.physical_address_city || "",
-                                    physical_address_state:
-                                      selectedClientForDetail.physical_address_state || "",
-                                    physical_address_postal_code:
-                                      selectedClientForDetail.physical_address_postal_code || "",
-                                    mailing_address_line1:
-                                      selectedClientForDetail.mailing_address_line1 || "",
-                                    mailing_address_line2:
-                                      selectedClientForDetail.mailing_address_line2 || "",
-                                    mailing_address_city:
-                                      selectedClientForDetail.mailing_address_city || "",
-                                    mailing_address_state:
-                                      selectedClientForDetail.mailing_address_state || "",
-                                    mailing_address_postal_code:
-                                      selectedClientForDetail.mailing_address_postal_code || "",
-                                    role: "volunteer",
-                                    is_driver: false,
-                                  });
-                                  setShowWorkerForm(true);
-                                  setActiveTab("Worker Directory");
-                                  setClientDetailSidebarOpen(false);
-                                }}
-                              >
-                                + Create user account from this client
-                              </button>
-                            )}
                             {canViewClientPII && (
                               <>
                                 <div>
@@ -2307,9 +2193,161 @@ function App() {
                                 </div>
                               )}
                             </div>
+
+                            {/* Actions at BOTTOM */}
+                            <div style={{ 
+                              borderTop: "1px solid #eee", 
+                              marginTop: "1rem", 
+                              paddingTop: "0.75rem" 
+                            }}>
+                              {canManage && (
+                                <div
+                                  style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}
+                                >
+                                  <button
+                                    className="ghost"
+                                    type="button"
+                                    onClick={() => {
+                                      const [first, ...rest] =
+                                        selectedClientForDetail.name.split(" ");
+                                      const last = rest.join(" ");
+                                      setEditingClientId(selectedClientForDetail.id);
+                                      setClientForm({
+                                        first_name: first,
+                                        last_name: last,
+                                        date_of_onboarding: selectedClientForDetail.date_of_onboarding
+                                          ? selectedClientForDetail.date_of_onboarding.slice(0, 10)
+                                          : new Date().toISOString().slice(0, 10),
+                                        physical_address_line1:
+                                          selectedClientForDetail.physical_address_line1,
+                                        physical_address_line2:
+                                          selectedClientForDetail.physical_address_line2 ?? "",
+                                        physical_address_city:
+                                          selectedClientForDetail.physical_address_city,
+                                        physical_address_state:
+                                          selectedClientForDetail.physical_address_state,
+                                        physical_address_postal_code:
+                                          selectedClientForDetail.physical_address_postal_code,
+                                        mailing_same_as_physical:
+                                          !selectedClientForDetail.mailing_address_line1,
+                                        mailing_address_line1:
+                                          selectedClientForDetail.mailing_address_line1 ?? "",
+                                        mailing_address_line2:
+                                          selectedClientForDetail.mailing_address_line2 ?? "",
+                                        mailing_address_city:
+                                          selectedClientForDetail.mailing_address_city ?? "",
+                                        mailing_address_state:
+                                          selectedClientForDetail.mailing_address_state ?? "",
+                                        mailing_address_postal_code:
+                                          selectedClientForDetail.mailing_address_postal_code ?? "",
+                                        telephone: selectedClientForDetail.telephone ?? "",
+                                        email: selectedClientForDetail.email ?? "",
+                                        how_did_they_hear_about_us:
+                                          selectedClientForDetail.how_did_they_hear_about_us ?? "",
+                                        referring_agency:
+                                          selectedClientForDetail.referring_agency ?? "",
+                                        approval_status: selectedClientForDetail.approval_status,
+                                        denial_reason: selectedClientForDetail.denial_reason ?? "",
+                                        gate_combo: selectedClientForDetail.gate_combo ?? "",
+                                        notes: selectedClientForDetail.notes ?? "",
+                                        wood_size_label:
+                                          selectedClientForDetail.wood_size_label ?? "",
+                                        wood_size_other:
+                                          selectedClientForDetail.wood_size_other ?? "",
+                                        directions: selectedClientForDetail.directions ?? "",
+                                        opt_out_email: !selectedClientForDetail.email,
+                                      });
+                                      setShowClientForm(true);
+                                      setClientDetailSidebarOpen(false);
+                                    }}
+                                    style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem" }}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    className="ghost"
+                                    type="button"
+                                    onClick={async () => {
+                                      if (
+                                        !window.confirm(
+                                          `Delete client ${selectedClientForDetail.name}? This marks them deleted.`,
+                                        )
+                                      )
+                                        return;
+                                      setBusy(true);
+                                      try {
+                                        await invokeTauri("delete_client", {
+                                          id: selectedClientForDetail.id,
+                                        });
+                                        await loadClients();
+                                        setClientDetailSidebarOpen(false);
+                                        setSelectedClientForDetail(null);
+                                      } finally {
+                                        setBusy(false);
+                                      }
+                                    }}
+                                    style={{
+                                      padding: "0.25rem 0.5rem",
+                                      fontSize: "0.85rem",
+                                      color: "#b3261e",
+                                    }}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              )}
+                              {session?.role === "admin" && (
+                                <button
+                                  className="ghost"
+                                  style={{
+                                    fontSize: "0.8rem",
+                                    width: "100%",
+                                    textAlign: "left",
+                                    justifyContent: "flex-start",
+                                  }}
+                                  onClick={() => {
+                                    setWorkerForm({
+                                      name: selectedClientForDetail.name,
+                                      email: selectedClientForDetail.email || "",
+                                      telephone: selectedClientForDetail.telephone || "",
+                                      username: "",
+                                      password: "",
+                                      physical_address_line1:
+                                        selectedClientForDetail.physical_address_line1 || "",
+                                      physical_address_line2:
+                                        selectedClientForDetail.physical_address_line2 || "",
+                                      physical_address_city:
+                                        selectedClientForDetail.physical_address_city || "",
+                                      physical_address_state:
+                                        selectedClientForDetail.physical_address_state || "",
+                                      physical_address_postal_code:
+                                        selectedClientForDetail.physical_address_postal_code || "",
+                                      mailing_address_line1:
+                                        selectedClientForDetail.mailing_address_line1 || "",
+                                      mailing_address_line2:
+                                        selectedClientForDetail.mailing_address_line2 || "",
+                                      mailing_address_city:
+                                        selectedClientForDetail.mailing_address_city || "",
+                                      mailing_address_state:
+                                        selectedClientForDetail.mailing_address_state || "",
+                                      mailing_address_postal_code:
+                                        selectedClientForDetail.mailing_address_postal_code || "",
+                                      role: "volunteer",
+                                      is_driver: false,
+                                    });
+                                    setShowWorkerForm(true);
+                                    setActiveTab("Worker Directory");
+                                    setClientDetailSidebarOpen(false);
+                                  }}
+                                >
+                                  + Create user account from this client
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
