@@ -51,7 +51,7 @@ Review & Improvement Suggestions (Program Structure + Workflow):
 - ✅ Standardize role names across UI, Rust, docs, and seeds — roles are now `admin/lead/staff/volunteer`. The `lead` role is used for team leads with elevated permissions (can view PII if HIPAA certified).
 - Split `src-tauri/src/main.rs` into command modules (e.g., `commands/users.rs`, `commands/work_orders.rs`) and move shared SQL into `db`/`services` layers. (main.rs is 3000+ lines)
 - Add a `src/pages` (or `features`) directory and move tab content components out of `App.tsx` to reduce re-render scope and improve readability.
-- Add DB indexes for common filters (work_orders.status, work_orders.scheduled_date, audit_logs.created_at) to keep reports and lists fast. (only is_deleted indexes exist currently)
+- ✅ Add DB indexes for common filters — migration 0016 adds indexes on work_orders.status, scheduled_date, audit_logs.created_at, delivery_events.start_date, clients.name
 - Add basic pagination/virtualization for large lists (clients, work orders, audit logs).
 
 Copyable prompts (Stage 0–5) for next agent:
