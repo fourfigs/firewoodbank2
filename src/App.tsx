@@ -405,6 +405,7 @@ function App() {
     helpers: [] as string[],
     delivery_size_choice: "f250",
     delivery_size_other: "",
+    delivery_size_other_cords: "",
   });
 
   const [workOrderNewClientEnabled, setWorkOrderNewClientEnabled] = useState(false);
@@ -2061,6 +2062,7 @@ function App() {
                                     helpers: [],
                                     delivery_size_choice: "f250",
                                     delivery_size_other: "",
+                                    delivery_size_other_cords: "",
                                   });
                                   setShowWorkOrderForm(true);
                                   setActiveTab("Work Orders");
@@ -2656,6 +2658,7 @@ function App() {
                                 helpers: [],
                                 delivery_size_choice: "f250",
                                 delivery_size_other: "",
+                                delivery_size_other_cords: "",
                               });
                               setWorkOrderNewClientEnabled(false);
                               setWorkOrderNewClient({
@@ -2923,10 +2926,17 @@ function App() {
                                 deliverySizeLabel = "Toyota";
                               } else {
                                 const details = workOrderForm.delivery_size_other.trim();
+                                const cordsRaw = workOrderForm.delivery_size_other_cords.trim();
+                                const cordsParsed = Number(cordsRaw);
                                 if (!details) {
                                   setWorkOrderError("Enter delivery vehicle details for Other.");
                                   return;
                                 }
+                                if (!Number.isFinite(cordsParsed) || cordsParsed <= 0) {
+                                  setWorkOrderError("Enter a valid cord amount for Other.");
+                                  return;
+                                }
+                                deliverySizeCords = cordsParsed;
                                 deliverySizeLabel = details;
                               }
 
@@ -3015,6 +3025,7 @@ function App() {
                                   helpers: [],
                                   delivery_size_choice: "f250",
                                   delivery_size_other: "",
+                                  delivery_size_other_cords: "",
                                 });
                                 setWorkOrderNewClient({
                                   first_name: "",
@@ -3101,18 +3112,35 @@ function App() {
                                 </select>
                               </label>
                               {workOrderForm.delivery_size_choice === "other" && (
-                                <label>
-                                  Delivery vehicle (other)
-                                  <input
-                                    value={workOrderForm.delivery_size_other}
-                                    onChange={(e) =>
-                                      setWorkOrderForm({
-                                        ...workOrderForm,
-                                        delivery_size_other: e.target.value,
-                                      })
-                                    }
-                                  />
-                                </label>
+                                <>
+                                  <label>
+                                    Delivery vehicle (other)
+                                    <input
+                                      value={workOrderForm.delivery_size_other}
+                                      onChange={(e) =>
+                                        setWorkOrderForm({
+                                          ...workOrderForm,
+                                          delivery_size_other: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    Cord amount
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={workOrderForm.delivery_size_other_cords}
+                                      onChange={(e) =>
+                                        setWorkOrderForm({
+                                          ...workOrderForm,
+                                          delivery_size_other_cords: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                </>
                               )}
                               <label className="span-2">
                                 Assign driver(s)
@@ -3466,7 +3494,8 @@ function App() {
                                             !workOrderNewClient.physical_address_state)) || // New Client fields
                                         !workOrderForm.scheduled_date || // Date scheduled
                                         (workOrderForm.delivery_size_choice === "other" &&
-                                          !workOrderForm.delivery_size_other))) // Vehicle details
+                                          (!workOrderForm.delivery_size_other ||
+                                            !workOrderForm.delivery_size_other_cords)))) // Vehicle details
                                   }
                                 >
                                   Save work order
