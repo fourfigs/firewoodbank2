@@ -1,9 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod db;
+mod sync;
 
 use anyhow::Result;
 use db::init_pool;
+use sync::{SyncRecord, SyncService};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Sqlite, SqlitePool, Transaction};
@@ -1967,6 +1969,12 @@ async fn list_invoices(state: State<'_, AppState>) -> Result<Vec<InvoiceRow>, St
 }
 
 #[tauri::command]
+async fn list_pending_changes(state: State<'_, AppState>) -> Result<Vec<SyncRecord>, String> {
+    let service = SyncService::new(state.pool.clone());
+    service.list_pending_changes().await
+}
+
+#[tauri::command]
 async fn create_invoice_from_work_order(
     state: State<'_, AppState>,
     input: CreateInvoiceInput,
@@ -2625,6 +2633,7 @@ fn main() -> Result<()> {
             login_user,
             list_invoices,
             create_invoice_from_work_order,
+            list_pending_changes,
             list_motd,
             create_motd,
             delete_motd,
