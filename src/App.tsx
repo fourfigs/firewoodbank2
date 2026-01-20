@@ -18,7 +18,7 @@ import {
   UserSession,
   WorkOrderRow,
 } from "./types";
-import { Clients, Inventory } from "./pages";
+import { Clients, Inventory, WorkOrders } from "./pages";
 
 const tabs = [
   "Dashboard",
@@ -248,6 +248,37 @@ function App() {
   const [editingInventoryId, setEditingInventoryId] = useState<string | null>(null);
   const [inventoryError, setInventoryError] = useState<string | null>(null);
 
+  // Work order-specific state
+  const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrderRow | null>(null);
+  const [workOrderDetailOpen, setWorkOrderDetailOpen] = useState(false);
+  const [workOrderEditMode, setWorkOrderEditMode] = useState(false);
+  const [workOrderEditForm, setWorkOrderEditForm] = useState({
+    scheduled_date: "",
+    status: "",
+    assignees: [] as string[],
+    mileage: "",
+    notes: "",
+  });
+  const [showWorkOrderForm, setShowWorkOrderForm] = useState(false);
+  const [workOrderNewClientEnabled, setWorkOrderNewClientEnabled] = useState(false);
+  const [workOrderNewClient, setWorkOrderNewClient] = useState({
+    first_name: "",
+    last_name: "",
+    date_of_onboarding: new Date().toISOString().slice(0, 10),
+    physical_address_line1: "",
+    physical_address_city: "",
+    physical_address_state: "",
+    physical_address_postal_code: "",
+    telephone: "",
+    email: "",
+    how_did_they_hear_about_us: "",
+    wood_size_label: "",
+    wood_size_other: "",
+  });
+  const [newWorkOrderId, setNewWorkOrderId] = useState<string>("");
+  const [newWorkOrderEntryDate, setNewWorkOrderEntryDate] = useState<string>("");
+  const [workOrderError, setWorkOrderError] = useState<string | null>(null);
+
   // Modal states
   const [showChangeRequestModal, setShowChangeRequestModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -319,6 +350,7 @@ function App() {
     if (session) {
       loadClients();
       loadInventory();
+      loadWorkOrders();
       // Load other data as needed
     } else {
       loadMotd();
@@ -450,15 +482,35 @@ function App() {
                   />
                 )}
 
-                {activeTab === "Work Orders" && (
-                  <div className="stack">
-                    <div className="card muted">
-                      <div className="add-header">
-                        <h3>Work Orders</h3>
-                        <p>Coming soon - extracted to src/pages/WorkOrders.tsx</p>
-                      </div>
-                    </div>
-                  </div>
+                {activeTab === "Work Orders" && session && (
+                  <WorkOrders
+                    session={session}
+                    workOrders={workOrders}
+                    users={users}
+                    clients={clients}
+                    busy={busy}
+                    selectedWorkOrder={selectedWorkOrder}
+                    setSelectedWorkOrder={setSelectedWorkOrder}
+                    workOrderDetailOpen={workOrderDetailOpen}
+                    setWorkOrderDetailOpen={setWorkOrderDetailOpen}
+                    workOrderEditMode={workOrderEditMode}
+                    setWorkOrderEditMode={setWorkOrderEditMode}
+                    workOrderEditForm={workOrderEditForm}
+                    setWorkOrderEditForm={setWorkOrderEditForm}
+                    showWorkOrderForm={showWorkOrderForm}
+                    setShowWorkOrderForm={setShowWorkOrderForm}
+                    workOrderNewClientEnabled={workOrderNewClientEnabled}
+                    setWorkOrderNewClientEnabled={setWorkOrderNewClientEnabled}
+                    workOrderNewClient={workOrderNewClient}
+                    setWorkOrderNewClient={setWorkOrderNewClient}
+                    newWorkOrderId={newWorkOrderId}
+                    setNewWorkOrderId={setNewWorkOrderId}
+                    newWorkOrderEntryDate={newWorkOrderEntryDate}
+                    setNewWorkOrderEntryDate={setNewWorkOrderEntryDate}
+                    workOrderError={workOrderError}
+                    setWorkOrderError={setWorkOrderError}
+                    loadWorkOrders={loadWorkOrders}
+                  />
                 )}
 
                 {activeTab === "Metrics" && (
