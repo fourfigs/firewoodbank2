@@ -425,6 +425,9 @@ function App() {
     physical_address_postal_code: "",
     telephone: "",
     email: "",
+    how_did_they_hear_about_us: "",
+    wood_size_label: "",
+    wood_size_other: "",
   });
 
   const [deliveryForm, setDeliveryForm] = useState({
@@ -893,10 +896,15 @@ function App() {
                         paddingRight: mailingListSidebarOpen ? "1rem" : "0",
                       }}
                     >
-                      {mailingListSidebarOpen && (
+                      {mailingListSidebarOpen && (() => {
+                        // Calculate counts
+                        const emailCount = clients.filter(c => !!c.email).length;
+                        const newsletterCount = clients.filter(c => !!c.physical_address_line1).length;
+                        
+                        return (
                         <div className="list-card">
                           <div className="list-head">
-                            <h3>Mailer List</h3>
+                            <h3>Mailing List</h3>
                             <button
                               className="ghost"
                               type="button"
@@ -906,49 +914,130 @@ function App() {
                               ×
                             </button>
                           </div>
-                          <div style={{ marginBottom: "0.5rem" }}>
-                            <select
-                              value={mailingListFilter}
-                              onChange={(e) => setMailingListFilter(e.target.value)}
-                              style={{ width: "100%", padding: "0.5rem" }}
+                          
+                          {/* Filter buttons with icons and counts */}
+                          <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              onClick={() => setMailingListFilter("all")}
+                              style={{
+                                padding: "0.4rem 0.75rem",
+                                background: mailingListFilter === "all" ? "#e67f1e" : "#f5f5f5",
+                                color: mailingListFilter === "all" ? "white" : "#333",
+                                border: "none",
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                                fontSize: "0.8rem",
+                                fontWeight: mailingListFilter === "all" ? "bold" : "normal",
+                              }}
                             >
-                              <option value="all">All</option>
-                              <option value="mail">Mail only</option>
-                              <option value="email">Email only</option>
-                              <option value="both">Both mail & email</option>
-                            </select>
+                              All
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setMailingListFilter("email")}
+                              style={{
+                                padding: "0.4rem 0.75rem",
+                                background: mailingListFilter === "email" ? "#2196F3" : "#f5f5f5",
+                                color: mailingListFilter === "email" ? "white" : "#333",
+                                border: "none",
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                                fontSize: "0.8rem",
+                                fontWeight: mailingListFilter === "email" ? "bold" : "normal",
+                              }}
+                              title="Email List"
+                            >
+                              ✉ Email
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setMailingListFilter("mail")}
+                              style={{
+                                padding: "0.4rem 0.75rem",
+                                background: mailingListFilter === "mail" ? "#4CAF50" : "#f5f5f5",
+                                color: mailingListFilter === "mail" ? "white" : "#333",
+                                border: "none",
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                                fontSize: "0.8rem",
+                                fontWeight: mailingListFilter === "mail" ? "bold" : "normal",
+                              }}
+                              title="Newsletter (Mail)"
+                            >
+                              📬 Newsletter
+                            </button>
                           </div>
+
+                          {/* Count badges */}
+                          <div style={{ display: "flex", gap: "1rem", marginBottom: "0.75rem", fontSize: "0.85rem" }}>
+                            <span style={{ 
+                              background: "#2196F3", 
+                              color: "white", 
+                              padding: "0.2rem 0.5rem", 
+                              borderRadius: "12px",
+                              fontWeight: "bold"
+                            }}>
+                              ✉ {emailCount} Email
+                            </span>
+                            <span style={{ 
+                              background: "#4CAF50", 
+                              color: "white", 
+                              padding: "0.2rem 0.5rem", 
+                              borderRadius: "12px",
+                              fontWeight: "bold"
+                            }}>
+                              📬 {newsletterCount} Newsletter
+                            </span>
+                          </div>
+
                           {canViewClientPII ? (
-                            <div
-                              className="table"
-                              style={{ maxHeight: "500px", overflowY: "auto" }}
-                            >
-                              <div className="table-head">
-                                <span>Name</span>
-                              </div>
+                            <div style={{ maxHeight: "400px", overflowY: "auto" }}>
                               {clients
                                 .filter((c) => {
                                   if (mailingListFilter === "all") return true;
                                   const hasEmail = !!c.email;
                                   const hasAddress = !!c.physical_address_line1;
-                                  if (mailingListFilter === "mail") return hasAddress && !hasEmail;
-                                  if (mailingListFilter === "email") return hasEmail && !hasAddress;
-                                  if (mailingListFilter === "both") return hasEmail && hasAddress;
+                                  if (mailingListFilter === "mail") return hasAddress;
+                                  if (mailingListFilter === "email") return hasEmail;
                                   return true;
                                 })
                                 .sort((a, b) => {
-                                  // Sort by date_of_onboarding (order of joining)
                                   const dateA = a.date_of_onboarding || a.created_at || "";
                                   const dateB = b.date_of_onboarding || b.created_at || "";
-                                  return dateA.localeCompare(dateB); // ASC order (oldest first)
+                                  return dateA.localeCompare(dateB);
                                 })
-                                .map((c) => (
-                                  <div className="table-row" key={`mailer-${c.id}`}>
-                                    <div>{c.name}</div>
-                                  </div>
-                                ))}
+                                .map((c) => {
+                                  const hasEmail = !!c.email;
+                                  const hasNewsletter = !!c.physical_address_line1;
+                                  return (
+                                    <div 
+                                      key={`mailer-${c.id}`}
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        padding: "0.4rem 0",
+                                        borderBottom: "1px solid #eee",
+                                        fontSize: "0.9rem",
+                                      }}
+                                    >
+                                      <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                        {c.name}
+                                      </span>
+                                      <span style={{ display: "flex", gap: "0.25rem", marginLeft: "0.5rem" }}>
+                                        {hasEmail && (
+                                          <span title="Email List" style={{ color: "#2196F3" }}>✉</span>
+                                        )}
+                                        {hasNewsletter && (
+                                          <span title="Newsletter" style={{ color: "#4CAF50" }}>📬</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
                               {!clients.length && (
-                                <div className="table-row">No mailer entries yet.</div>
+                                <div className="muted" style={{ padding: "1rem 0" }}>No mailer entries yet.</div>
                               )}
                             </div>
                           ) : (
@@ -957,7 +1046,8 @@ function App() {
                             </p>
                           )}
                         </div>
-                      )}
+                        );
+                      })()}
                     </div>
 
                     {/* Main Content */}
@@ -1397,8 +1487,9 @@ function App() {
 
                               {/* Row 4: How Did You Hear, Gate Combo */}
                               <label className="span-2">
-                                How Did You Hear
+                                How Did You Hear *
                                 <input
+                                  required
                                   tabIndex={9}
                                   value={clientForm.how_did_they_hear_about_us}
                                   onChange={(e) =>
@@ -1520,8 +1611,9 @@ function App() {
                               )}
                               {/* Wood size and gate combo under notes */}
                               <label>
-                                Wood Size
+                                Wood Size *
                                 <select
+                                  required
                                   tabIndex={18}
                                   value={clientForm.wood_size_label}
                                   onChange={(e) =>
@@ -1895,28 +1987,33 @@ function App() {
                         </div>
                       </div>
 
-                      {/* Toggle button for mailing list sidebar */}
+                      {/* Toggle button for mailing list sidebar - Orange rotated tab */}
                       {!mailingListSidebarOpen && (
                         <button
-                          className="ghost"
                           type="button"
                           onClick={() => setMailingListSidebarOpen(true)}
                           style={{
                             position: "absolute",
                             left: 0,
                             top: "50%",
-                            transform: "translateY(-50%)",
-                            padding: "0.5rem",
-                            background: "#fff",
-                            border: "1px solid #ddd",
-                            borderLeft: "none",
-                            borderRadius: "0 4px 4px 0",
+                            transform: "translateY(-50%) rotate(-90deg)",
+                            transformOrigin: "left center",
+                            padding: "0.5rem 1rem",
+                            background: "#e67f1e",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "0 0 6px 6px",
                             cursor: "pointer",
                             zIndex: 10,
+                            fontWeight: "bold",
+                            fontSize: "0.85rem",
+                            whiteSpace: "nowrap",
+                            boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                            marginLeft: "12px",
                           }}
-                          title="Open Mailer List"
+                          title="Open Mailing List"
                         >
-                          →
+                          Mailing List
                         </button>
                       )}
                     </div>
@@ -2757,6 +2854,9 @@ function App() {
                                 physical_address_postal_code: "",
                                 telephone: "",
                                 email: "",
+                                how_did_they_hear_about_us: "",
+                                wood_size_label: "",
+                                wood_size_other: "",
                               });
                               setWorkOrderError(null);
                               setShowWorkOrderForm(true);
@@ -2952,12 +3052,14 @@ function App() {
                                     mailing_address_postal_code: null,
                                     telephone: ncPhoneCheck.normalized || null,
                                     email: ncEmail || null,
-                                    how_did_they_hear_about_us: null,
+                                    how_did_they_hear_about_us: nc.how_did_they_hear_about_us || null,
                                     referring_agency: null,
                                     approval_status: "pending",
                                     denial_reason: null,
                                     gate_combo: null,
                                     notes: null,
+                                    wood_size_label: nc.wood_size_label || null,
+                                    wood_size_other: nc.wood_size_other || null,
                                     created_by_user_id: null,
                                   },
                                 });
@@ -2981,6 +3083,8 @@ function App() {
                                   mailing_address_postal_code: null,
                                   gate_combo: null,
                                   notes: null,
+                                  wood_size_label: nc.wood_size_label || null,
+                                  wood_size_other: nc.wood_size_other || null,
                                 };
                               }
 
@@ -3189,6 +3293,9 @@ function App() {
                                   physical_address_postal_code: "",
                                   telephone: "",
                                   email: "",
+                                  how_did_they_hear_about_us: "",
+                                  wood_size_label: "",
+                                  wood_size_other: "",
                                 });
                                 setShowWorkOrderForm(false);
                               } finally {
@@ -3573,8 +3680,9 @@ function App() {
                                   />
                                 </label>
                                 <label>
-                                  Postal code
+                                  Postal code *
                                   <input
+                                    required
                                     value={workOrderNewClient.physical_address_postal_code}
                                     onChange={(e) =>
                                       setWorkOrderNewClient({
@@ -3584,6 +3692,55 @@ function App() {
                                     }
                                   />
                                 </label>
+                                <label>
+                                  How Did You Hear *
+                                  <input
+                                    required
+                                    value={workOrderNewClient.how_did_they_hear_about_us}
+                                    onChange={(e) =>
+                                      setWorkOrderNewClient({
+                                        ...workOrderNewClient,
+                                        how_did_they_hear_about_us: e.target.value,
+                                      })
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  Wood Size *
+                                  <select
+                                    required
+                                    value={workOrderNewClient.wood_size_label}
+                                    onChange={(e) =>
+                                      setWorkOrderNewClient({
+                                        ...workOrderNewClient,
+                                        wood_size_label: e.target.value,
+                                      })
+                                    }
+                                  >
+                                    <option value="">Select size</option>
+                                    <option value="12">12 in</option>
+                                    <option value="14">14 in</option>
+                                    <option value="16">16 in</option>
+                                    <option value="other">Other</option>
+                                  </select>
+                                </label>
+                                {workOrderNewClient.wood_size_label === "other" && (
+                                  <label>
+                                    Wood Size (Other, Inches)
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      required
+                                      value={workOrderNewClient.wood_size_other}
+                                      onChange={(e) =>
+                                        setWorkOrderNewClient({
+                                          ...workOrderNewClient,
+                                          wood_size_other: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                )}
                                 <label>
                                   Telephone
                                   <input
