@@ -257,9 +257,13 @@ function App() {
 
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [showChangeRequestModal, setShowChangeRequestModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ current: "", next: "", confirm: "" });
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   // Worker form state (for adding new workers in Worker Directory tab)
   const [showWorkerForm, setShowWorkerForm] = useState(false);
+  const [workerPasswordReset, setWorkerPasswordReset] = useState("");
   const [workerForm, setWorkerForm] = useState<{
     name: string;
     email: string;
@@ -781,6 +785,11 @@ function App() {
             {session && (
               <button className="ghost" onClick={() => setShowChangeRequestModal(true)}>
                 Request Change
+              </button>
+            )}
+            {session && (
+              <button className="ghost" onClick={() => setShowPasswordModal(true)}>
+                Change Password
               </button>
             )}
           </div>
@@ -3762,6 +3771,41 @@ function App() {
                           </label>
                           {(session?.role === "admin" || session?.role === "lead") && (
                             <div style={{ display: "flex", gap: 8 }}>
+                              <label style={{ flex: 1 }}>
+                                Reset Password
+                                <input
+                                  type="password"
+                                  value={workerPasswordReset}
+                                  onChange={(e) => setWorkerPasswordReset(e.target.value)}
+                                  placeholder="New password"
+                                />
+                              </label>
+                              <button
+                                className="ghost"
+                                type="button"
+                                disabled={busy || !workerPasswordReset.trim()}
+                                onClick={async () => {
+                                  setWorkerError(null);
+                                  if (!workerPasswordReset.trim()) return;
+                                  setBusy(true);
+                                  try {
+                                    await invokeTauri("reset_password", {
+                                      input: {
+                                        user_id: selectedWorker.id,
+                                        new_password: workerPasswordReset.trim(),
+                                      },
+                                      role: session?.role ?? null,
+                                    });
+                                    setWorkerPasswordReset("");
+                                  } catch (err) {
+                                    setWorkerError(typeof err === "string" ? err : "Failed to reset password.");
+                                  } finally {
+                                    setBusy(false);
+                                  }
+                                }}
+                              >
+                                Reset Password
+                              </button>
                               <button
                                 className="ping"
                                 type="button"
@@ -3807,6 +3851,7 @@ function App() {
                                     });
                                     await loadUsers();
                                     setSelectedWorker(null);
+                                    setWorkerPasswordReset("");
                                   } finally {
                                     setBusy(false);
                                   }
@@ -3814,7 +3859,14 @@ function App() {
                               >
                                 Save worker
                               </button>
-                              <button className="ghost" type="button" onClick={() => setSelectedWorker(null)}>
+                              <button
+                                className="ghost"
+                                type="button"
+                                onClick={() => {
+                                  setSelectedWorker(null);
+                                  setWorkerPasswordReset("");
+                                }}
+                              >
                                 Cancel
                               </button>
                             </div>
@@ -3965,6 +4017,90 @@ function App() {
           />
         )
       }
+      {session && showPasswordModal && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h3>Change Password</h3>
+            {passwordError && (
+              <div className="pill" style={{ background: "#fbe2e2", color: "#b3261e" }}>
+                {passwordError}
+              </div>
+            )}
+            <form
+              className="stack"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setPasswordError(null);
+                if (!passwordForm.current || !passwordForm.next) {
+                  setPasswordError("Current and new password are required.");
+                  return;
+                }
+                if (passwordForm.next !== passwordForm.confirm) {
+                  setPasswordError("New password and confirmation do not match.");
+                  return;
+                }
+                setBusy(true);
+                try {
+                  await invokeTauri("change_password", {
+                    input: {
+                      username: session.username,
+                      current_password: passwordForm.current,
+                      new_password: passwordForm.next,
+                    },
+                  });
+                  setPasswordForm({ current: "", next: "", confirm: "" });
+                  setShowPasswordModal(false);
+                } catch (err) {
+                  setPasswordError(typeof err === "string" ? err : "Failed to change password.");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <label>
+                Current Password
+                <input
+                  type="password"
+                  value={passwordForm.current}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
+                />
+              </label>
+              <label>
+                New Password
+                <input
+                  type="password"
+                  value={passwordForm.next}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
+                />
+              </label>
+              <label>
+                Confirm New Password
+                <input
+                  type="password"
+                  value={passwordForm.confirm}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
+                />
+              </label>
+              <div className="actions">
+                <button className="ping" type="submit" disabled={busy}>
+                  {busy ? "Saving..." : "Update Password"}
+                </button>
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={() => {
+                    setShowPasswordModal(false);
+                    setPasswordForm({ current: "", next: "", confirm: "" });
+                    setPasswordError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div >
   );
 }

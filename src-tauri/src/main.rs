@@ -2126,6 +2126,19 @@ struct LoginResponse {
     is_driver: i64,
 }
 
+#[derive(Debug, Deserialize)]
+struct ChangePasswordInput {
+    username: String,
+    current_password: String,
+    new_password: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ResetPasswordInput {
+    user_id: String,
+    new_password: String,
+}
+
 #[tauri::command]
 async fn login_user(state: State<'_, AppState>, input: LoginInput) -> Result<LoginResponse, String> {
     let username = input.username.trim().to_lowercase();
@@ -2175,6 +2188,85 @@ async fn login_user(state: State<'_, AppState>, input: LoginInput) -> Result<Log
         hipaa_certified: row.hipaa_certified,
         is_driver: row.is_driver,
     })
+}
+
+#[tauri::command]
+async fn change_password(state: State<'_, AppState>, input: ChangePasswordInput) -> Result<(), String> {
+    let username = input.username.trim().to_lowercase();
+    let current_password = input.current_password.trim();
+    let new_password = input.new_password.trim();
+    if username.is_empty() || current_password.is_empty() || new_password.is_empty() {
+        return Err("Username, current password, and new password are required".to_string());
+    }
+
+    let row = sqlx::query!(
+        r#"
+        SELECT id, password
+        FROM auth_users
+        WHERE lower(username) = lower(?)
+          AND is_deleted = 0
+        LIMIT 1
+        "#,
+        username
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "User not found".to_string())?;
+
+    if !verify(current_password, &row.password).map_err(|e| e.to_string())? {
+        return Err("Current password is incorrect".to_string());
+    }
+
+    let hashed = hash(new_password, DEFAULT_COST).map_err(|e| e.to_string())?;
+    sqlx::query(
+        r#"
+        UPDATE auth_users
+        SET password = ?, updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+    )
+    .bind(&hashed)
+    .bind(&row.id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    audit_db(&state.pool, "change_password", "unknown", &username).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn reset_password(
+    state: State<'_, AppState>,
+    input: ResetPasswordInput,
+    role: Option<String>,
+) -> Result<(), String> {
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    if role_val != "admin" && role_val != "lead" {
+        return Err("Only admins or leads can reset passwords".to_string());
+    }
+    let new_password = input.new_password.trim();
+    if new_password.is_empty() {
+        return Err("New password is required".to_string());
+    }
+    let hashed = hash(new_password, DEFAULT_COST).map_err(|e| e.to_string())?;
+    sqlx::query(
+        r#"
+        UPDATE auth_users
+        SET password = ?, updated_at = datetime('now')
+        WHERE user_id = ?
+          AND is_deleted = 0
+        "#,
+    )
+    .bind(&hashed)
+    .bind(&input.user_id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    audit_db(&state.pool, "reset_password", &role_val, &input.user_id).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -2636,6 +2728,8 @@ fn main() -> Result<()> {
             update_user_flags,
             get_available_drivers,
             login_user,
+            change_password,
+            reset_password,
             list_invoices,
             create_invoice_from_work_order,
             list_pending_changes,
