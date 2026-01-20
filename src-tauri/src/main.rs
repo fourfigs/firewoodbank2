@@ -935,7 +935,7 @@ async fn update_client(
         .map_err(|e| e.to_string())?;
 
     if let Some(prev) = existing {
-        let mut log_field = |field: &str, old_val: Option<String>, new_val: Option<String>| {
+        let log_field = |field: &str, old_val: Option<String>, new_val: Option<String>| {
             if old_val != new_val {
                 let pool = state.pool.clone();
                 let role = role_val.clone();
@@ -1149,7 +1149,7 @@ async fn update_inventory_item(
     .await
     .map_err(|e| e.to_string())?;
     if let Some(prev) = existing {
-        let mut log_field = |field: &str, old_val: Option<String>, new_val: Option<String>| {
+        let log_field = |field: &str, old_val: Option<String>, new_val: Option<String>| {
             if old_val != new_val {
                 let pool = state.pool.clone();
                 let role = role_val.clone();
@@ -2056,7 +2056,7 @@ async fn update_user_flags(
     .map_err(|e| e.to_string())?;
 
     if let Some(prev) = existing {
-        let mut log_field = |field: &str, old_val: Option<String>, new_val: Option<String>| {
+        let log_field = |field: &str, old_val: Option<String>, new_val: Option<String>| {
             if old_val != new_val {
                 let pool = state.pool.clone();
                 let role = role_val.clone();

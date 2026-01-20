@@ -10,7 +10,10 @@ pub struct SyncRecord {
     pub version: i64,
 }
 
+/// Placeholder sync service for future cloud sync implementation.
+/// The pool and methods are retained for when sync functionality is added.
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct SyncService {
     pool: SqlitePool,
 }
@@ -20,6 +23,7 @@ impl SyncService {
         Self { pool }
     }
 
+    #[allow(dead_code)]
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
