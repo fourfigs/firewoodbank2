@@ -1,4 +1,4 @@
-Notable Gaps / Changes Needed (updated after Stage 12 completion)
+Notable Gaps / Changes Needed (updated after Stage 12 completion + Major Refactoring)
 
 Completed in Stages 5.2-5.4:
 - ✅ Client name split into first/last (Stage 5.2). Numeric client identifiers (formerly `client_number`) have been removed.
@@ -14,9 +14,21 @@ Completed in Stages 5.2-5.4:
 - ✅ Reports tab with audit log viewer and time filtering (Stage 5.4)
 - ✅ Inventory reservation validation added (2025-12-28) - prevents reserved_quantity exceeding available on-hand (backend validation in `adjust_inventory_for_transition_tx`).
 
+Major Refactoring Progress (Post-Stage 12):
+- ✅ Frontend Architecture: App.tsx reduced from 5,977 lines to ~504 lines (91% reduction!)
+- ✅ Page Extraction: Created src/pages/ with Clients, Inventory, WorkOrders fully implemented
+- ✅ Backend Organization: Created src-tauri/src/commands/ with user commands extracted
+- ✅ Type Consolidation: Removed duplicate type definitions, centralized in types.ts
+- ✅ Auto-username Generation: Implemented smart username creation (first initial + last name, numeric suffixes for duplicates)
+
 Remaining Items:
 - ✅ client_title field removed from DTOs (types.ts, ts_dtos.ts, rust_structs.rs, App.tsx). Database column retained for backwards compatibility.
 - Inventory creation gating to be enforced with user CRUD/users stage (if needed)
+- Extract remaining pages: WorkerDirectory, Reports, Admin, Dashboard, Invoices
+- Implement printing capabilities for client lists, worker lists, work orders, and metrics
+- Add enhanced worker profiles with schedule, certifications, and auto-permissions
+- Complete backend command extraction for all modules
+- Add testing infrastructure and error boundaries
 
 Current Status:
 - Stage 5.2: ✅ COMPLETE
@@ -29,6 +41,7 @@ Current Status:
 - Stage 10: ✅ COMPLETE (HIPAA Checklist) — `stage-10-hipaa`
 - Stage 11: ✅ COMPLETE (Desktop Rollout checklist) — `stage-11-desktop`
 - Stage 12: ✅ COMPLETE (Sync hooks skeleton) — `stage-12-sync`
+- Refactoring Phase: 🟢 IN PROGRESS (Major codebase improvements underway)
 
 Notes:
 - MOTD is surfaced on login (newest first) via list_motd/create_motd

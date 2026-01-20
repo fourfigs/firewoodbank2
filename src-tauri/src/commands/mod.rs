@@ -1,4 +1,5 @@
 // Command modules for organizing Tauri command handlers
+pub mod audit;
 pub mod users;
 pub mod clients;
 pub mod inventory;
@@ -7,6 +8,7 @@ pub mod invoices;
 pub mod reports;
 
 // Re-export command functions for use in main.rs
+pub use audit::*;
 pub use users::*;
 pub use clients::*;
 pub use inventory::*;
