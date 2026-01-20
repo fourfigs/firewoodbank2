@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+
 import { invokeTauri } from "./api/tauri";
 import Nav from "./components/Nav";
 import Dashboard from "./components/Dashboard";
@@ -16,7 +17,6 @@ import {
   InventoryRow,
   LoginResponse,
   MotdRow,
-  Role,
   UserRow,
   UserSession,
   WorkOrderRow,
@@ -257,7 +257,7 @@ function App() {
   const [progressEdits, setProgressEdits] = useState<
     Record<string, { status: string; mileage: string }>
   >({});
-  const [driverEdits, setDriverEdits] = useState<Record<string, { mileage: string }>>({});
+  const [_driverEdits, _setDriverEdits] = useState<Record<string, { mileage: string }>>({});
   const [selectedWorker, setSelectedWorker] = useState<UserRow | null>(null);
   const [workerEdit, setWorkerEdit] = useState<Partial<UserRow> | null>(null);
   const [workerError, setWorkerError] = useState<string | null>(null);
@@ -338,7 +338,7 @@ function App() {
   // User creation modal state
   // (Removed UserFormModal)
 
-  const [revisionSidebarOpen, setRevisionSidebarOpen] = useState(false);
+  const [_revisionSidebarOpen, _setRevisionSidebarOpen] = useState(false);
 
   const buildBlankClientForm = () => ({
     first_name: "",
@@ -435,7 +435,7 @@ function App() {
     wood_size_other: "",
   });
 
-  const [deliveryForm, setDeliveryForm] = useState({
+  const [_deliveryForm, _setDeliveryForm] = useState({
     title: "",
     description: "",
     event_type: "delivery",
@@ -667,7 +667,7 @@ function App() {
     }
   }, [auditLogFilter, activeTab, session]);
 
-  const initials = useMemo(() => {
+  const _initials = useMemo(() => {
     if (!session?.name) return "FB";
     const parts = session.name.split(" ").filter(Boolean);
     return parts
@@ -1948,7 +1948,7 @@ function App() {
                               return "#e9ecef"; // Light gray default
                             };
 
-                            const statusColor = getStatusColor(c.approval_status);
+                            const _statusColor = getStatusColor(c.approval_status);
 
                             return (
                               <div
