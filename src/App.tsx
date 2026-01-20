@@ -286,6 +286,14 @@ function App() {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrderRow | null>(null);
   const [workOrderDetailOpen, setWorkOrderDetailOpen] = useState(false);
+  const [workOrderEditMode, setWorkOrderEditMode] = useState(false);
+  const [workOrderEditForm, setWorkOrderEditForm] = useState({
+    scheduled_date: "",
+    status: "",
+    assignees: [] as string[],
+    mileage: "",
+    notes: "",
+  });
 
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [showChangeRequestModal, setShowChangeRequestModal] = useState(false);
@@ -4368,7 +4376,10 @@ function App() {
                       justifyContent: "center",
                       zIndex: 1000,
                     }}
-                    onClick={() => setWorkOrderDetailOpen(false)}
+                    onClick={() => {
+                      setWorkOrderDetailOpen(false);
+                      setWorkOrderEditMode(false);
+                    }}
                   >
                     <div
                       className="card"
@@ -4386,7 +4397,10 @@ function App() {
                         <button
                           className="ghost"
                           type="button"
-                          onClick={() => setWorkOrderDetailOpen(false)}
+                          onClick={() => {
+                            setWorkOrderDetailOpen(false);
+                            setWorkOrderEditMode(false);
+                          }}
                           style={{ padding: "0.25rem 0.5rem" }}
                         >
                           ×
@@ -4542,6 +4556,86 @@ function App() {
                         )}
                       </div>
 
+                      {/* Edit Form for Admin/Staff */}
+                      {workOrderEditMode && (session?.role === "admin" || session?.role === "staff" || session?.role === "lead") && (
+                        <div style={{ marginTop: "1rem", borderTop: "1px solid #eee", paddingTop: "1rem" }}>
+                          <h4 style={{ marginBottom: "0.75rem" }}>Edit Work Order</h4>
+                          <div className="form-grid" style={{ gap: "0.75rem" }}>
+                            <label>
+                              Scheduled Date/Time
+                              <input
+                                type="datetime-local"
+                                value={workOrderEditForm.scheduled_date}
+                                onChange={(e) =>
+                                  setWorkOrderEditForm({ ...workOrderEditForm, scheduled_date: e.target.value })
+                                }
+                              />
+                            </label>
+                            <label>
+                              Status
+                              <select
+                                value={workOrderEditForm.status}
+                                onChange={(e) =>
+                                  setWorkOrderEditForm({ ...workOrderEditForm, status: e.target.value })
+                                }
+                              >
+                                <option value="received">received</option>
+                                <option value="pending">pending</option>
+                                <option value="scheduled">scheduled</option>
+                                <option value="in_progress">in_progress</option>
+                                <option value="completed">completed</option>
+                                <option value="cancelled">cancelled</option>
+                              </select>
+                            </label>
+                            <label className="span-2">
+                              Assign Drivers
+                              <select
+                                multiple
+                                value={workOrderEditForm.assignees}
+                                onChange={(e) => {
+                                  const selected = Array.from(e.target.selectedOptions, (opt) => opt.value);
+                                  setWorkOrderEditForm({ ...workOrderEditForm, assignees: selected });
+                                }}
+                                style={{ minHeight: "80px" }}
+                              >
+                                {users
+                                  .filter((u) => u.is_driver)
+                                  .map((u) => (
+                                    <option key={u.id} value={u.name}>
+                                      {u.name}
+                                    </option>
+                                  ))}
+                              </select>
+                              <span className="muted" style={{ fontSize: "0.8rem" }}>
+                                Hold Ctrl/Cmd to select multiple
+                              </span>
+                            </label>
+                            <label>
+                              Mileage
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                value={workOrderEditForm.mileage}
+                                onChange={(e) =>
+                                  setWorkOrderEditForm({ ...workOrderEditForm, mileage: e.target.value })
+                                }
+                              />
+                            </label>
+                            <label className="span-2">
+                              Notes
+                              <textarea
+                                value={workOrderEditForm.notes}
+                                onChange={(e) =>
+                                  setWorkOrderEditForm({ ...workOrderEditForm, notes: e.target.value })
+                                }
+                                rows={3}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      )}
+
                       <div
                         style={{
                           marginTop: "1.5rem",
@@ -4550,13 +4644,93 @@ function App() {
                           justifyContent: "flex-end",
                         }}
                       >
-                        <button
-                          className="ghost"
-                          type="button"
-                          onClick={() => setWorkOrderDetailOpen(false)}
-                        >
-                          Close
-                        </button>
+                        {(session?.role === "admin" || session?.role === "staff" || session?.role === "lead") && !workOrderEditMode && (
+                          <button
+                            className="ghost"
+                            type="button"
+                            onClick={() => {
+                              // Populate edit form with current values
+                              const assignees: string[] = (() => {
+                                try {
+                                  const arr = JSON.parse(selectedWorkOrder.assignees_json || "[]");
+                                  return Array.isArray(arr) ? arr : [];
+                                } catch {
+                                  return [];
+                                }
+                              })();
+                              setWorkOrderEditForm({
+                                scheduled_date: selectedWorkOrder.scheduled_date
+                                  ? selectedWorkOrder.scheduled_date.slice(0, 16)
+                                  : "",
+                                status: selectedWorkOrder.status || "received",
+                                assignees,
+                                mileage: selectedWorkOrder.mileage != null ? String(selectedWorkOrder.mileage) : "",
+                                notes: selectedWorkOrder.notes || "",
+                              });
+                              setWorkOrderEditMode(true);
+                            }}
+                          >
+                            Edit
+                          </button>
+                        )}
+                        {workOrderEditMode && (
+                          <>
+                            <button
+                              className="ghost"
+                              type="button"
+                              onClick={() => setWorkOrderEditMode(false)}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={async () => {
+                                setBusy(true);
+                                try {
+                                  // Update assignees
+                                  await invokeTauri("update_work_order_assignees", {
+                                    input: {
+                                      work_order_id: selectedWorkOrder.id,
+                                      assignees_json: JSON.stringify(workOrderEditForm.assignees),
+                                    },
+                                  });
+                                  // Update status and mileage
+                                  await invokeTauri("update_work_order_status", {
+                                    input: {
+                                      work_order_id: selectedWorkOrder.id,
+                                      status: workOrderEditForm.status,
+                                      mileage: workOrderEditForm.mileage ? Number(workOrderEditForm.mileage) : null,
+                                      is_driver: session?.isDriver ?? false,
+                                    },
+                                    role: session?.role ?? null,
+                                    actor: session?.name ?? session?.username ?? null,
+                                  });
+                                  await loadWorkOrders();
+                                  await loadDeliveries();
+                                  setWorkOrderEditMode(false);
+                                  setWorkOrderDetailOpen(false);
+                                  setSelectedWorkOrder(null);
+                                } catch (e: any) {
+                                  alert(typeof e === "string" ? e : JSON.stringify(e));
+                                } finally {
+                                  setBusy(false);
+                                }
+                              }}
+                            >
+                              {busy ? "Saving..." : "Save Changes"}
+                            </button>
+                          </>
+                        )}
+                        {!workOrderEditMode && (
+                          <button
+                            className="ghost"
+                            type="button"
+                            onClick={() => setWorkOrderDetailOpen(false)}
+                          >
+                            Close
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
