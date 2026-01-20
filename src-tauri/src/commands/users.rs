@@ -2,11 +2,72 @@ use crate::{AppState, LoginInput, LoginResponse, ChangePasswordInput, EnsureUser
 use tauri::State;
 use bcrypt::{verify, hash, DEFAULT_COST};
 use serde::Deserialize;
+use uuid;
+
+// Generate a unique username from first and last name
+async fn generate_unique_username(pool: &sqlx::SqlitePool, first_name: &str, last_name: &str) -> Result<String, String> {
+    let first_initial = first_name.chars().next().unwrap_or(' ').to_lowercase().to_string();
+    let last_name_clean = last_name.to_lowercase().replace(" ", "").replace("-", "");
+
+    let base_username = format!("{}{}", first_initial, last_name_clean);
+
+    // Check if base username exists
+    let existing_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM auth_users WHERE username LIKE ? AND is_deleted = 0"
+    )
+    .bind(format!("{}%", base_username))
+    .fetch_one(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if existing_count.0 == 0 {
+        return Ok(base_username);
+    }
+
+    // Find the next available number
+    for i in 1..100 {  // Reasonable limit to prevent infinite loops
+        let candidate = format!("{}{}", base_username, i);
+        let count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM auth_users WHERE username = ? AND is_deleted = 0"
+        )
+        .bind(&candidate)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if count.0 == 0 {
+            return Ok(candidate);
+        }
+    }
+
+    Err("Could not generate unique username".to_string())
+}
 
 #[derive(Debug, Deserialize)]
 pub struct ResetPasswordInput {
     user_id: String,
     new_password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateUserInput {
+    pub name: String,
+    pub email: String,
+    pub telephone: String,
+    pub username: Option<String>, // Optional - will auto-generate if not provided
+    pub password: String,
+    pub physical_address_line1: String,
+    pub physical_address_line2: String,
+    pub physical_address_city: String,
+    pub physical_address_state: String,
+    pub physical_address_postal_code: String,
+    pub mailing_address_line1: String,
+    pub mailing_address_line2: String,
+    pub mailing_address_city: String,
+    pub mailing_address_state: String,
+    pub mailing_address_postal_code: String,
+    pub role: String,
+    pub is_driver: bool,
 }
 
 // User authentication and management commands
@@ -138,10 +199,114 @@ pub async fn reset_password(state: State<'_, AppState>, input: ResetPasswordInpu
 }
 
 #[tauri::command]
-pub async fn create_user(state: State<'_, AppState>, input: serde_json::Value, role: Option<String>) -> Result<String, String> {
-    // TODO: Implement full user creation logic
-    // For now, return not implemented
-    Err("User creation not yet implemented".to_string())
+pub async fn create_user(state: State<'_, AppState>, input: CreateUserInput, role: Option<String>) -> Result<String, String> {
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    if role_val != "admin" && role_val != "lead" {
+        return Err("Only admins or leads can create users".to_string());
+    }
+
+    // Parse name to generate username if not provided
+    let name_parts: Vec<&str> = input.name.split_whitespace().collect();
+    if name_parts.len() < 2 {
+        return Err("Full name (first and last) is required".to_string());
+    }
+
+    let first_name = name_parts[0];
+    let last_name = name_parts[name_parts.len() - 1];
+
+    // Generate unique username
+    let username = if let Some(provided_username) = &input.username {
+        provided_username.clone()
+    } else {
+        generate_unique_username(&state.pool, first_name, last_name).await?
+    };
+
+    // Validate inputs
+    let password = input.password.trim().to_string();
+    if password.is_empty() {
+        return Err("Password is required".to_string());
+    }
+
+    // Check if username already exists
+    let existing_login = sqlx::query!(
+        r#"
+        SELECT id FROM auth_users
+        WHERE lower(username) = lower(?)
+          AND is_deleted = 0
+        LIMIT 1
+        "#,
+        username
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if existing_login.is_some() {
+        return Err(format!("Username '{}' already exists", username));
+    }
+
+    // Hash password
+    let hashed_password = hash(&password, DEFAULT_COST).map_err(|e| e.to_string())?;
+
+    // Start transaction
+    let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
+
+    // Create user record
+    let user_id = sqlx::query(
+        r#"
+        INSERT INTO users (
+            id, name, email, telephone,
+            physical_address_line1, physical_address_line2, physical_address_city, physical_address_state, physical_address_postal_code,
+            mailing_address_line1, mailing_address_line2, mailing_address_city, mailing_address_state, mailing_address_postal_code,
+            role, is_driver, hipaa_certified, created_at, updated_at, is_deleted
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'), 0)
+        "#,
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&input.name)
+    .bind(input.email.as_str())
+    .bind(input.telephone.as_str())
+    .bind(&input.physical_address_line1)
+    .bind(&input.physical_address_line2)
+    .bind(&input.physical_address_city)
+    .bind(&input.physical_address_state)
+    .bind(&input.physical_address_postal_code)
+    .bind(&input.mailing_address_line1)
+    .bind(&input.mailing_address_line2)
+    .bind(&input.mailing_address_city)
+    .bind(&input.mailing_address_state)
+    .bind(&input.mailing_address_postal_code)
+    .bind(&input.role)
+    .bind(input.is_driver)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let user_id_str = user_id.last_insert_rowid().to_string();
+
+    // Create auth record
+    sqlx::query(
+        r#"
+        INSERT INTO auth_users (
+            id, user_id, username, password, created_at, updated_at, is_deleted
+        ) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+        "#,
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&user_id_str)
+    .bind(&username)
+    .bind(&hashed_password)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // Commit transaction
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    // TODO: Add audit logging
+    // audit_db(&state.pool, "create_user", &role_val, &input.name).await;
+
+    Ok(user_id_str)
 }
 
 #[tauri::command]
