@@ -83,23 +83,40 @@ export default function Dashboard({
   const woodSummary = useMemo(() => {
     let split = 0;
     let unsplit = 0;
+    let hasSplitItem = false;
+    let hasUnsplitItem = false;
 
     inventory.forEach((item) => {
+      const name = (item.name || "").toLowerCase();
       const cat = (item.category || "").toLowerCase();
-      // Heuristic: "split" in category -> Split; "log", "round" -> Unsplit.
-      // If neither, we might ignore or classify based on unit.
-      // For now, assuming "Split Wood" vs "Logs/Rounds".
+      const unit = (item.unit || "").toLowerCase();
       const qty = item.quantity_on_hand;
 
-      if (cat.includes("split")) {
+      // Check for split firewood
+      if (name.includes("split") && (name.includes("firewood") || name.includes("wood")) && !name.includes("unsplit")) {
         split += qty;
+        hasSplitItem = true;
+      } else if (cat.includes("split") && !cat.includes("unsplit")) {
+        split += qty;
+        hasSplitItem = true;
+      }
+      // Check for unsplit/rounds/logs
+      else if (name.includes("unsplit") || name.includes("round") || name.includes("log")) {
+        unsplit += qty;
+        hasUnsplitItem = true;
       } else if (cat.includes("log") || cat.includes("round") || cat.includes("unsplit")) {
         unsplit += qty;
+        hasUnsplitItem = true;
       }
-      // items that don't match (e.g. oil, chainsaw) are ignored for this summary
+      // Also check if it's a wood category with cords unit
+      else if (cat === "wood" && unit.includes("cord")) {
+        // Default to split if unclear
+        split += qty;
+        hasSplitItem = true;
+      }
     });
 
-    return { split, unsplit };
+    return { split, unsplit, hasSplitItem, hasUnsplitItem };
   }, [inventory]);
 
   // --- Calendar Logic ---
@@ -177,6 +194,30 @@ export default function Dashboard({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", paddingBottom: "2rem" }}>
+      {/* Warning if no wood inventory */}
+      {!woodSummary.hasSplitItem && (
+        <div
+          className="card"
+          style={{
+            background: "#fff3cd",
+            borderColor: "#ffc107",
+            borderWidth: "2px",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+          }}
+        >
+          <span style={{ fontSize: "1.5rem" }}>⚠️</span>
+          <div>
+            <strong style={{ color: "#856404" }}>No Wood Inventory Found</strong>
+            <div style={{ fontSize: "0.9rem", color: "#856404" }}>
+              Please add a "Split Firewood" inventory item to track wood stock. 
+              Work orders cannot be processed without a wood inventory item.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Hero / Summary Section */}
       <div className="hero">
         <div style={{ display: "flex", gap: "1rem", marginTop: "1rem" }}>
