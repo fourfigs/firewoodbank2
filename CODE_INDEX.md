@@ -18,19 +18,32 @@ firewoodbank2/
 │   ├── assets/
 │   │   └── logo.png             # Application logo
 │   └── components/
-│       └── Nav.tsx              # Navigation component
+│       ├── AdminPanel.tsx        # MOTD + change requests
+│       ├── ChangeRequestModal.tsx# Request change modal
+│       ├── Dashboard.tsx         # Dashboard widgets
+│       ├── GlobalErrorBoundary.tsx
+│       └── Nav.tsx               # Navigation component
 │
 ├── src-tauri/                    # Backend Rust application
 │   ├── src/
-│   │   ├── main.rs              # Main Rust application (1426 lines)
-│   │   └── db.rs                # Database initialization module
+│   │   ├── main.rs              # Main Rust application (~2650 lines)
+│   │   ├── db.rs                # Database initialization module
+│   │   ├── sync.rs              # Sync hooks skeleton
+│   │   └── bin/
+│   │       └── bootstrap_db.rs  # DB bootstrap for SQLx
 │   ├── migrations/              # SQLite database migrations
 │   │   ├── 0001_init.sql
 │   │   ├── 0002_add_work_order_assignees.sql
 │   │   ├── 0003_stage5_2_intake.sql
 │   │   ├── 0004_audit_and_user_flags.sql
 │   │   ├── 0005_add_user_driver_flag.sql
-│   │   └── 0006_add_driver_details.sql
+│   │   ├── 0006_add_driver_details.sql
+│   │   ├── 0007_add_user_availability_schedule.sql
+│   │   ├── 0008_add_client_wood_size_directions.sql
+│   │   ├── 0009_add_client_first_last_name.sql
+│   │   ├── 0010_remove_client_number.sql
+│   │   ├── 0011_add_user_logins_and_addresses.sql
+│   │   └── 0012_add_auth_user_unique.sql
 │   ├── build.rs                 # Build script
 │   ├── Cargo.toml               # Rust dependencies
 │   └── tauri.conf.json          # Tauri configuration
@@ -43,6 +56,8 @@ firewoodbank2/
 ├── package.json                 # Node.js dependencies
 ├── vite.config.ts               # Vite configuration
 ├── tsconfig.json                # TypeScript configuration
+├── APP_TSX_TOC.md               # App.tsx line index
+├── DESKTOP_ROLLOUT_CHECKLIST.md # Desktop rollout checklist
 ├── README.md                    # Project readme
 ├── ROADMAP.md                   # Development roadmap
 └── NOTES.md                     # Development notes
@@ -68,6 +83,7 @@ firewoodbank2/
 - **UUID** 1.9
 - **Chrono** 0.4 (datetime)
 - **Anyhow** 1.0 (error handling)
+- **bcrypt** 0.15 (password hashing)
 
 ### Database
 - **SQLite** (via SQLx)
@@ -96,7 +112,7 @@ firewoodbank2/
 
 ### 2. Backend (`src-tauri/src/`)
 
-#### `main.rs` (1426 lines)
+#### `main.rs` (~2650 lines)
 Main Rust application file containing:
 
 **App State:**
@@ -113,7 +129,10 @@ Main Rust application file containing:
 - `InventoryUpdateInput`: Inventory item update input
 - `WorkOrderInput`: Work order creation input
 - `WorkOrderUpdateInput`: Work order update input
-- `UserUpdateFlagsInput`: User flag updates input
+- `UserUpdateInput`: Worker profile update input (contact, address, driver, HIPAA)
+- `CreateUserInput`: Worker creation input (includes login)
+- `LoginInput`: Username/password login input
+- `CreateInvoiceInput`: Invoice creation input (from work order)
 - `DeliveryEventInput`: Delivery event creation input
 - `MOTDInput`: Message of the day creation input
 
@@ -121,11 +140,13 @@ Main Rust application file containing:
 - `ClientRow`: Client database row
 - `InventoryRow`: Inventory item database row
 - `WorkOrderRow`: Work order database row
-- `UserRow`: User database row
+- `UserRow`: Worker database row (includes addresses)
 - `DeliveryEventRow`: Delivery event database row
 - `MOTDRow`: MOTD database row
+- `InvoiceRow`: Invoice database row
+- `SyncRecord`: Sync placeholder record
 
-**Tauri Commands (20 total):**
+**Tauri Commands (expanded):**
 
 1. **`ping()`** - Test command for Rust↔React bridge
 2. **`create_client()`** - Create a new client
@@ -144,10 +165,20 @@ Main Rust application file containing:
 15. **`adjust_inventory_for_transition_tx()`** - Internal helper for inventory transitions
 16. **`create_delivery_event()`** - Create a delivery event
 17. **`list_delivery_events()`** - List delivery events
-18. **`list_users()`** - List all users
-19. **`update_user_flags()`** - Update user flags (is_driver, hipaa_certified, etc.)
-20. **`list_motd()`** - List messages of the day
-21. **`create_motd()`** - Create a new message of the day
+18. **`list_users()`** - List all workers
+19. **`ensure_user_exists()`** - Ensure worker exists for session
+20. **`create_user()`** - Create worker + login
+21. **`login_user()`** - Login with username/password
+22. **`update_user_flags()`** - Update worker profile/flags
+23. **`list_invoices()`** - List invoices
+24. **`create_invoice_from_work_order()`** - Create invoice from completed work order
+25. **`list_motd()`** - List messages of the day
+26. **`create_motd()`** - Create a new message of the day
+27. **`list_change_requests()`** - List change requests
+28. **`create_change_request()`** - Create a change request
+29. **`resolve_change_request()`** - Resolve a change request
+30. **`list_audit_logs()`** - List audit logs
+31. **`list_pending_changes()`** - Sync placeholder
 
 **Helper Functions:**
 - `adjust_inventory_for_transition_tx()`: Handles inventory reservation/release on work order status changes
@@ -200,6 +231,12 @@ TypeScript interface definitions (matching Rust structs):
 4. **0004_audit_and_user_flags.sql** - Audit logging and user flags
 5. **0005_add_user_driver_flag.sql** - Driver flag support
 6. **0006_add_driver_details.sql** - Driver details (license, vehicle, etc.)
+7. **0007_add_user_availability_schedule.sql** - Weekly availability schedule
+8. **0008_add_client_wood_size_directions.sql** - Client wood size/directions
+9. **0009_add_client_first_last_name.sql** - Client first/last split
+10. **0010_remove_client_number.sql** - Remove client_number
+11. **0011_add_user_logins_and_addresses.sql** - Login table + worker addresses
+12. **0012_add_auth_user_unique.sql** - Unique login per worker
 
 ---
 
@@ -228,11 +265,19 @@ TypeScript interface definitions (matching Rust structs):
 - Mileage tracking
 - Inventory impact tracking
 
+### Invoices
+- Draft invoices generated from completed work orders
+- Stored client snapshot for printing
+
 ### Delivery Events
 - Calendar-based delivery scheduling
 - Linked to work orders
 - Type classification (Delivery, Meeting, Workday)
 - Color coding support
+
+### Sync Hooks
+- `SyncService` skeleton in `src-tauri/src/sync.rs`
+- `list_pending_changes` placeholder command
 
 ### Client Management
 - Full onboarding form support
@@ -248,6 +293,11 @@ TypeScript interface definitions (matching Rust structs):
 - Vehicle information
 - HIPAA certification flags
 - Availability tracking
+
+### Authentication
+- `auth_users` table with bcrypt-hashed passwords
+- One login per worker
+- Seeded demo accounts (see README)
 
 ### Messages of the Day (MOTD)
 - System-wide messages
@@ -285,7 +335,25 @@ All commands are invoked from the frontend using `invoke()` from `@tauri-apps/ap
 
 ### User Commands
 - `list_users(): Promise<UserRow[]>`
-- `update_user_flags(id, input: UserUpdateFlagsInput): Promise<void>`
+- `ensure_user_exists(input): Promise<string>`
+- `create_user(input, role?): Promise<string>`
+- `login_user(input): Promise<LoginResponse>`
+- `update_user_flags(id, input: UserUpdateInput): Promise<void>`
+
+### Invoice Commands
+- `list_invoices(): Promise<InvoiceRow[]>`
+- `create_invoice_from_work_order(input): Promise<string>`
+
+### Change Request Commands
+- `create_change_request(input): Promise<string>`
+- `list_change_requests(): Promise<ChangeRequestRow[]>`
+- `resolve_change_request(input): Promise<void>`
+
+### Audit Log Commands
+- `list_audit_logs(filter): Promise<AuditLogRow[]>`
+
+### Sync Commands
+- `list_pending_changes(): Promise<SyncRecord[]>`
 
 ### MOTD Commands
 - `list_motd(): Promise<MOTDRow[]>`
@@ -298,7 +366,7 @@ All commands are invoked from the frontend using `invoke()` from `@tauri-apps/ap
 
 ## 📝 Development Status
 
-**Current Stage**: Stage 5.4 - Reports / Audit Log Viewer  
+**Current Stage**: Stage 12 - Sync Hooks  
 **Branch Pattern**: `stage-X-[name]`
 
 See `ROADMAP.md` for detailed stage information.
@@ -310,7 +378,7 @@ See `ROADMAP.md` for detailed stage information.
 ### Development
 ```bash
 npm install
-npm run dev          # Runs both UI (Vite) and Tauri in parallel
+npm run dev          # UI + Tauri (set DATABASE_URL for SQLx)
 npm run dev:ui       # UI only (http://localhost:5173)
 npm run dev:tauri    # Tauri only
 ```
@@ -324,16 +392,17 @@ npm run build        # Builds for production
 - Database file: `firewoodbank.db` (at project root)
 - Can be overridden with `DATABASE_URL` environment variable
 - Migrations run automatically on startup via SQLx
+ - For SQLx compile-time checks, run `cargo run --bin bootstrap_db` first
 
 ---
 
 ## 🔍 Code Statistics
 
-- **Rust**: ~1,426 lines (main.rs) + db.rs + structs
-- **TypeScript/TSX**: ~200+ lines (App.tsx, components)
-- **SQL Migrations**: 6 migration files
-- **Tauri Commands**: 20 commands exposed to frontend
-- **Database Tables**: Clients, Work Orders, Inventory, Users, Delivery Events, Audit Logs, MOTD
+- **Rust**: ~2,650 lines (main.rs) + db.rs + sync.rs
+- **TypeScript/TSX**: ~4,100+ lines (App.tsx, components)
+- **SQL Migrations**: 12 migration files
+- **Tauri Commands**: 30+ commands exposed to frontend
+- **Database Tables**: Clients, Work Orders, Inventory, Users, Delivery Events, Audit Logs, MOTD, Auth Users, Invoices
 
 ---
 

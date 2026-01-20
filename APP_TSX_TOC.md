@@ -7,43 +7,45 @@ This file lists high-level sections in `src/App.tsx` with line numbers for quick
 - 11: `tabs` list
 - 13: `Role` type
 - 15: `UserSession` type
-- 24: `ClientRow` type
-- 53: `ClientConflictRow` type
-- 61: `InventoryRow` type
-- 73: `WorkOrderRow` type
-- 95: `UserRow` type
-- 111: `DeliveryEventRow` type
-- 122: `MotdRow` type
-- 130: `AuditLogRow` type
+- 26: `ClientRow` type
+- 55: `ClientConflictRow` type
+- 63: `InventoryRow` type
+- 75: `WorkOrderRow` type
+- 97: `UserRow` type
+- 123: `LoginResponse` type
+- 134: `DeliveryEventRow` type
+- 145: `MotdRow` type
+- 153: `AuditLogRow` type
 
 ## Helper Utilities
-- 140-146: `normalizePhone`
-- 148: `isValidPhone`
-- 149: `normalizeState`
-- 150-157: `US_STATES`
-- 158-161: `isValidState`
-- 162: `normalizePostal`
-- 163: `isValidPostal`
-- 164-170: `initCapCity`
-- 172-181: `safeDate`
+- 163-169: `normalizePhone`
+- 171: `isValidPhone`
+- 172: `normalizeState`
+- 173-180: `US_STATES`
+- 181-184: `isValidState`
+- 185: `normalizePostal`
+- 186: `isValidPostal`
+- 187-194: `initCapCity`
+- 195-204: `safeDate`
+- 206: `isSameDay`
 
 ## Components
-- 183-365: `LoginCard` component (login + forgot password flow)
-- 366-3571: `App` component (main app shell)
+- 208-375: `LoginCard` component (login + forgot password flow)
+- 377-4127: `App` component (main app shell)
 
 ## App Component Detail
-- 367-518: `useState` hooks (app state, forms, flags)
-- 438-535: form helpers (`buildBlankClientForm`, `buildBlankInventoryForm`, `resetClientForm`, `resetInventoryForm`)
-- 543-611: data loaders (`loadClients`, `loadInventory`, `loadWorkOrders`, `loadDeliveries`, `loadUsers`, `loadAuditLogs`, `loadMotd`, `loadAll`)
-- 633-734: memoized derived data (`filteredClients`, `visibleTabs`, `initials`, `userDeliveryHours`)
-- 709-718: effects (initial loads + report refresh)
+- 378-560: `useState` hooks (app state, forms, flags)
+- 558-644: form helpers (`buildBlankClientForm`, `buildBlankInventoryForm`, `resetClientForm`, `resetInventoryForm`)
+- 579-647: data loaders (`loadClients`, `loadInventory`, `loadWorkOrders`, `loadDeliveries`, `loadUsers`, `loadAuditLogs`, `loadMotd`, `loadAll`)
+- 689-867: memoized derived data (`filteredClients`, `visibleTabs`, `initials`, `userDeliveryHours`, `deliveredOrdersForClient`)
+- 741-775: effects (initial loads + report refresh)
 
 ## App Render: Tabs
-- 828-838: Dashboard tab render
-- 839-842: Admin tab render
-- 843-1795: Clients tab render
-- 1796-2050: Inventory tab render
-- 2051-2977: Work Orders tab render
-- 2978-3080: Metrics tab render
-- 3081-3440: Worker Directory tab render
-- 3441-3571: Reports tab render
+- 968-978: Dashboard tab render
+- 979-982: Admin tab render
+- 983-1998: Clients tab render
+- 1999-2253: Inventory tab render
+- 2254-3268: Work Orders tab render
+- 3269-3371: Metrics tab render
+- 3372-3984: Worker Directory tab render
+- 3985-4127: Reports tab render

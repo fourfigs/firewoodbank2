@@ -199,3 +199,12 @@ All critical features for stages 1–5.4 have been implemented. The remaining it
 
 The core functionality for all stages through 5.4 is present and working.
 
+---
+
+## ✅ Stage 8–12 Addendum (2026-01-19)
+
+- ✅ Stage 8 (Invoices + Printing) implemented on `stage-8-invoices`
+- ✅ Stage 9 (Driver Mode) implemented on `stage-9-driver`
+- ✅ Stage 10 (HIPAA Checklist) implemented on `stage-10-hipaa`
+- ✅ Stage 11 (Desktop Rollout Checklist) implemented on `stage-11-desktop`
+- ✅ Stage 12 (Sync Hooks Skeleton) implemented on `stage-12-sync`

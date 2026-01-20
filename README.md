@@ -2,7 +2,7 @@
 
 A desktop-first Tauri application for managing Community Firewood Bank operations including client onboarding, inventory tracking, work orders, deliveries, and invoicing.
 
-**Current Status**: Stage 7 Complete - Users, Change Requests, MOTD, and Login Redesign  
+**Current Status**: Stage 12 Complete (see `ROADMAP.md` for branches)  
 **Repository**: https://github.com/fourfigs/firewoodbank2
 
 ---
@@ -14,8 +14,10 @@ This application provides a comprehensive management console for firewood bank o
 - **Client Management**: Onboarding, approval workflows, contact information, addresses
 - **Inventory Tracking**: Equipment and supplies with reorder thresholds and reservation tracking
 - **Work Orders**: Delivery scheduling, status tracking, mileage recording, worker assignments
+- **Invoicing**: Draft invoices generated from completed work orders (Stage 8 branch)
 - **Delivery Events**: Calendar-based delivery scheduling with assignments
 - **User Management**: Role-based access (Admin, Lead, Staff, Volunteer/Driver) with HIPAA compliance features
+- **Driver Mode**: Driver-facing updates for today’s deliveries (Stage 9 branch)
 - **Audit Logging**: Complete activity tracking
 - **Messages of the Day**: System-wide messaging
 
@@ -39,6 +41,7 @@ This application provides a comprehensive management console for firewood bank o
 - **Serde** 1.0 (serialization)
 - **UUID** 1.9
 - **Chrono** 0.4 (datetime handling)
+- **bcrypt** 0.15 (password hashing)
 
 ### Database
 
@@ -53,6 +56,7 @@ This application provides a comprehensive management console for firewood bank o
 - **Node.js** 18+ and npm
 - **Rust** 1.76+ (install via [rustup](https://rustup.rs/))
 - **Tauri CLI** (installed automatically via npm)
+- **MSVC Build Tools** (Windows): Visual Studio Build Tools w/ C++ workload
 
 ### Installation
 
@@ -69,9 +73,17 @@ cd firewoodbank2
 npm install
 ```
 
-3. Run in development mode:
+3. Bootstrap the database (required for SQLx compile-time checks):
 
 ```bash
+cd src-tauri
+cargo run --bin bootstrap_db
+```
+
+4. Run in development mode (PowerShell):
+
+```bash
+$env:DATABASE_URL="sqlite:///C:/firewood%20bank/firewoodbank2/firewoodbank.db"
 npm run dev
 ```
 
@@ -80,6 +92,19 @@ This will:
 - Start the Vite dev server on `http://localhost:5173`
 - Launch the Tauri application window
 - Automatically run database migrations on startup
+
+**PowerShell note:** If you see a `npm.ps1` execution policy error, run:
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+### Default Logins (Seeded)
+
+- `admin` / `admin`
+- `lead` / `lead`
+- `staff` / `staff`
+- `volunteer` / `volunteer`
+- `sketch` / `Sketching2!` (admin)
 
 ### Build for Production
 
@@ -120,7 +145,7 @@ firewoodbank2/
 
 ## 🗄️ Database
 
-The application uses SQLite with automatic migrations. The database file (`firewoodbank.db`) is created at the project root on first run.
+The application uses SQLite with automatic migrations. The database file (`firewoodbank.db`) is created at the project root on first run. Authentication logins are stored in the `auth_users` table (bcrypt-hashed).
 
 ### Migrations
 
@@ -132,6 +157,12 @@ Migrations are automatically applied on startup. Current migrations:
 - `0004_audit_and_user_flags.sql` - Audit logs and HIPAA flags
 - `0005_add_user_driver_flag.sql` - Driver capability flags
 - `0006_add_driver_details.sql` - Driver license details
+- `0007_add_user_availability_schedule.sql` - Weekly availability schedule
+- `0008_add_client_wood_size_directions.sql` - Client wood size/directions
+- `0009_add_client_first_last_name.sql` - Client first/last split
+- `0010_remove_client_number.sql` - Remove client_number
+- `0011_add_user_logins_and_addresses.sql` - Login table + worker addresses
+- `0012_add_auth_user_unique.sql` - Unique login per worker
 
 ### Environment Variables
 
@@ -139,6 +170,11 @@ You can override the database location by setting:
 
 ```bash
 DATABASE_URL=sqlite:///path/to/your/database.db
+```
+
+On Windows paths with spaces, URL-encode them, e.g.:
+```bash
+DATABASE_URL=sqlite:///C:/firewood%20bank/firewoodbank2/firewoodbank.db
 ```
 
 ---
@@ -149,7 +185,7 @@ DATABASE_URL=sqlite:///path/to/your/database.db
 
 - Full access to all features
 - Can view all PII (Personally Identifiable Information)
-- Can manage users, clients, inventory, work orders
+- Can manage workers, clients, inventory, work orders
 - Can create and manage MOTD
 
 ### Lead
@@ -157,20 +193,20 @@ DATABASE_URL=sqlite:///path/to/your/database.db
 - Can view PII if HIPAA certified
 - Can manage clients, inventory, work orders
 - Can assign drivers and close work orders
-- Limited user management
+- Limited worker management
 
 ### Staff
 
 - Can create and edit clients, inventory items
 - Can create work orders
 - Cannot view PII without HIPAA certification
-- Cannot manage users
+- Cannot manage workers (must request changes)
 
 ### Volunteer/Driver
 
 - Limited view: only assigned deliveries
 - Can see name, address, and contact info for assigned work
-- Can add mileage and update delivery status
+- Can update delivery status for assigned deliveries
 - Cannot view client PII for non-assigned work
 
 ---
@@ -193,9 +229,13 @@ The application exposes Tauri commands that can be invoked from the frontend. Se
 
 - `create_work_order`, `list_work_orders`, `update_work_order_status`, `update_work_order_assignees`
 
-**Users:**
+**Users/Auth:**
 
-- `list_users`, `update_user_flags`
+- `list_users`, `update_user_flags`, `create_user`, `login_user`, `ensure_user_exists`
+
+**Invoices:**
+
+- `list_invoices`, `create_invoice_from_work_order` (Stage 8 branch)
 
 **Delivery Events:**
 
@@ -221,12 +261,13 @@ The application exposes Tauri commands that can be invoked from the frontend. Se
 - **Audit Logging**: All actions are logged with role, actor, and timestamp
 - **Role-Based Access**: UI and backend enforcement of permissions
 - **Driver Data Isolation**: Drivers only see data for assigned deliveries
+- **Password Hashing**: Logins are stored as bcrypt hashes in `auth_users`
 
 ---
 
 ## 🛣️ Development Roadmap
 
-See `ROADMAP.md` for the complete development roadmap. Current stage: **Stage 7 Complete**
+See `ROADMAP.md` for the complete development roadmap. Current stage: **Stage 12 Complete**
 
 **Completed Stages:**
 
@@ -243,13 +284,13 @@ See `ROADMAP.md` for the complete development roadmap. Current stage: **Stage 7 
 - ✅ Stage 6: Login + Dashboard + Calendar
 - ✅ Stage 7: Users + Change Requests + MOTD (including login redesign)
 
-**Upcoming Stages:**
+**Completed Later Stages (by branch):**
 
-- ⭕ Stage 8: Invoices + Printing
-- ⭕ Stage 9: Driver Mode (Desktop)
-- ⭕ Stage 10: HIPAA Compliance Check
-- ⭕ Stage 11: Desktop Rollout
-- ⭕ Stage 12: Sync Hooks
+- ✅ Stage 8: Invoices + Printing (`stage-8-invoices`)
+- ✅ Stage 9: Driver Mode (Desktop) (`stage-9-driver`)
+- ✅ Stage 10: HIPAA Compliance Check (`stage-10-hipaa`)
+- ✅ Stage 11: Desktop Rollout (`stage-11-desktop`)
+- ✅ Stage 12: Sync Hooks (`stage-12-sync`)
 
 ---
 

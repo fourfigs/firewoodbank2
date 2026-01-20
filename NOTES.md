@@ -24,13 +24,19 @@ Current Status:
 - Stage 5.4: ✅ COMPLETE
 - Stage 6: ✅ COMPLETE (Dashboard + Calendar + Metrics)
 - Stage 7: ✅ COMPLETE (Users, Change Requests, MOTD, Login Refinement)
-- Next: Stage 8 - Invoices + Printing
+- Stage 8: ✅ COMPLETE (Invoices + Printing) — `stage-8-invoices`
+- Stage 9: ✅ COMPLETE (Driver Mode) — `stage-9-driver`
+- Stage 10: ✅ COMPLETE (HIPAA Checklist) — `stage-10-hipaa`
+- Stage 11: ✅ COMPLETE (Desktop Rollout checklist) — `stage-11-desktop`
+- Stage 12: ✅ COMPLETE (Sync hooks skeleton) — `stage-12-sync`
 
 Notes:
 - MOTD is surfaced on login (newest first) via list_motd/create_motd
 - Audit logs persist to audit_logs table with filtering by day/7days/month/year/all
 - Town derivation for volunteer view is NOT needed (old mistake) - standard contact form names should be used
 - Driver availability is now integrated with weekly schedule tracking
+- Auth uses `auth_users` with bcrypt hashes; seed logins include `admin/admin`, `lead/lead`, `staff/staff`, `volunteer/volunteer`, and `sketch/Sketching2!`
+- For SQLx compile-time checks, run `cargo run --bin bootstrap_db` and set `DATABASE_URL` (URL-encode spaces)
 
 Copyable prompts (Stage 0–5) for next agent:
 Stage 0 prompt
