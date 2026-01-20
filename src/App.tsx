@@ -8,7 +8,7 @@ import logo from "./assets/logo.png";
 import firewoodIcon from "./assets/logo.png";
 import "./index.css";
 
-const tabs = ["Dashboard", "Clients", "Inventory", "Work Orders", "Invoices", "Metrics", "Worker Directory", "Reports", "Admin"];
+const tabs = ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics", "Worker Directory", "Reports", "Admin"];
 
 type Role = "admin" | "lead" | "staff" | "volunteer";
 
@@ -92,20 +92,6 @@ type WorkOrderRow = {
   delivery_size_cords?: number | null;
   assignees_json?: string | null;
   created_by_display?: string | null;
-};
-
-type InvoiceRow = {
-  id: string;
-  work_order_id?: string | null;
-  invoice_number: string;
-  invoice_date: string;
-  subtotal: number;
-  tax: number;
-  total: number;
-  client_snapshot_json?: string | null;
-  notes?: string | null;
-  status: string;
-  created_at: string;
 };
 
 type UserRow = {
@@ -216,6 +202,8 @@ const safeDate = (dateStr: string | null | undefined) => {
     return "Error Date";
   }
 };
+
+const isSameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
 
 function LoginCard({
   onLogin,
@@ -398,7 +386,6 @@ function App() {
   const [inventory, setInventory] = useState<InventoryRow[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrderRow[]>([]);
   const [deliveries, setDeliveries] = useState<DeliveryEventRow[]>([]);
-  const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [showClientForm, setShowClientForm] = useState(false);
@@ -406,8 +393,8 @@ function App() {
   const [showWorkOrderForm, setShowWorkOrderForm] = useState(false);
   const [clientError, setClientError] = useState<string | null>(null);
   const [workOrderError, setWorkOrderError] = useState<string | null>(null);
-  const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [progressEdits, setProgressEdits] = useState<Record<string, { status: string; mileage: string }>>({});
+  const [driverEdits, setDriverEdits] = useState<Record<string, { mileage: string }>>({});
   const [selectedWorker, setSelectedWorker] = useState<UserRow | null>(null);
   const [workerEdit, setWorkerEdit] = useState<Partial<UserRow> | null>(null);
   const [workerError, setWorkerError] = useState<string | null>(null);
@@ -437,8 +424,6 @@ function App() {
 
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [showChangeRequestModal, setShowChangeRequestModal] = useState(false);
-  const [invoiceWorkOrderId, setInvoiceWorkOrderId] = useState<string>("");
-  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceRow | null>(null);
 
   // Worker form state (for adding new workers in Worker Directory tab)
   const [showWorkerForm, setShowWorkerForm] = useState(false);
@@ -641,11 +626,6 @@ function App() {
     setUsers(mapped);
   };
 
-  const loadInvoices = async () => {
-    const data = await invoke<InvoiceRow[]>("list_invoices");
-    setInvoices(data);
-  };
-
   const loadAuditLogs = async () => {
     const data = await invoke<AuditLogRow[]>("list_audit_logs", {
       filter: auditLogFilter,
@@ -689,7 +669,7 @@ function App() {
             hipaa_certified: session.hipaaCertified ?? false,
           },
         });
-        tasks.push(loadClients(), loadInventory(), loadUsers(), loadInvoices());
+        tasks.push(loadClients(), loadInventory(), loadUsers());
       }
       if (session?.role === "admin" || session?.role === "lead") {
         tasks.push(loadAuditLogs());
@@ -775,7 +755,7 @@ function App() {
   const visibleTabs = useMemo(() => {
     if (!session) return tabs.filter((t) => t !== "Worker Directory" && t !== "Reports");
     if (session.role === "volunteer") return ["Dashboard", "Work Orders"];
-    if (session.role === "staff") return ["Dashboard", "Clients", "Inventory", "Work Orders", "Invoices", "Metrics"];
+    if (session.role === "staff") return ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics"];
     // admin / lead
     // admin / lead
     if (session.role === "admin" || session.role === "lead") return tabs;
@@ -896,26 +876,45 @@ function App() {
     });
   }, [selectedClientForDetail, workOrders]);
 
-  const invoiceClientName = (invoice: InvoiceRow) => {
-    try {
-      const snapshot = JSON.parse(invoice.client_snapshot_json ?? "{}");
-      return snapshot.client_name || "Unknown client";
-    } catch {
-      return "Unknown client";
-    }
-  };
+  const workOrdersById = useMemo(() => {
+    const map = new Map<string, WorkOrderRow>();
+    workOrders.forEach((wo) => map.set(wo.id, wo));
+    return map;
+  }, [workOrders]);
 
-  const invoicedWorkOrderIds = useMemo(() => {
-    return new Set(invoices.map((inv) => inv.work_order_id).filter(Boolean));
-  }, [invoices]);
-
-  const pendingInvoiceWorkOrders = useMemo(() => {
-    return workOrders.filter(
-      (wo) =>
-        (wo.status ?? "").toLowerCase() === "completed" &&
-        !invoicedWorkOrderIds.has(wo.id),
-    );
-  }, [invoicedWorkOrderIds, workOrders]);
+  const driverDeliveries = useMemo(() => {
+    if (!session) return [];
+    const today = new Date();
+    const uname = (session.username ?? "").toLowerCase();
+    const displayName = (session.name ?? "").toLowerCase();
+    return deliveries
+      .filter((d) => (d.event_type ?? "").toLowerCase() === "delivery")
+      .filter((d) => {
+        try {
+          return isSameDay(new Date(d.start_date), today);
+        } catch {
+          return false;
+        }
+      })
+      .filter((d) => {
+        let assigned: string[] = [];
+        try {
+          const parsed = JSON.parse(d.assigned_user_ids_json ?? "[]");
+          if (Array.isArray(parsed)) {
+            assigned = parsed
+              .map((x) => (typeof x === "string" ? x.toLowerCase() : ""))
+              .filter(Boolean);
+          }
+        } catch {
+          assigned = [];
+        }
+        return assigned.includes(uname) || (displayName && assigned.includes(displayName));
+      })
+      .map((d) => ({
+        delivery: d,
+        workOrder: d.work_order_id ? workOrdersById.get(d.work_order_id) : undefined,
+      }));
+  }, [deliveries, session, workOrdersById]);
 
   return (
     <div className="app">
@@ -2254,6 +2253,98 @@ function App() {
 
                 {activeTab === "Work Orders" && (
                   <div className="stack">
+                    {isDriver && (
+                      <div className="card muted">
+                        <div className="list-head">
+                          <h3>Driver Mode - Today's Deliveries</h3>
+                        </div>
+                        {!driverDeliveries.length && (
+                          <div className="muted">No deliveries assigned for today.</div>
+                        )}
+                        {driverDeliveries.map(({ delivery, workOrder }) => (
+                          <div key={`driver-${delivery.id}`} className="list-card" style={{ marginBottom: 12 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                              <div>
+                                <strong>{workOrder?.client_name ?? delivery.title}</strong>
+                                <div className="muted">
+                                  {workOrder?.physical_address_line1 ?? "Address not available"}{" "}
+                                  {workOrder?.physical_address_city ?? ""}{" "}
+                                  {workOrder?.physical_address_state ?? ""}{" "}
+                                  {workOrder?.physical_address_postal_code ?? ""}
+                                </div>
+                                <div className="muted">
+                                  Phone: {workOrder?.telephone ?? "—"}
+                                </div>
+                              </div>
+                              <div className="pill">{workOrder?.status ?? "scheduled"}</div>
+                            </div>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                              <select
+                                value={progressEdits[workOrder?.id ?? ""]?.status ?? workOrder?.status ?? "in_progress"}
+                                onChange={(e) => {
+                                  if (!workOrder?.id) return;
+                                  setProgressEdits({
+                                    ...progressEdits,
+                                    [workOrder.id]: {
+                                      status: e.target.value,
+                                      mileage: progressEdits[workOrder.id]?.mileage ?? "",
+                                    },
+                                  });
+                                }}
+                              >
+                                <option value="in_progress">en route</option>
+                                <option value="delivered">delivered</option>
+                                <option value="issue">issue</option>
+                              </select>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                placeholder="Mileage"
+                                value={workOrder?.id ? (progressEdits[workOrder.id]?.mileage ?? "") : ""}
+                                onChange={(e) => {
+                                  if (!workOrder?.id) return;
+                                  setProgressEdits({
+                                    ...progressEdits,
+                                    [workOrder.id]: {
+                                      status: progressEdits[workOrder.id]?.status ?? workOrder.status,
+                                      mileage: e.target.value,
+                                    },
+                                  });
+                                }}
+                                style={{ width: 120 }}
+                              />
+                              <button
+                                className="ping"
+                                type="button"
+                                disabled={!workOrder?.id || busy}
+                                onClick={async () => {
+                                  if (!workOrder?.id) return;
+                                  const edit = progressEdits[workOrder.id] ?? { status: "in_progress", mileage: "" };
+                                  setBusy(true);
+                                  try {
+                                    await invoke("update_work_order_status", {
+                                      input: {
+                                        work_order_id: workOrder.id,
+                                        status: edit.status,
+                                        mileage: edit.mileage === "" ? null : Number(edit.mileage),
+                                        is_driver: true,
+                                      },
+                                      role: session?.role ?? null,
+                                    });
+                                    await loadWorkOrders();
+                                  } finally {
+                                    setBusy(false);
+                                  }
+                                }}
+                              >
+                                Update status
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="card muted">
                       <div className="add-header">
                         <button
@@ -2268,7 +2359,7 @@ function App() {
                             } else {
                               setWorkOrderForm({
                                 client_id: "",
-                                scheduled_date: "",
+                                scheduled_date: formatDateTimeLocal(new Date()),
                                 status: "received",
                                 gate_combo: "",
                                 notes: "",
@@ -3171,139 +3262,6 @@ function App() {
                           </div>
                         );
                       })()}
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === "Invoices" && (
-                  <div className="stack">
-                    <div className="card muted">
-                      <div className="add-header">
-                        <h3>Generate invoice</h3>
-                      </div>
-                      {invoiceError && (
-                        <div className="pill" style={{ background: "#fbe2e2", color: "#b3261e" }}>
-                          {invoiceError}
-                        </div>
-                      )}
-                      <div className="form-grid">
-                        <label className="span-2">
-                          Completed work order
-                          <select
-                            value={invoiceWorkOrderId}
-                            onChange={(e) => setInvoiceWorkOrderId(e.target.value)}
-                          >
-                            <option value="">Select a completed work order</option>
-                            {pendingInvoiceWorkOrders.map((wo) => (
-                              <option key={`invoice-wo-${wo.id}`} value={wo.id}>
-                                {wo.client_name} • {safeDate(wo.scheduled_date)} • {wo.delivery_size_label ?? "Delivery"}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <div className="actions span-2">
-                          <button
-                            className="ping"
-                            type="button"
-                            disabled={!invoiceWorkOrderId || busy}
-                            onClick={async () => {
-                              if (!invoiceWorkOrderId) return;
-                              setInvoiceError(null);
-                              setBusy(true);
-                              try {
-                                await invoke("create_invoice_from_work_order", {
-                                  work_order_id: invoiceWorkOrderId,
-                                });
-                                setInvoiceWorkOrderId("");
-                                await loadInvoices();
-                              } catch (err) {
-                                setInvoiceError(typeof err === "string" ? err : "Failed to create invoice.");
-                              } finally {
-                                setBusy(false);
-                              }
-                            }}
-                          >
-                            {busy ? "Creating..." : "Create invoice"}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="two-up">
-                      <div className="card">
-                        <div className="list-head">
-                          <h3>Invoices</h3>
-                        </div>
-                        <div className="table">
-                          <div className="table-head">
-                            <span>Invoice</span>
-                            <span>Client</span>
-                            <span>Date</span>
-                            <span>Total</span>
-                          </div>
-                          {invoices.map((inv) => (
-                            <div
-                              className="table-row"
-                              key={`invoice-${inv.id}`}
-                              onClick={() => setSelectedInvoice(inv)}
-                              style={{ cursor: "pointer" }}
-                            >
-                              <div>{inv.invoice_number}</div>
-                              <div>{invoiceClientName(inv)}</div>
-                              <div>{safeDate(inv.invoice_date)}</div>
-                              <div>{inv.total.toFixed(2)}</div>
-                            </div>
-                          ))}
-                          {!invoices.length && <div className="table-row">No invoices yet.</div>}
-                        </div>
-                      </div>
-
-                      <div className="card">
-                        {selectedInvoice ? (
-                          <div className="stack">
-                            <div className="list-head">
-                              <h3>{selectedInvoice.invoice_number}</h3>
-                              <button className="ghost" onClick={() => setSelectedInvoice(null)}>
-                                Close
-                              </button>
-                            </div>
-                            {(() => {
-                              let snapshot: any = {};
-                              try {
-                                snapshot = JSON.parse(selectedInvoice.client_snapshot_json ?? "{}");
-                              } catch {
-                                snapshot = {};
-                              }
-                              return (
-                                <>
-                                  <div><strong>Date:</strong> {safeDate(selectedInvoice.invoice_date)}</div>
-                                  <div><strong>Client:</strong> {snapshot.client_name ?? "Unknown"}</div>
-                                  <div>
-                                    <strong>Address:</strong>{" "}
-                                    {snapshot.physical_address_line1 ?? "—"}, {snapshot.physical_address_city ?? ""}{" "}
-                                    {snapshot.physical_address_state ?? ""} {snapshot.physical_address_postal_code ?? ""}
-                                  </div>
-                                  <div><strong>Phone:</strong> {snapshot.telephone ?? "—"}</div>
-                                  <div><strong>Email:</strong> {snapshot.email ?? "—"}</div>
-                                  {snapshot.delivery_size_label && (
-                                    <div><strong>Delivery:</strong> {snapshot.delivery_size_label}</div>
-                                  )}
-                                  <div><strong>Total:</strong> {selectedInvoice.total.toFixed(2)}</div>
-                                </>
-                              );
-                            })()}
-                            <button
-                              className="ping"
-                              type="button"
-                              onClick={() => window.print()}
-                            >
-                              Print invoice
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="muted">Select an invoice to view details.</div>
-                        )}
-                      </div>
                     </div>
                   </div>
                 )}

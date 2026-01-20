@@ -2258,13 +2258,16 @@ async fn update_work_order_status(
         return Err("Mileage is required to mark completed".to_string());
     }
 
-    // Drivers can only move to in_progress and set mileage; volunteers cannot update; staff/leads/admin can update status.
-    if role_val == "volunteer" {
+    // Volunteers can only update if they are marked as drivers.
+    if role_val == "volunteer" && !driver_capable {
         return Err("Volunteers cannot update status/mileage".to_string());
     }
 
-    if driver_capable && input.status.is_some() && next_status != "in_progress" {
-        return Err("Drivers can only mark in_progress with mileage".to_string());
+    if driver_capable && input.status.is_some() {
+        let allowed = ["in_progress", "delivered", "issue"];
+        if !allowed.contains(&next_status.as_str()) {
+            return Err("Drivers can only mark in_progress, delivered, or issue".to_string());
+        }
     }
 
     sqlx::query(
