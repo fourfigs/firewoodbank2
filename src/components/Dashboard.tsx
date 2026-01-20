@@ -406,6 +406,8 @@ export default function Dashboard({
                 if (!day.date) return <div key={idx} style={{ background: "transparent" }} />;
 
                 const events = getEventsForDate(day.date);
+                const deliveryEvents = events.filter((e) => (e.event_type || "").toLowerCase() === "delivery");
+                const otherEvents = events.filter((e) => (e.event_type || "").toLowerCase() !== "delivery");
                 const isTodayFlag = isToday(day.date);
 
                 return (
@@ -432,7 +434,28 @@ export default function Dashboard({
                       {day.date.getDate()}
                     </div>
                     <div className="stack" style={{ gap: "2px" }}>
-                      {events.map((ev) => (
+                      {/* Show delivery count badge if there are deliveries */}
+                      {deliveryEvents.length > 0 && (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "4px",
+                            fontSize: "0.7rem",
+                            background: "#e67f1e",
+                            color: "white",
+                            padding: "3px 6px",
+                            borderRadius: "4px",
+                            fontWeight: "bold",
+                          }}
+                          title={deliveryEvents.map((e) => e.title).join(", ")}
+                        >
+                          🚚 {deliveryEvents.length} {deliveryEvents.length === 1 ? "delivery" : "deliveries"}
+                        </div>
+                      )}
+                      {/* Show other events individually */}
+                      {otherEvents.map((ev) => (
                         <div
                           key={ev.id}
                           style={{
