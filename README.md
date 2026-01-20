@@ -177,6 +177,11 @@ On Windows paths with spaces, URL-encode them, e.g.:
 DATABASE_URL=sqlite:///C:/firewood%20bank/firewoodbank2/firewoodbank.db
 ```
 
+You can also create a local `.env` file in the repo root:
+```bash
+DATABASE_URL=sqlite:///C:/firewood%20bank/firewoodbank2/firewoodbank.db
+```
+
 ---
 
 ## 👥 User Roles & Permissions
