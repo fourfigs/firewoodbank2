@@ -250,6 +250,8 @@ function App() {
   const [showClientForm, setShowClientForm] = useState(false);
   const [showInventoryForm, setShowInventoryForm] = useState(false);
   const [showWorkOrderForm, setShowWorkOrderForm] = useState(false);
+  const [newWorkOrderId, setNewWorkOrderId] = useState<string>("");
+  const [newWorkOrderEntryDate, setNewWorkOrderEntryDate] = useState<string>("");
   const [clientError, setClientError] = useState<string | null>(null);
   const [workOrderError, setWorkOrderError] = useState<string | null>(null);
   const [progressEdits, setProgressEdits] = useState<
@@ -872,6 +874,7 @@ function App() {
                     motdItems={motdItems}
                     users={users}
                     userDeliveryHours={userDeliveryHours}
+                    workOrders={workOrders}
                   />
                 )}
 
@@ -2100,6 +2103,8 @@ function App() {
                                     pickup_height: "",
                                     pickup_units: "ft",
                                   });
+                                  setNewWorkOrderId(crypto.randomUUID());
+                                  setNewWorkOrderEntryDate(new Date().toISOString());
                                   setShowWorkOrderForm(true);
                                   setActiveTab("Work Orders");
                                   setClientDetailSidebarOpen(false);
@@ -2887,6 +2892,9 @@ function App() {
                                 wood_size_other: "",
                               });
                               setWorkOrderError(null);
+                              // Generate preview Order ID and entry date
+                              setNewWorkOrderId(crypto.randomUUID());
+                              setNewWorkOrderEntryDate(new Date().toISOString());
                               setShowWorkOrderForm(true);
                             }
                           }}
@@ -2900,6 +2908,31 @@ function App() {
                       )}
                       {showWorkOrderForm ? (
                         <>
+                          {/* Entry Date and Order ID display */}
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "1rem",
+                              background: "#f5f5f5",
+                              padding: "0.75rem 1rem",
+                              borderRadius: "6px",
+                              marginBottom: "0.5rem",
+                              fontSize: "0.9rem",
+                            }}
+                          >
+                            <div>
+                              <strong>Entry Date:</strong>{" "}
+                              {new Date(newWorkOrderEntryDate).toLocaleDateString()}{" "}
+                              {new Date(newWorkOrderEntryDate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </div>
+                            <div style={{ color: "#666" }}>|</div>
+                            <div>
+                              <strong>Order ID:</strong>{" "}
+                              <span style={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
+                                {newWorkOrderId.slice(0, 8).toUpperCase()}
+                              </span>
+                            </div>
+                          </div>
                           {workOrderError && (
                             <div
                               className="pill"

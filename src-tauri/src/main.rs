@@ -466,6 +466,7 @@ struct WorkOrderRow {
     pickup_units: Option<String>,
     assignees_json: Option<String>,
     created_by_display: Option<String>,
+    created_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -1386,7 +1387,8 @@ async fn list_work_orders(
             pickup_height,
             pickup_units,
             COALESCE(assignees_json, '[]') as assignees_json,
-            created_by_display
+            created_by_display,
+            created_at
         FROM work_orders
         WHERE is_deleted = 0
         ORDER BY (scheduled_date IS NULL), datetime(scheduled_date) DESC, created_at DESC

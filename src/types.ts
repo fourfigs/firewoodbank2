@@ -85,6 +85,7 @@ export type WorkOrderRow = {
   pickup_units?: string | null;
   assignees_json?: string | null;
   created_by_display?: string | null;
+  created_at?: string | null;
 };
 
 export type UserRow = {

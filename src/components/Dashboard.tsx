@@ -42,6 +42,17 @@ type UserSession = {
   isDriver?: boolean;
 };
 
+type WorkOrderRow = {
+  id: string;
+  client_name: string;
+  status: string;
+  scheduled_date?: string | null;
+  delivery_size_cords?: number | null;
+  pickup_quantity_cords?: number | null;
+  pickup_delivery_type?: string | null;
+  created_at?: string | null;
+};
+
 interface DashboardProps {
   session: UserSession;
   deliveries: DeliveryEventRow[];
@@ -51,6 +62,7 @@ interface DashboardProps {
   // We should ideally fetch them or accept them. I'll accept them as props for now.
   users: UserRow[];
   userDeliveryHours: { hours: number; deliveries: number; woodCreditCords: number };
+  workOrders: WorkOrderRow[];
 }
 
 // Helper to check if a date is today
@@ -75,6 +87,7 @@ export default function Dashboard({
   motdItems,
   users,
   userDeliveryHours,
+  workOrders,
 }: DashboardProps) {
   const [calendarView, setCalendarView] = useState<"2weeks" | "month">("2weeks");
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -118,6 +131,54 @@ export default function Dashboard({
 
     return { split, unsplit, hasSplitItem, hasUnsplitItem };
   }, [inventory]);
+
+  // --- Pending Orders Wood Demand ---
+  const pendingOrdersAnalysis = useMemo(() => {
+    // Count wood needed for non-completed, non-cancelled orders
+    const pendingStatuses = ["received", "pending", "scheduled", "in_progress"];
+    const pendingOrders = workOrders.filter((wo) =>
+      pendingStatuses.includes((wo.status || "").toLowerCase())
+    );
+
+    let totalWoodNeeded = 0;
+    pendingOrders.forEach((wo) => {
+      const isPickup = (wo.pickup_delivery_type || "").toLowerCase() === "pickup";
+      if (isPickup) {
+        totalWoodNeeded += wo.pickup_quantity_cords ?? 0;
+      } else {
+        totalWoodNeeded += wo.delivery_size_cords ?? 0;
+      }
+    });
+
+    return {
+      count: pendingOrders.length,
+      totalWoodNeeded,
+    };
+  }, [workOrders]);
+
+  // --- Unscheduled Orders ---
+  const unscheduledOrders = useMemo(() => {
+    return workOrders.filter((wo) => {
+      const status = (wo.status || "").toLowerCase();
+      // Not completed, not cancelled, and no scheduled date
+      const isActive = !["completed", "cancelled", "picked_up"].includes(status);
+      const hasNoSchedule = !wo.scheduled_date;
+      return isActive && hasNoSchedule;
+    });
+  }, [workOrders]);
+
+  // --- Wood Shortage Calculation ---
+  const woodShortage = useMemo(() => {
+    const available = woodSummary.split;
+    const needed = pendingOrdersAnalysis.totalWoodNeeded;
+    const shortage = needed - available;
+    return {
+      isShort: shortage > 0,
+      amount: shortage,
+      available,
+      needed,
+    };
+  }, [woodSummary.split, pendingOrdersAnalysis.totalWoodNeeded]);
 
   // --- Calendar Logic ---
   const calendarDays = useMemo(() => {
@@ -213,6 +274,33 @@ export default function Dashboard({
             <div style={{ fontSize: "0.9rem", color: "#856404" }}>
               Please add a "Split Firewood" inventory item to track wood stock. 
               Work orders cannot be processed without a wood inventory item.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Red warning if orders exceed wood on hand */}
+      {woodShortage.isShort && woodSummary.hasSplitItem && (
+        <div
+          className="card"
+          style={{
+            background: "#ffebee",
+            borderColor: "#e53935",
+            borderWidth: "2px",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+          }}
+        >
+          <span style={{ fontSize: "1.5rem" }}>🚨</span>
+          <div>
+            <strong style={{ color: "#c62828" }}>Wood Shortage Warning</strong>
+            <div style={{ fontSize: "0.9rem", color: "#c62828" }}>
+              Pending orders require <strong>{woodShortage.needed.toFixed(1)} cords</strong> but only{" "}
+              <strong>{woodShortage.available.toFixed(1)} cords</strong> available.{" "}
+              <strong style={{ color: "#b71c1c" }}>
+                Short by {woodShortage.amount.toFixed(1)} cords.
+              </strong>
             </div>
           </div>
         </div>
@@ -463,6 +551,50 @@ export default function Dashboard({
                 </ul>
               </div>
             </>
+          )}
+
+          {/* Unscheduled Orders */}
+          {unscheduledOrders.length > 0 && (
+            <div
+              className="card"
+              style={{ borderColor: "#ff9800", borderWidth: "2px" }}
+            >
+              <h3 style={{ color: "#e65100" }}>
+                Unscheduled Orders
+                <span
+                  className="badge"
+                  style={{ backgroundColor: "#ff9800", color: "white", marginLeft: "0.5rem" }}
+                >
+                  {unscheduledOrders.length}
+                </span>
+              </h3>
+              <ul className="list" style={{ marginTop: "0.5rem" }}>
+                {unscheduledOrders.slice(0, 8).map((wo) => (
+                  <li key={wo.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <strong>{wo.client_name}</strong>
+                      <div style={{ fontSize: "0.8rem", color: "#666" }}>
+                        ID: {wo.id.slice(0, 8)}... • {wo.created_at ? new Date(wo.created_at).toLocaleDateString() : "—"}
+                      </div>
+                    </div>
+                    <span
+                      className="pill"
+                      style={{
+                        fontSize: "0.75rem",
+                        background: wo.status === "received" ? "#e3f2fd" : "#fff3e0",
+                      }}
+                    >
+                      {wo.status}
+                    </span>
+                  </li>
+                ))}
+                {unscheduledOrders.length > 8 && (
+                  <li className="muted" style={{ textAlign: "center" }}>
+                    +{unscheduledOrders.length - 8} more...
+                  </li>
+                )}
+              </ul>
+            </div>
           )}
         </div>
       </div>
