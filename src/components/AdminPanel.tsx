@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invokeTauri } from '../api/tauri';
 
 type MotdRow = {
     id: string;
@@ -52,7 +52,7 @@ export default function AdminPanel({ session }: AdminPanelProps) {
     const loadMotds = async () => {
         try {
             // Fetch ALL (including inactive) to manage them
-            const data = await invoke<MotdRow[]>('list_motd', { activeOnly: false });
+            const data = await invokeTauri<MotdRow[]>('list_motd', { activeOnly: false });
             setMotds(data);
         } catch (e: any) {
             setError(e.toString());
@@ -61,7 +61,7 @@ export default function AdminPanel({ session }: AdminPanelProps) {
 
     const loadChangeRequests = async () => {
         try {
-            const data = await invoke<ChangeRequestRow[]>('list_change_requests', { status: 'open' }); // Start with open
+            const data = await invokeTauri<ChangeRequestRow[]>('list_change_requests', { status: 'open' }); // Start with open
             setChangeRequests(data);
         } catch (e: any) {
             setError(e.toString());
@@ -77,7 +77,7 @@ export default function AdminPanel({ session }: AdminPanelProps) {
         e.preventDefault();
         setBusy(true);
         try {
-            await invoke('create_motd', {
+            await invokeTauri('create_motd', {
                 input: {
                     message: motdForm.message,
                     active_from: motdForm.active_from || null,
@@ -98,7 +98,7 @@ export default function AdminPanel({ session }: AdminPanelProps) {
         if (!window.confirm('Delete this message?')) return;
         setBusy(true);
         try {
-            await invoke('delete_motd', { id });
+            await invokeTauri('delete_motd', { id });
             await loadMotds();
         } catch (e: any) {
             setError(e.toString());
@@ -111,7 +111,7 @@ export default function AdminPanel({ session }: AdminPanelProps) {
         if (!selectedRequest) return;
         setBusy(true);
         try {
-            await invoke('resolve_change_request', {
+            await invokeTauri('resolve_change_request', {
                 id: selectedRequest.id,
                 status,
                 resolutionNotes: resolutionNotes,

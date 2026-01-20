@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invokeTauri } from '../api/tauri';
 
 interface ChangeRequestModalProps {
     isOpen: boolean;
@@ -20,7 +20,7 @@ export default function ChangeRequestModal({ isOpen, onClose, userId }: ChangeRe
         e.preventDefault();
         setBusy(true);
         try {
-            await invoke('create_change_request', {
+            await invokeTauri('create_change_request', {
                 input: {
                     title,
                     description,

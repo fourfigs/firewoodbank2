@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeTauri } from "./api/tauri";
 import Nav from "./components/Nav";
 import Dashboard from "./components/Dashboard";
 import AdminPanel from "./components/AdminPanel";
@@ -67,7 +67,7 @@ function LoginCard({
     setSubmitting(true);
     setLoginError(null);
     try {
-      const response = await invoke<LoginResponse>("login_user", {
+      const response = await invokeTauri<LoginResponse>("login_user", {
         username,
         password,
       });
@@ -408,7 +408,7 @@ function App() {
 
 
   const loadClients = async () => {
-    const data = await invoke<ClientRow[]>("list_clients", {
+    const data = await invokeTauri<ClientRow[]>("list_clients", {
       role: session?.role ?? null,
       username: session?.username ?? null,
       hipaa_certified: session?.hipaaCertified ?? false,
@@ -418,12 +418,12 @@ function App() {
   };
 
   const loadInventory = async () => {
-    const data = await invoke<InventoryRow[]>("list_inventory_items");
+    const data = await invokeTauri<InventoryRow[]>("list_inventory_items");
     setInventory(data);
   };
 
   const loadWorkOrders = async () => {
-    const data = await invoke<WorkOrderRow[]>("list_work_orders", {
+    const data = await invokeTauri<WorkOrderRow[]>("list_work_orders", {
       role: session?.role ?? null,
       username: session?.username ?? null,
       hipaa_certified: session?.hipaaCertified ?? false,
@@ -438,7 +438,7 @@ function App() {
   };
 
   const loadDeliveries = async () => {
-    const data = await invoke<DeliveryEventRow[]>("list_delivery_events", {
+    const data = await invokeTauri<DeliveryEventRow[]>("list_delivery_events", {
       role: session?.role ?? null,
       username: session?.username ?? null,
       hipaa_certified: session?.hipaaCertified ?? false,
@@ -448,7 +448,7 @@ function App() {
   };
 
   const loadUsers = async () => {
-    const data = await invoke<UserRow[]>("list_users");
+    const data = await invokeTauri<UserRow[]>("list_users");
     const mapped = data.map((u) => ({
       ...u,
       is_driver: !!u.is_driver,
@@ -458,7 +458,7 @@ function App() {
   };
 
   const loadAuditLogs = async () => {
-    const data = await invoke<AuditLogRow[]>("list_audit_logs", {
+    const data = await invokeTauri<AuditLogRow[]>("list_audit_logs", {
       filter: auditLogFilter,
     });
     setAuditLogs(data);
@@ -466,7 +466,7 @@ function App() {
 
   const loadMotd = async () => {
     try {
-      const items = await invoke<MotdRow[]>("list_motd", { active_only: true });
+      const items = await invokeTauri<MotdRow[]>("list_motd", { active_only: true });
       // Backend returns newest first, but ensure ordering just in case.
       items.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
       setMotdItems(items);
@@ -480,7 +480,7 @@ function App() {
     try {
       const tasks: Promise<unknown>[] = [];
       if (session?.role === "admin" || session?.role === "lead" || session?.role === "staff") {
-        await invoke("ensure_user_exists", {
+        await invokeTauri("ensure_user_exists", {
           input: {
             name: session.name,
             email: session.email ?? null,
@@ -919,7 +919,7 @@ function App() {
                                 setBusy(true);
                                 try {
                                   const fullName = `${clientForm.first_name.trim()} ${clientForm.last_name.trim()}`.trim();
-                                  const conflicts = await invoke<ClientConflictRow[]>("check_client_conflict", {
+                                  const conflicts = await invokeTauri<ClientConflictRow[]>("check_client_conflict", {
                                     name: fullName,
                                   });
                                   const conflictAtOtherAddress = conflicts.some((c) => {
@@ -1052,14 +1052,14 @@ function App() {
                                   };
 
                                   if (editingClientId) {
-                                    await invoke("update_client", {
+                                    await invokeTauri("update_client", {
                                       input: {
                                         ...payload,
                                         id: editingClientId,
                                       },
                                     });
                                   } else {
-                                    await invoke("create_client", { input: payload });
+                                    await invokeTauri("create_client", { input: payload });
                                   }
                                   await loadClients();
                                   resetClientForm();
@@ -1699,7 +1699,7 @@ function App() {
                                     if (!window.confirm(`Delete client ${selectedClientForDetail.name}? This marks them deleted.`)) return;
                                     setBusy(true);
                                     try {
-                                      await invoke("delete_client", { id: selectedClientForDetail.id });
+                                      await invokeTauri("delete_client", { id: selectedClientForDetail.id });
                                       await loadClients();
                                       setClientDetailSidebarOpen(false);
                                       setSelectedClientForDetail(null);
@@ -1879,14 +1879,14 @@ function App() {
                                 created_by_user_id: null,
                               };
                               if (editingInventoryId) {
-                                await invoke("update_inventory_item", {
+                                await invokeTauri("update_inventory_item", {
                                   input: {
                                     ...payload,
                                     id: editingInventoryId,
                                   },
                                 });
                               } else {
-                                await invoke("create_inventory_item", { input: payload });
+                                await invokeTauri("create_inventory_item", { input: payload });
                               }
                               await loadInventory();
                               resetInventoryForm();
@@ -2062,7 +2062,7 @@ function App() {
                                         if (!window.confirm(`Delete ${item.name}? This marks it deleted.`)) return;
                                         setBusy(true);
                                         try {
-                                          await invoke("delete_inventory_item", { id: item.id });
+                                          await invokeTauri("delete_inventory_item", { id: item.id });
                                           await loadInventory();
                                         } finally {
                                           setBusy(false);
@@ -2154,7 +2154,7 @@ function App() {
                                   const edit = progressEdits[workOrder.id] ?? { status: "in_progress", mileage: "" };
                                   setBusy(true);
                                   try {
-                                    await invoke("update_work_order_status", {
+                                    await invokeTauri("update_work_order_status", {
                                       input: {
                                         work_order_id: workOrder.id,
                                         status: edit.status,
@@ -2335,7 +2335,7 @@ function App() {
                                   return;
                                 }
                                 const fullName = `${nc.first_name.trim()} ${nc.last_name.trim()}`.trim();
-                                const conflicts = await invoke<ClientConflictRow[]>("check_client_conflict", {
+                                const conflicts = await invokeTauri<ClientConflictRow[]>("check_client_conflict", {
                                   name: fullName,
                                 });
                                 const conflictAtOtherAddress = conflicts.some((c) => {
@@ -2350,7 +2350,7 @@ function App() {
                                   return;
                                 }
 
-                                const newClientId = await invoke<string>("create_client", {
+                                const newClientId = await invokeTauri<string>("create_client", {
                                   input: {
                                     client_title: null,
                                     name: fullName,
@@ -2431,7 +2431,7 @@ function App() {
                               setBusy(true);
                               try {
                                 try {
-                                  await invoke("create_work_order", {
+                                  await invokeTauri("create_work_order", {
                                     input: {
                                       client_id: targetClient.id,
                                       client_title: null,
@@ -3061,7 +3061,7 @@ function App() {
                                           }
                                           setBusy(true);
                                           try {
-                                            await invoke("update_work_order_status", {
+                                            await invokeTauri("update_work_order_status", {
                                               input: {
                                                 work_order_id: wo.id,
                                                 status: session?.role === "lead" || session?.role === "admin" ? edit.status : "in_progress",
@@ -3263,7 +3263,7 @@ function App() {
                                   setWorkerFormError(null);
                                   setBusy(true);
                                   try {
-                                    await invoke("create_user", {
+                                    await invokeTauri("create_user", {
                                       input: {
                                         name: workerForm.name,
                                         email: workerForm.email || null,
@@ -3762,7 +3762,7 @@ function App() {
                                   }
                                   setBusy(true);
                                   try {
-                                    await invoke("update_user_flags", {
+                                    await invokeTauri("update_user_flags", {
                                       input: {
                                         id: selectedWorker.id,
                                         email: workerEdit?.email ?? null,
@@ -3844,7 +3844,7 @@ function App() {
                               setAuditLogFilter(filter);
                               setBusy(true);
                               try {
-                                const data = await invoke<AuditLogRow[]>("list_audit_logs", {
+                                const data = await invokeTauri<AuditLogRow[]>("list_audit_logs", {
                                   filter: filter,
                                 });
                                 setAuditLogs(data);
@@ -3955,3 +3955,4 @@ function App() {
 }
 
 export default App;
+
