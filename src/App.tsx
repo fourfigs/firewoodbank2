@@ -23,14 +23,16 @@ import {
 import {
   initCapCity,
   isSameDay,
-  isValidPhone,
-  isValidPostal,
-  isValidState,
   normalizePhone,
-  normalizePostal,
   normalizeState,
   safeDate,
 } from "./utils/format";
+import {
+  normalizeAndValidatePhone,
+  normalizeAndValidatePostal,
+  normalizeAndValidateState,
+  normalizeCity,
+} from "./utils/validation";
 
 const tabs = ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics", "Worker Directory", "Reports", "Admin"];
 
@@ -939,22 +941,25 @@ function App() {
                                   const onboardingDate = editingClientId
                                     ? clientForm.date_of_onboarding
                                     : new Date().toISOString().slice(0, 10);
-                                  const normalizedState = normalizeState(clientForm.physical_address_state);
-                                  if (!isValidState(normalizedState)) {
-                                    setClientError("State must be a valid 2-letter US state code (e.g., CA, VT, NY).");
+                                  const stateCheck = normalizeAndValidateState(clientForm.physical_address_state, "State");
+                                  if (stateCheck.error) {
+                                    setClientError(stateCheck.error);
                                     setBusy(false);
                                     return;
                                   }
-                                  const normalizedPostal = normalizePostal(clientForm.physical_address_postal_code);
-                                  if (!isValidPostal(normalizedPostal)) {
-                                    setClientError("Postal code must be 5 digits or 5+4 (##### or #####-####).");
+                                  const postalCheck = normalizeAndValidatePostal(
+                                    clientForm.physical_address_postal_code,
+                                    "Postal code",
+                                  );
+                                  if (postalCheck.error) {
+                                    setClientError(postalCheck.error);
                                     setBusy(false);
                                     return;
                                   }
-                                  const normalizedCity = initCapCity(clientForm.physical_address_city);
-                                  const normalizedPhone = clientForm.telephone ? normalizePhone(clientForm.telephone) : "";
-                                  if (normalizedPhone && !isValidPhone(normalizedPhone)) {
-                                    setClientError("Phone must use (###) ###-#### format.");
+                                  const normalizedCity = normalizeCity(clientForm.physical_address_city);
+                                  const phoneCheck = normalizeAndValidatePhone(clientForm.telephone || "");
+                                  if (phoneCheck.error) {
+                                    setClientError(phoneCheck.error);
                                     setBusy(false);
                                     return;
                                   }
@@ -962,7 +967,7 @@ function App() {
                                   // But still require at least one contact method
                                   const trimmedEmail = clientForm.email.trim();
                                   const finalEmail = clientForm.opt_out_email ? null : (trimmedEmail || null);
-                                  if (!normalizedPhone && !trimmedEmail) {
+                                  if (!phoneCheck.normalized && !trimmedEmail) {
                                     setClientError("Provide at least one contact method (phone or email).");
                                     setBusy(false);
                                     return;
@@ -990,16 +995,22 @@ function App() {
                                       return;
                                     }
                                     // Validate mailing state
-                                    const mailingState = normalizeState(clientForm.mailing_address_state || "");
-                                    if (!isValidState(mailingState)) {
-                                      setClientError("Mailing state must be a valid 2-letter US state code.");
+                                    const mailingStateCheck = normalizeAndValidateState(
+                                      clientForm.mailing_address_state || "",
+                                      "Mailing state",
+                                    );
+                                    if (mailingStateCheck.error) {
+                                      setClientError(mailingStateCheck.error);
                                       setBusy(false);
                                       return;
                                     }
                                     // Validate mailing postal code
-                                    const mailingPostal = normalizePostal(clientForm.mailing_address_postal_code);
-                                    if (!isValidPostal(mailingPostal)) {
-                                      setClientError("Mailing postal code must be 5 digits or 5+4 (##### or #####-####).");
+                                    const mailingPostalCheck = normalizeAndValidatePostal(
+                                      clientForm.mailing_address_postal_code,
+                                      "Mailing postal code",
+                                    );
+                                    if (mailingPostalCheck.error) {
+                                      setClientError(mailingPostalCheck.error);
                                       setBusy(false);
                                       return;
                                     }
@@ -1010,15 +1021,15 @@ function App() {
                                       mailing_address_line1: clientForm.physical_address_line1,
                                       mailing_address_line2: clientForm.physical_address_line2 || null,
                                       mailing_address_city: normalizedCity,
-                                      mailing_address_state: normalizedState,
-                                      mailing_address_postal_code: normalizedPostal,
+                                      mailing_address_state: stateCheck.normalized,
+                                      mailing_address_postal_code: postalCheck.normalized,
                                     }
                                     : {
                                       mailing_address_line1: clientForm.mailing_address_line1 || null,
                                       mailing_address_line2: clientForm.mailing_address_line2 || null,
                                       mailing_address_city: clientForm.mailing_address_city ? initCapCity(clientForm.mailing_address_city) : null,
-                                      mailing_address_state: clientForm.mailing_address_state ? normalizeState(clientForm.mailing_address_state) : null,
-                                      mailing_address_postal_code: clientForm.mailing_address_postal_code ? normalizePostal(clientForm.mailing_address_postal_code) : null,
+                                      mailing_address_state: clientForm.mailing_address_state ? normalizeAndValidateState(clientForm.mailing_address_state).normalized : null,
+                                      mailing_address_postal_code: clientForm.mailing_address_postal_code ? normalizeAndValidatePostal(clientForm.mailing_address_postal_code).normalized : null,
                                     };
 
                                   // Default status to "pending" if no referring agency
@@ -1034,9 +1045,9 @@ function App() {
                                       : `${onboardingDate}T00:00:00`,
                                     physical_address_line2: clientForm.physical_address_line2 || null,
                                     physical_address_city: normalizedCity,
-                                    physical_address_state: normalizedState,
-                                    physical_address_postal_code: normalizedPostal,
-                                    telephone: normalizedPhone || null,
+                                    physical_address_state: stateCheck.normalized,
+                                    physical_address_postal_code: postalCheck.normalized,
+                                    telephone: phoneCheck.normalized || null,
                                     email: finalEmail, // null if opted out, otherwise the email
                                     gate_combo: clientForm.gate_combo || null,
                                     notes: clientForm.notes || null,
@@ -2308,24 +2319,28 @@ function App() {
                                   setWorkOrderError("Please fill first/last name, onboarding date, and address for the new client.");
                                   return;
                                 }
-                                const ncState = normalizeState(nc.physical_address_state);
-                                if (!isValidState(ncState)) {
-                                  setWorkOrderError("New client state must be two letters.");
+                                const ncStateCheck = normalizeAndValidateState(nc.physical_address_state, "New client state");
+                                if (ncStateCheck.error) {
+                                  setWorkOrderError(ncStateCheck.error);
                                   return;
                                 }
-                                const ncPostal = normalizePostal(nc.physical_address_postal_code);
-                                if (ncPostal && !isValidPostal(ncPostal)) {
-                                  setWorkOrderError("New client postal code must be 5 digits or 5+4.");
+                                const ncPostalCheck = normalizeAndValidatePostal(
+                                  nc.physical_address_postal_code,
+                                  "New client postal code",
+                                  true,
+                                );
+                                if (ncPostalCheck.error) {
+                                  setWorkOrderError(ncPostalCheck.error);
                                   return;
                                 }
-                                const ncCity = initCapCity(nc.physical_address_city);
-                                const ncPhone = nc.telephone ? normalizePhone(nc.telephone) : "";
-                                if (ncPhone && !isValidPhone(ncPhone)) {
-                                  setWorkOrderError("New client phone must be (###) ###-####.");
+                                const ncCity = normalizeCity(nc.physical_address_city);
+                                const ncPhoneCheck = normalizeAndValidatePhone(nc.telephone || "");
+                                if (ncPhoneCheck.error) {
+                                  setWorkOrderError(ncPhoneCheck.error);
                                   return;
                                 }
                                 const ncEmail = nc.email.trim();
-                                if (!ncPhone && !ncEmail) {
+                                if (!ncPhoneCheck.normalized && !ncEmail) {
                                   setWorkOrderError("Provide at least one contact (phone/email) for the new client.");
                                   return;
                                 }
@@ -2357,15 +2372,15 @@ function App() {
                                     physical_address_line1: nc.physical_address_line1,
                                     physical_address_line2: null,
                                     physical_address_city: ncCity,
-                                    physical_address_state: ncState,
-                                    physical_address_postal_code: ncPostal,
+                                    physical_address_state: ncStateCheck.normalized,
+                                    physical_address_postal_code: ncPostalCheck.normalized,
                                     date_of_onboarding: `${ncDate}T00:00:00`,
                                     mailing_address_line1: null,
                                     mailing_address_line2: null,
                                     mailing_address_city: null,
                                     mailing_address_state: null,
                                     mailing_address_postal_code: null,
-                                    telephone: ncPhone || null,
+                                    telephone: ncPhoneCheck.normalized || null,
                                     email: ncEmail || null,
                                     how_did_they_hear_about_us: null,
                                     referring_agency: null,
