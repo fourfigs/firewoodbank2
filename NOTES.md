@@ -17,7 +17,7 @@ Completed in Stages 5.2-5.4:
 Major Refactoring Progress (Post-Stage 12):
 - ✅ Frontend Architecture: App.tsx reduced from 5,977 lines to ~504 lines (91% reduction!)
 - ✅ Page Extraction: Created src/pages/ with Clients, Inventory, WorkOrders fully implemented
-- ✅ Backend Organization: Created src-tauri/src/commands/ with users, clients, work_orders, and inventory modules extracted
+- ✅ Backend Organization: Created src-tauri/src/commands/ with users, clients, work_orders, inventory, and invoices modules extracted
 - ✅ Type Consolidation: Removed duplicate type definitions, centralized in types.ts
 - ✅ Auto-username Generation: Implemented smart username creation (first initial + last name, numeric suffixes for duplicates)
 

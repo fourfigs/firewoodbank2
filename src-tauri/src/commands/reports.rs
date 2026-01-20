@@ -1,83 +1,77 @@
-use crate::{AppState, SyncRecord, AuditLogRow, DeliveryEventRow, MotdRow, ChangeRequestRow};
+use crate::{AppState};
 use tauri::State;
+use serde::Serialize;
+use sqlx::FromRow;
 
-// Reporting and system management commands
-
-#[tauri::command]
-pub async fn create_delivery_event(state: State<'_, AppState>, input: serde_json::Value) -> Result<String, String> {
-    // TODO: Extract delivery event creation logic from main.rs
-    Err("Not implemented yet".to_string())
+#[derive(Debug, Serialize, FromRow)]
+pub struct AuditLogRow {
+    pub id: String,
+    pub event: String,
+    pub role: Option<String>,
+    pub actor: Option<String>,
+    pub entity: Option<String>,
+    pub entity_id: Option<String>,
+    pub field: Option<String>,
+    pub old_value: Option<String>,
+    pub new_value: Option<String>,
+    pub created_at: String,
 }
 
-#[tauri::command]
-pub async fn list_delivery_events(
-    state: State<'_, AppState>,
-    role: Option<String>,
-    username: Option<String>,
-    hipaa_certified: Option<bool>,
-    is_driver: Option<bool>,
-) -> Result<Vec<DeliveryEventRow>, String> {
-    // TODO: Extract delivery event listing logic from main.rs
-    Err("Not implemented yet".to_string())
-}
-
-#[tauri::command]
-pub async fn list_motd(state: State<'_, AppState>, active_only: Option<bool>) -> Result<Vec<MotdRow>, String> {
-    // TODO: Extract MOTD listing logic from main.rs
-    Err("Not implemented yet".to_string())
-}
-
-#[tauri::command]
-pub async fn create_motd(state: State<'_, AppState>, input: serde_json::Value) -> Result<String, String> {
-    // TODO: Extract MOTD creation logic from main.rs
-    Err("Not implemented yet".to_string())
-}
-
-#[tauri::command]
-pub async fn delete_motd(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    // TODO: Extract MOTD deletion logic from main.rs
-    Err("Not implemented yet".to_string())
-}
-
-#[tauri::command]
-pub async fn create_change_request(state: State<'_, AppState>, input: serde_json::Value) -> Result<String, String> {
-    // TODO: Extract change request creation logic from main.rs
-    Err("Not implemented yet".to_string())
-}
-
-#[tauri::command]
-pub async fn list_change_requests(state: State<'_, AppState>) -> Result<Vec<ChangeRequestRow>, String> {
-    // TODO: Extract change request listing logic from main.rs
-    Err("Not implemented yet".to_string())
-}
-
-#[tauri::command]
-pub async fn resolve_change_request(
-    state: State<'_, AppState>,
-    id: String,
-    status: String,
-    resolution_notes: Option<String>,
-) -> Result<(), String> {
-    // TODO: Extract change request resolution logic from main.rs
-    Err("Not implemented yet".to_string())
-}
+// Reporting and audit commands
 
 #[tauri::command]
 pub async fn list_audit_logs(
     state: State<'_, AppState>,
-    filter: Option<String>,
+    filter: Option<String>, // "day", "7days", "month", "year", "all"
 ) -> Result<Vec<AuditLogRow>, String> {
-    // TODO: Extract audit log listing logic from main.rs
-    Err("Not implemented yet".to_string())
-}
+    let filter_val = filter.unwrap_or_else(|| "all".to_string());
+    let query = match filter_val.as_str() {
+        "day" => {
+            r#"
+            SELECT id, event, role, actor, entity, entity_id, field, old_value, new_value, created_at
+            FROM audit_logs
+            WHERE date(created_at) = date('now')
+            ORDER BY created_at DESC
+            "#
+        }
+        "7days" => {
+            r#"
+            SELECT id, event, role, actor, entity, entity_id, field, old_value, new_value, created_at
+            FROM audit_logs
+            WHERE created_at >= datetime('now', '-7 days')
+            ORDER BY created_at DESC
+            "#
+        }
+        "month" => {
+            r#"
+            SELECT id, event, role, actor, entity, entity_id, field, old_value, new_value, created_at
+            FROM audit_logs
+            WHERE date(created_at) >= date('now', 'start of month')
+            ORDER BY created_at DESC
+            "#
+        }
+        "year" => {
+            r#"
+            SELECT id, event, role, actor, entity, entity_id, field, old_value, new_value, created_at
+            FROM audit_logs
+            WHERE date(created_at) >= date('now', 'start of year')
+            ORDER BY created_at DESC
+            "#
+        }
+        _ => {
+            // "all" or default
+            r#"
+            SELECT id, event, role, actor, entity, entity_id, field, old_value, new_value, created_at
+            FROM audit_logs
+            ORDER BY created_at DESC
+            "#
+        }
+    };
 
-#[tauri::command]
-pub async fn list_pending_changes(state: State<'_, AppState>) -> Result<Vec<SyncRecord>, String> {
-    // TODO: Extract pending changes listing logic from main.rs
-    Err("Not implemented yet".to_string())
-}
+    let rows = sqlx::query_as::<_, AuditLogRow>(query)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
-#[tauri::command]
-pub fn ping() -> String {
-    "pong".to_string()
+    Ok(rows)
 }
