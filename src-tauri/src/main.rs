@@ -1245,7 +1245,7 @@ async fn create_work_order(
             created_by_user_id, created_by_display
         )
         VALUES (
-            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
             ?, ?, ?,
             ?, ?,
             ?, ?, ?,
@@ -1254,7 +1254,11 @@ async fn create_work_order(
             ?, ?, ?,
             ?, ?, ?,
             ?, ?,
-            ?, ?, ?
+            ?, ?,
+            ?,
+            ?, ?, ?, ?, ?,
+            ?,
+            ?, ?
         )
     "#;
 
