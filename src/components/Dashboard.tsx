@@ -1,58 +1,12 @@
 import React, { useMemo, useState } from "react";
-
-// Types mirrored from App.tsx (ideally these should be in a shared types file)
-type InventoryRow = {
-  id: string;
-  name: string;
-  category?: string | null;
-  quantity_on_hand: number;
-  unit: string;
-  reorder_threshold: number;
-  reorder_amount?: number | null;
-  reserved_quantity: number;
-};
-
-type DeliveryEventRow = {
-  id: string;
-  title: string;
-  event_type: string;
-  start_date: string;
-  end_date?: string | null;
-  work_order_id?: string | null;
-  color_code?: string | null;
-  assigned_user_ids_json?: string | null;
-};
-
-type MotdRow = {
-  id: string;
-  message: string;
-  created_at: string;
-};
-
-type UserRow = {
-  id: string;
-  name: string;
-  role: string;
-  telephone?: string | null;
-  availability_schedule?: string | null;
-};
-
-type UserSession = {
-  name: string;
-  role: string;
-  isDriver?: boolean;
-};
-
-type WorkOrderRow = {
-  id: string;
-  client_name: string;
-  status: string;
-  scheduled_date?: string | null;
-  delivery_size_cords?: number | null;
-  pickup_quantity_cords?: number | null;
-  pickup_delivery_type?: string | null;
-  created_at?: string | null;
-};
+import {
+  InventoryRow,
+  DeliveryEventRow,
+  MotdRow,
+  UserRow,
+  UserSession,
+  WorkOrderRow,
+} from "../types";
 
 interface DashboardProps {
   session: UserSession;

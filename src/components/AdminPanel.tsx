@@ -1,30 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { invokeTauri } from "../api/tauri";
-
-type MotdRow = {
-  id: string;
-  message: string;
-  active_from?: string;
-  active_to?: string;
-  created_at: string;
-};
-
-type ChangeRequestRow = {
-  id: string;
-  title: string;
-  description: string;
-  requested_by_user_id: string;
-  status: string; // 'open', 'resolved', 'rejected'
-  resolution_notes?: string;
-  resolved_by_user_id?: string;
-  created_at: string;
-};
-
-type UserSession = {
-  name: string;
-  username: string;
-  role: string;
-};
+import { MotdRow, ChangeRequestRow, UserSession } from "../types";
 
 interface AdminPanelProps {
   session: UserSession;

@@ -147,6 +147,17 @@ export type MotdRow = {
   created_at: string;
 };
 
+export type ChangeRequestRow = {
+  id: string;
+  title: string;
+  description: string;
+  requested_by_user_id: string;
+  status: string; // 'open', 'in_review', 'approved', 'rejected'
+  resolution_notes?: string;
+  resolved_by_user_id?: string;
+  created_at: string;
+};
+
 export type AuditLogRow = {
   id: string;
   event: string;
