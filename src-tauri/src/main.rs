@@ -1975,7 +1975,7 @@ async fn list_pending_changes(state: State<'_, AppState>) -> Result<Vec<SyncReco
 }
 
 #[tauri::command]
-fn print_invoice(window: tauri::Window) -> Result<(), String> {
+fn print_invoice(window: tauri::WebviewWindow) -> Result<(), String> {
     window.eval("window.print()").map_err(|e| e.to_string())
 }
 
@@ -2757,6 +2757,7 @@ mod tests {
                 quantity_on_hand REAL NOT NULL,
                 reserved_quantity REAL NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
+                updated_at TEXT,
                 is_deleted INTEGER NOT NULL DEFAULT 0
             )
             "#,

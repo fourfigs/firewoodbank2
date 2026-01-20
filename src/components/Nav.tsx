@@ -22,4 +22,3 @@ export function Nav({ tabs, activeTab, onSelect }: NavProps) {
 }
 
 export default Nav;
-

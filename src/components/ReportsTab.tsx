@@ -27,7 +27,11 @@ export default function ReportsTab({
   busy,
   setBusy,
 }: ReportsTabProps) {
-  if (!session || activeTab !== "Reports" || (session.role !== "admin" && session.role !== "lead")) {
+  if (
+    !session ||
+    activeTab !== "Reports" ||
+    (session.role !== "admin" && session.role !== "lead")
+  ) {
     return null;
   }
 

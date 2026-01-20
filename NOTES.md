@@ -38,6 +38,16 @@ Notes:
 - Auth uses `auth_users` with bcrypt hashes; seed logins include `admin/admin`, `lead/lead`, `staff/staff`, `volunteer/volunteer`, and `sketch/Sketching2!`
 - For SQLx compile-time checks, run `cargo run --bin bootstrap_db` and set `DATABASE_URL` (URL-encode spaces)
 
+Review & Improvement Suggestions (Program Structure + Workflow):
+- Split `src/App.tsx` into feature modules (clients, inventory, work orders, invoices, worker directory) and centralize shared UI helpers.
+- Add a thin API layer (e.g., `src/api/*`) to wrap `invoke()` and keep request/response types in one place.
+- Replace `window.print()` with a Tauri-side print command for consistent native printing behavior.
+- Add form-level validation utilities (city/state/phone/zip) to avoid duplicated onBlur handlers.
+- Introduce a real auth flow (password reset, change password) and store password hashes only.
+- Add `dev` docs for DATABASE_URL encoding and `.env` usage to avoid PowerShell pitfalls.
+- Add tests: unit tests for Rust auth + work order status transitions; basic UI smoke tests for critical tabs.
+- Add lint/format config (ESLint/Prettier + rustfmt/clippy) and wire into CI scripts.
+
 Copyable prompts (Stage 0–5) for next agent:
 Stage 0 prompt
 We are building a Windows desktop–first Tauri 2 + React + TypeScript + SQLite app for a Community Firewood Bank.

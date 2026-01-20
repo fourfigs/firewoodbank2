@@ -9,6 +9,5 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <GlobalErrorBoundary>
       <App />
     </GlobalErrorBoundary>
-  </React.StrictMode>
+  </React.StrictMode>,
 );
-
