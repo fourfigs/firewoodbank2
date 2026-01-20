@@ -351,6 +351,7 @@ struct ClientRow {
     wood_size_other: Option<String>,
     directions: Option<String>,
     created_at: String,
+    default_mileage: Option<f64>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -438,6 +439,7 @@ struct WorkOrderInput {
     assignees_json: Option<String>,
     created_by_user_id: Option<String>,
     created_by_display: Option<String>,
+    paired_order_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -467,6 +469,8 @@ struct WorkOrderRow {
     assignees_json: Option<String>,
     created_by_display: Option<String>,
     created_at: Option<String>,
+    paired_order_id: Option<String>,
+    client_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -747,7 +751,8 @@ async fn list_clients(
             wood_size_label,
             wood_size_other,
             directions,
-            created_at
+            created_at,
+            default_mileage
         FROM clients
         WHERE is_deleted = 0
         ORDER BY COALESCE(date_of_onboarding, created_at) ASC
@@ -1243,7 +1248,8 @@ async fn create_work_order(
             pickup_delivery_type,
             pickup_quantity_cords, pickup_length, pickup_width, pickup_height, pickup_units,
             assignees_json,
-            created_by_user_id, created_by_display
+            created_by_user_id, created_by_display,
+            paired_order_id
         )
         VALUES (
             ?, ?, ?, ?,
@@ -1259,7 +1265,8 @@ async fn create_work_order(
             ?,
             ?, ?, ?, ?, ?,
             ?,
-            ?, ?
+            ?, ?,
+            ?
         )
     "#;
 
@@ -1307,9 +1314,24 @@ async fn create_work_order(
         .bind(&assignees_store)
         .bind(&input.created_by_user_id)
         .bind(&input.created_by_display)
+        .bind(&input.paired_order_id)
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
+
+    // If this order is paired with another, update the other order's paired_order_id to point back
+    if let Some(paired_id) = &input.paired_order_id {
+        if !paired_id.is_empty() {
+            sqlx::query(
+                r#"UPDATE work_orders SET paired_order_id = ?, updated_at = datetime('now') WHERE id = ?"#
+            )
+            .bind(&id)
+            .bind(paired_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+    }
 
     let inventory_cords = if status.eq_ignore_ascii_case("picked_up") {
         input.pickup_quantity_cords.unwrap_or(0.0)
@@ -1388,7 +1410,9 @@ async fn list_work_orders(
             pickup_units,
             COALESCE(assignees_json, '[]') as assignees_json,
             created_by_display,
-            created_at
+            created_at,
+            paired_order_id,
+            client_id
         FROM work_orders
         WHERE is_deleted = 0
         ORDER BY (scheduled_date IS NULL), datetime(scheduled_date) DESC, created_at DESC
@@ -2771,6 +2795,53 @@ async fn update_work_order_status(
             input.mileage.map(|v| v.to_string()),
         )
         .await;
+    }
+
+    // Save mileage to client on first completed order (if not a paired half order)
+    if next_status.eq_ignore_ascii_case("completed") || next_status.eq_ignore_ascii_case("picked_up") {
+        if let Some(mileage) = input.mileage {
+            // Get work order details to check if it's a half order
+            let wo_info = sqlx::query!(
+                r#"SELECT client_id, paired_order_id, delivery_size_label FROM work_orders WHERE id = ?"#,
+                input.work_order_id
+            )
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+
+            if let Some(wo) = wo_info {
+                let is_half_order = wo.delivery_size_label.as_deref() == Some("F-250 1/2") 
+                    || wo.paired_order_id.is_some();
+                
+                // Only save mileage to client if NOT a half order
+                if !is_half_order {
+                    if let Some(client_id) = &wo.client_id {
+                        // Check if client already has default mileage
+                        let client_mileage = sqlx::query!(
+                            r#"SELECT default_mileage FROM clients WHERE id = ?"#,
+                            client_id
+                        )
+                        .fetch_optional(&mut *tx)
+                        .await
+                        .map_err(|e| e.to_string())?;
+
+                        // Only save if client doesn't already have a default mileage
+                        if let Some(cm) = client_mileage {
+                            if cm.default_mileage.is_none() {
+                                sqlx::query(
+                                    r#"UPDATE clients SET default_mileage = ?, updated_at = datetime('now') WHERE id = ?"#
+                                )
+                                .bind(mileage)
+                                .bind(client_id)
+                                .execute(&mut *tx)
+                                .await
+                                .map_err(|e| e.to_string())?;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     tx.commit().await.map_err(|e| e.to_string())?;

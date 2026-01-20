@@ -37,6 +37,7 @@ export type ClientRow = {
   wood_size_other?: string | null;
   directions?: string | null;
   created_at?: string | null;
+  default_mileage?: number | null;
 };
 
 export type ClientConflictRow = {
@@ -86,6 +87,8 @@ export type WorkOrderRow = {
   assignees_json?: string | null;
   created_by_display?: string | null;
   created_at?: string | null;
+  paired_order_id?: string | null;
+  client_id?: string | null;
 };
 
 export type UserRow = {

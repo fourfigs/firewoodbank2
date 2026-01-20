@@ -416,6 +416,7 @@ function App() {
     pickup_width: "",
     pickup_height: "",
     pickup_units: "ft",
+    paired_order_id: "",
   });
 
   const [workOrderNewClientEnabled, setWorkOrderNewClientEnabled] = useState(false);
@@ -773,6 +774,16 @@ function App() {
     const map = new Map<string, WorkOrderRow>();
     workOrders.forEach((wo) => map.set(wo.id, wo));
     return map;
+  }, [workOrders]);
+
+  // Available half-order work orders for pairing (unscheduled F-250 1/2 orders)
+  const availableHalfOrders = useMemo(() => {
+    return workOrders.filter((wo) => {
+      const isHalf = wo.delivery_size_label === "Ford F-250 1/2";
+      const isUnpaired = !wo.paired_order_id;
+      const isActive = !["completed", "cancelled", "picked_up"].includes((wo.status || "").toLowerCase());
+      return isHalf && isUnpaired && isActive;
+    });
   }, [workOrders]);
 
   const driverDeliveries = useMemo(() => {
@@ -2090,7 +2101,9 @@ function App() {
                                     other_heat_source_gas: false,
                                     other_heat_source_electric: false,
                                     other_heat_source_other: "",
-                                    mileage: "",
+                                    mileage: selectedClientForDetail.default_mileage != null
+                                      ? String(selectedClientForDetail.default_mileage)
+                                      : "",
                                     mailingSameAsPhysical: true,
                                     assignees: [],
                                     helpers: [],
@@ -2104,6 +2117,7 @@ function App() {
                                     pickup_width: "",
                                     pickup_height: "",
                                     pickup_units: "ft",
+                                    paired_order_id: "",
                                   });
                                   setNewWorkOrderId(crypto.randomUUID());
                                   setNewWorkOrderEntryDate(new Date().toISOString());
@@ -2877,6 +2891,7 @@ function App() {
                                 pickup_width: "",
                                 pickup_height: "",
                                 pickup_units: "ft",
+                                paired_order_id: "",
                               });
                               setWorkOrderNewClientEnabled(false);
                               setWorkOrderNewClient({
@@ -3305,6 +3320,7 @@ function App() {
                                       created_by_user_id: null,
                                       created_by_display:
                                         session?.name ?? session?.username ?? null,
+                                      paired_order_id: workOrderForm.paired_order_id || null,
                                     },
                                     role: session?.role ?? null,
                                   });
@@ -3341,6 +3357,7 @@ function App() {
                                   pickup_width: "",
                                   pickup_height: "",
                                   pickup_units: "ft",
+                                  paired_order_id: "",
                                 });
                                 setWorkOrderNewClient({
                                   first_name: "",
@@ -3389,12 +3406,18 @@ function App() {
                                 <select
                                   required
                                   value={workOrderForm.client_id}
-                                    onChange={(e) =>
+                                    onChange={(e) => {
+                                      const selectedClient = clients.find((c) => c.id === e.target.value);
                                       setWorkOrderForm({
                                         ...workOrderForm,
                                         client_id: e.target.value,
-                                      })
-                                    }
+                                        // Auto-fill mileage from client's default if available and mileage is empty
+                                        mileage: workOrderForm.mileage === "" && selectedClient?.default_mileage != null
+                                          ? String(selectedClient.default_mileage)
+                                          : workOrderForm.mileage,
+                                        gate_combo: selectedClient?.gate_combo ?? workOrderForm.gate_combo,
+                                      });
+                                    }}
                                 >
                                   <option value="">Select client</option>
                                   {clients.map((c) => (
@@ -3477,6 +3500,50 @@ function App() {
                               </label>
                                     </>
                                   )}
+                            {workOrderForm.delivery_size_choice === "f250_half" && (
+                              <div
+                                className="card"
+                                style={{
+                                  gridColumn: "1 / -1",
+                                  background: "#fff9f0",
+                                  border: "1px dashed #e67f1e",
+                                  padding: "0.75rem",
+                                }}
+                              >
+                                <strong style={{ color: "#e67f1e" }}>Half Load Pairing</strong>
+                                <p className="muted" style={{ fontSize: "0.85rem", margin: "0.5rem 0" }}>
+                                  Half F-250 orders should be scheduled together. Select another half order to pair with,
+                                  or leave empty to pair later. Mileage will be entered once for the combined trip.
+                                </p>
+                                <label>
+                                  Pair with existing order
+                                  <select
+                                    value={workOrderForm.paired_order_id}
+                                    onChange={(e) =>
+                                      setWorkOrderForm({
+                                        ...workOrderForm,
+                                        paired_order_id: e.target.value,
+                                      })
+                                    }
+                                  >
+                                    <option value="">— No pairing (schedule later) —</option>
+                                    {availableHalfOrders
+                                      .filter((ho) => ho.client_id !== workOrderForm.client_id)
+                                      .map((ho) => (
+                                        <option key={ho.id} value={ho.id}>
+                                          {ho.client_name} — {ho.physical_address_city || "Unknown city"}{" "}
+                                          ({ho.status})
+                                        </option>
+                                      ))}
+                                  </select>
+                                </label>
+                                {availableHalfOrders.filter((ho) => ho.client_id !== workOrderForm.client_id).length === 0 && (
+                                  <p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.5rem" }}>
+                                    No other unpaired half orders available. This order can be paired later.
+                                  </p>
+                                )}
+                              </div>
+                            )}
                                 </>
                               )}
                               {workOrderForm.status === "picked_up" && (
