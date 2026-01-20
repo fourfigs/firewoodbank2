@@ -382,6 +382,7 @@ struct WorkOrderInput {
     wood_size_other: Option<String>,
     delivery_size_label: Option<String>,
     delivery_size_cords: Option<f64>,
+    pickup_delivery_type: Option<String>,
     pickup_quantity_cords: Option<f64>,
     pickup_length: Option<f64>,
     pickup_width: Option<f64>,
@@ -410,6 +411,7 @@ struct WorkOrderRow {
     wood_size_other: Option<String>,
     delivery_size_label: Option<String>,
     delivery_size_cords: Option<f64>,
+    pickup_delivery_type: Option<String>,
     pickup_quantity_cords: Option<f64>,
     pickup_length: Option<f64>,
     pickup_width: Option<f64>,
@@ -621,6 +623,7 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
             ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?,
+            ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?
         )
@@ -1045,6 +1048,7 @@ async fn create_work_order(
             notes, scheduled_date, status,
             wood_size_label, wood_size_other,
             delivery_size_label, delivery_size_cords,
+            pickup_delivery_type,
             pickup_quantity_cords, pickup_length, pickup_width, pickup_height, pickup_units,
             assignees_json,
             created_by_user_id, created_by_display
@@ -1098,6 +1102,7 @@ async fn create_work_order(
         .bind(&input.wood_size_other)
         .bind(&input.delivery_size_label)
         .bind(&input.delivery_size_cords)
+        .bind(&input.pickup_delivery_type)
         .bind(&input.pickup_quantity_cords)
         .bind(&input.pickup_length)
         .bind(&input.pickup_width)
@@ -1179,6 +1184,7 @@ async fn list_work_orders(
             wood_size_other,
             delivery_size_label,
             delivery_size_cords,
+            pickup_delivery_type,
             pickup_quantity_cords,
             pickup_length,
             pickup_width,

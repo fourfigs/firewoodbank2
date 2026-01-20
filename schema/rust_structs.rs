@@ -70,6 +70,7 @@ pub enum WorkOrderStatus {
     Draft,
     Scheduled,
     InProgress,
+    PickedUp,
     Completed,
     Cancelled,
 }
@@ -89,6 +90,14 @@ pub struct WorkOrder {
     pub notes: Option<String>,
     pub scheduled_date: Option<Timestamp>,
     pub status: WorkOrderStatus,
+    pub delivery_size_label: Option<String>,
+    pub delivery_size_cords: Option<f64>,
+    pub pickup_delivery_type: Option<String>,
+    pub pickup_quantity_cords: Option<f64>,
+    pub pickup_length: Option<f64>,
+    pub pickup_width: Option<f64>,
+    pub pickup_height: Option<f64>,
+    pub pickup_units: Option<String>,
     pub created_by_user_id: Option<Uuid>,
 }
 

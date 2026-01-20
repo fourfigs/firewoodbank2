@@ -406,6 +406,7 @@ function App() {
     delivery_size_choice: "f250",
     delivery_size_other: "",
     delivery_size_other_cords: "",
+    pickup_delivery_type: "delivery",
     pickup_quantity_mode: "cords",
     pickup_quantity_cords: "",
     pickup_length: "",
@@ -2069,6 +2070,7 @@ function App() {
                                     delivery_size_choice: "f250",
                                     delivery_size_other: "",
                                     delivery_size_other_cords: "",
+                                    pickup_delivery_type: "delivery",
                                     pickup_quantity_mode: "cords",
                                     pickup_quantity_cords: "",
                                     pickup_length: "",
@@ -2671,6 +2673,7 @@ function App() {
                                 delivery_size_choice: "f250",
                                 delivery_size_other: "",
                                 delivery_size_other_cords: "",
+                                pickup_delivery_type: "delivery",
                                 pickup_quantity_mode: "cords",
                                 pickup_quantity_cords: "",
                                 pickup_length: "",
@@ -2931,31 +2934,34 @@ function App() {
                               }
 
                               const deliveryChoice = workOrderForm.delivery_size_choice;
+                              const pickupType = workOrderForm.pickup_delivery_type;
                               let deliverySizeCords: number | null = null;
-                              let deliverySizeLabel = "";
-                              if (deliveryChoice === "f250") {
-                                deliverySizeCords = 1;
-                                deliverySizeLabel = "Ford F-250";
-                              } else if (deliveryChoice === "f250_half") {
-                                deliverySizeCords = 0.5;
-                                deliverySizeLabel = "Ford F-250 1/2";
-                              } else if (deliveryChoice === "toyota") {
-                                deliverySizeCords = 0.33;
-                                deliverySizeLabel = "Toyota";
-                              } else {
-                                const details = workOrderForm.delivery_size_other.trim();
-                                const cordsRaw = workOrderForm.delivery_size_other_cords.trim();
-                                const cordsParsed = Number(cordsRaw);
-                                if (!details) {
-                                  setWorkOrderError("Enter delivery vehicle details for Other.");
-                                  return;
+                              let deliverySizeLabel: string | null = null;
+                              if (pickupType === "delivery") {
+                                if (deliveryChoice === "f250") {
+                                  deliverySizeCords = 1;
+                                  deliverySizeLabel = "Ford F-250";
+                                } else if (deliveryChoice === "f250_half") {
+                                  deliverySizeCords = 0.5;
+                                  deliverySizeLabel = "Ford F-250 1/2";
+                                } else if (deliveryChoice === "toyota") {
+                                  deliverySizeCords = 0.33;
+                                  deliverySizeLabel = "Toyota";
+                                } else {
+                                  const details = workOrderForm.delivery_size_other.trim();
+                                  const cordsRaw = workOrderForm.delivery_size_other_cords.trim();
+                                  const cordsParsed = Number(cordsRaw);
+                                  if (!details) {
+                                    setWorkOrderError("Enter delivery vehicle details for Other.");
+                                    return;
+                                  }
+                                  if (!Number.isFinite(cordsParsed) || cordsParsed <= 0) {
+                                    setWorkOrderError("Enter a valid cord amount for Other.");
+                                    return;
+                                  }
+                                  deliverySizeCords = cordsParsed;
+                                  deliverySizeLabel = details;
                                 }
-                                if (!Number.isFinite(cordsParsed) || cordsParsed <= 0) {
-                                  setWorkOrderError("Enter a valid cord amount for Other.");
-                                  return;
-                                }
-                                deliverySizeCords = cordsParsed;
-                                deliverySizeLabel = details;
                               }
 
                               let pickupQuantityCords: number | null = null;
@@ -3059,6 +3065,7 @@ function App() {
                                       wood_size_other: targetClient.wood_size_other || null,
                                       delivery_size_label: deliverySizeLabel,
                                       delivery_size_cords: deliverySizeCords,
+                                      pickup_delivery_type: pickupType,
                                       pickup_quantity_cords: pickupQuantityCords,
                                       pickup_length: pickupLength,
                                       pickup_width: pickupWidth,
@@ -3102,6 +3109,7 @@ function App() {
                                   delivery_size_choice: "f250",
                                   delivery_size_other: "",
                                   delivery_size_other_cords: "",
+                                  pickup_delivery_type: "delivery",
                                   pickup_quantity_mode: "cords",
                                   pickup_quantity_cords: "",
                                   pickup_length: "",
@@ -3177,51 +3185,70 @@ function App() {
                                 )}
                               </label>
                               <label>
-                                Delivery vehicle
+                                Type
                                 <select
-                                  value={workOrderForm.delivery_size_choice}
+                                  value={workOrderForm.pickup_delivery_type}
                                   onChange={(e) =>
                                     setWorkOrderForm({
                                       ...workOrderForm,
-                                      delivery_size_choice: e.target.value,
+                                      pickup_delivery_type: e.target.value,
                                     })
                                   }
                                 >
-                                  <option value="f250">Ford F-250</option>
-                                  <option value="f250_half">Ford F-250 1/2</option>
-                                  <option value="toyota">Toyota</option>
-                                  <option value="other">Other</option>
+                                  <option value="delivery">delivery</option>
+                                  <option value="pickup">pickup</option>
                                 </select>
                               </label>
-                              {workOrderForm.delivery_size_choice === "other" && (
+                              {workOrderForm.pickup_delivery_type === "delivery" && (
                                 <>
                                   <label>
-                                    Delivery vehicle (other)
-                                    <input
-                                      value={workOrderForm.delivery_size_other}
+                                    Delivery vehicle
+                                    <select
+                                      value={workOrderForm.delivery_size_choice}
                                       onChange={(e) =>
                                         setWorkOrderForm({
                                           ...workOrderForm,
-                                          delivery_size_other: e.target.value,
+                                          delivery_size_choice: e.target.value,
                                         })
                                       }
-                                    />
+                                    >
+                                      <option value="f250">Ford F-250</option>
+                                      <option value="f250_half">Ford F-250 1/2</option>
+                                      <option value="toyota">Toyota</option>
+                                      <option value="other">Other</option>
+                                    </select>
                                   </label>
-                                  <label>
-                                    Cord amount
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                      value={workOrderForm.delivery_size_other_cords}
-                                      onChange={(e) =>
-                                        setWorkOrderForm({
-                                          ...workOrderForm,
-                                          delivery_size_other_cords: e.target.value,
-                                        })
-                                      }
-                                    />
-                                  </label>
+                                  {workOrderForm.delivery_size_choice === "other" && (
+                                    <>
+                                      <label>
+                                        Delivery vehicle (other)
+                                        <input
+                                          value={workOrderForm.delivery_size_other}
+                                          onChange={(e) =>
+                                            setWorkOrderForm({
+                                              ...workOrderForm,
+                                              delivery_size_other: e.target.value,
+                                            })
+                                          }
+                                        />
+                                      </label>
+                                      <label>
+                                        Cord amount
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="0.01"
+                                          value={workOrderForm.delivery_size_other_cords}
+                                          onChange={(e) =>
+                                            setWorkOrderForm({
+                                              ...workOrderForm,
+                                              delivery_size_other_cords: e.target.value,
+                                            })
+                                          }
+                                        />
+                                      </label>
+                                    </>
+                                  )}
                                 </>
                               )}
                               {workOrderForm.status === "picked_up" && (
@@ -3675,7 +3702,8 @@ function App() {
                                           !workOrderNewClient.physical_address_city ||
                                           !workOrderNewClient.physical_address_state)) || // New Client fields
                                       !workOrderForm.scheduled_date)) || // Date scheduled
-                                  (workOrderForm.delivery_size_choice === "other" &&
+                                  (workOrderForm.pickup_delivery_type === "delivery" &&
+                                    workOrderForm.delivery_size_choice === "other" &&
                                     (!workOrderForm.delivery_size_other ||
                                       !workOrderForm.delivery_size_other_cords)) ||
                                   (workOrderForm.status === "picked_up" &&
@@ -3784,6 +3812,11 @@ function App() {
                                           ? `${wo.physical_address_line1}, ${wo.physical_address_city ?? ""}, ${wo.physical_address_state ?? ""} ${wo.physical_address_postal_code ?? ""}`
                                           : "—"}
                                       </div>
+                                      {wo.pickup_delivery_type && (
+                                        <div className="muted">
+                                          Type: {wo.pickup_delivery_type}
+                                        </div>
+                                      )}
                                       {wo.delivery_size_label && (
                                         <div className="muted">
                                           Delivery: {wo.delivery_size_label}
@@ -3814,6 +3847,11 @@ function App() {
                                       {wo.created_by_display && (
                                         <div className="muted">
                                           Created by: {wo.created_by_display}
+                                        </div>
+                                      )}
+                                      {wo.pickup_delivery_type && (
+                                        <div className="muted">
+                                          Type: {wo.pickup_delivery_type}
                                         </div>
                                       )}
                                       {wo.delivery_size_label && (

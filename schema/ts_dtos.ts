@@ -57,6 +57,7 @@ export type WorkOrderStatus =
   | "draft"
   | "scheduled"
   | "in_progress"
+  | "picked_up"
   | "completed"
   | "cancelled";
 
@@ -75,6 +76,14 @@ export interface WorkOrder {
   notes?: string;
   scheduledDate?: Timestamp;
   status: WorkOrderStatus;
+  deliverySizeLabel?: string;
+  deliverySizeCords?: number;
+  pickupDeliveryType?: string;
+  pickupQuantityCords?: number;
+  pickupLength?: number;
+  pickupWidth?: number;
+  pickupHeight?: number;
+  pickupUnits?: string;
   createdByUserId?: UUID;
 }
 
