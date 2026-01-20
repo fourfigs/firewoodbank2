@@ -4,6 +4,7 @@ mod db;
 
 use anyhow::Result;
 use db::init_pool;
+use bcrypt::{hash, verify, DEFAULT_COST};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Sqlite, SqlitePool, Transaction};
 use std::collections::HashSet;
@@ -55,6 +56,159 @@ fn resolve_database_url() -> String {
         "sqlite://{}",
         root_db.canonicalize().unwrap_or(root_db).to_string_lossy()
     )
+}
+
+async fn migrate_auth_passwords(pool: &SqlitePool) -> Result<(), String> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT id, password
+        FROM auth_users
+        WHERE is_deleted = 0
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    for row in rows {
+        if !row.password.starts_with("$2") {
+            let hashed = hash(row.password, DEFAULT_COST).map_err(|e| e.to_string())?;
+            sqlx::query(
+                r#"
+                UPDATE auth_users
+                SET password = ?, updated_at = datetime('now')
+                WHERE id = ?
+                "#,
+            )
+            .bind(&hashed)
+            .bind(&row.id)
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+async fn ensure_seed_login(
+    pool: &SqlitePool,
+    username: &str,
+    password: &str,
+    name: &str,
+    role: &str,
+    hipaa: bool,
+) -> Result<(), String> {
+    let user = sqlx::query!(
+        r#"
+        SELECT id
+        FROM users
+        WHERE lower(name) = lower(?)
+          AND is_deleted = 0
+        LIMIT 1
+        "#,
+        name
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let user_id = if let Some(row) = user {
+        row.id
+    } else {
+        let id = Uuid::new_v4().to_string();
+        sqlx::query(
+            r#"
+            INSERT INTO users (
+                id, name, email, telephone,
+                role, hipaa_certified, is_driver,
+                created_at, updated_at, is_deleted
+            )
+            VALUES (?, ?, NULL, NULL, ?, ?, 0, datetime('now'), datetime('now'), 0)
+            "#,
+        )
+        .bind(&id)
+        .bind(name)
+        .bind(role)
+        .bind(if hipaa { 1 } else { 0 })
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+        id
+    };
+
+    let existing = sqlx::query!(
+        r#"
+        SELECT id, user_id, password
+        FROM auth_users
+        WHERE lower(username) = lower(?)
+          AND is_deleted = 0
+        LIMIT 1
+        "#,
+        username
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let hashed = hash(password, DEFAULT_COST).map_err(|e| e.to_string())?;
+
+    if let Some(row) = existing {
+        if row.user_id != user_id {
+            return Err(format!("Username {} already assigned to another user", username));
+        }
+        if !row.password.starts_with("$2") || !verify(password, &row.password).map_err(|e| e.to_string())? {
+            sqlx::query(
+                r#"
+                UPDATE auth_users
+                SET password = ?, updated_at = datetime('now')
+                WHERE id = ?
+                "#,
+            )
+            .bind(&hashed)
+            .bind(&row.id)
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
+
+    let login_id = Uuid::new_v4().to_string();
+    sqlx::query(
+        r#"
+        INSERT INTO auth_users (id, user_id, username, password, created_at, updated_at, is_deleted)
+        VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+        "#,
+    )
+    .bind(&login_id)
+    .bind(&user_id)
+    .bind(username)
+    .bind(&hashed)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+async fn seed_default_logins(pool: &SqlitePool) -> anyhow::Result<()> {
+    migrate_auth_passwords(pool).await.map_err(|e| anyhow::anyhow!(e))?;
+    ensure_seed_login(pool, "admin", "admin", "Admin", "admin", true)
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
+    ensure_seed_login(pool, "lead", "lead", "Lead", "lead", true)
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
+    ensure_seed_login(pool, "staff", "staff", "Staff", "staff", false)
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
+    ensure_seed_login(pool, "volunteer", "volunteer", "Volunteer", "volunteer", false)
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
+    ensure_seed_login(pool, "sketch", "Sketching2!", "Sketch", "admin", true)
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -259,6 +413,16 @@ struct UserRow {
     name: String,
     email: Option<String>,
     telephone: Option<String>,
+    physical_address_line1: Option<String>,
+    physical_address_line2: Option<String>,
+    physical_address_city: Option<String>,
+    physical_address_state: Option<String>,
+    physical_address_postal_code: Option<String>,
+    mailing_address_line1: Option<String>,
+    mailing_address_line2: Option<String>,
+    mailing_address_city: Option<String>,
+    mailing_address_state: Option<String>,
+    mailing_address_postal_code: Option<String>,
     role: String,
     availability_notes: Option<String>,
     availability_schedule: Option<String>,
@@ -1183,6 +1347,16 @@ async fn list_users(state: State<'_, AppState>) -> Result<Vec<UserRow>, String> 
             name,
             email,
             telephone,
+            physical_address_line1,
+            physical_address_line2,
+            physical_address_city,
+            physical_address_state,
+            physical_address_postal_code,
+            mailing_address_line1,
+            mailing_address_line2,
+            mailing_address_city,
+            mailing_address_state,
+            mailing_address_postal_code,
             role,
             availability_notes,
             availability_schedule,
@@ -1210,6 +1384,16 @@ struct EnsureUserInput {
     name: String,
     email: Option<String>,
     telephone: Option<String>,
+    physical_address_line1: Option<String>,
+    physical_address_line2: Option<String>,
+    physical_address_city: Option<String>,
+    physical_address_state: Option<String>,
+    physical_address_postal_code: Option<String>,
+    mailing_address_line1: Option<String>,
+    mailing_address_line2: Option<String>,
+    mailing_address_city: Option<String>,
+    mailing_address_state: Option<String>,
+    mailing_address_postal_code: Option<String>,
     role: String,
     is_driver: Option<bool>,
     hipaa_certified: Option<bool>,
@@ -1229,6 +1413,16 @@ async fn ensure_user_exists(state: State<'_, AppState>, input: EnsureUserInput) 
             role,
             email,
             telephone,
+            physical_address_line1,
+            physical_address_line2,
+            physical_address_city,
+            physical_address_state,
+            physical_address_postal_code,
+            mailing_address_line1,
+            mailing_address_line2,
+            mailing_address_city,
+            mailing_address_state,
+            mailing_address_postal_code,
             COALESCE(is_driver, 0) as "is_driver!: i64",
             COALESCE(hipaa_certified, 0) as "hipaa_certified!: i64"
         FROM users
@@ -1246,38 +1440,139 @@ async fn ensure_user_exists(state: State<'_, AppState>, input: EnsureUserInput) 
     let wants_hipaa = input.hipaa_certified.unwrap_or(false);
 
     if let Some(row) = existing {
-        let mut updates = Vec::new();
-        let mut update_role = row.role.clone();
-        if role_rank(&role) > role_rank(&row.role) {
-            update_role = role.clone();
-            updates.push("role = ?");
-        }
-        if row.email.is_none() && input.email.is_some() {
-            updates.push("email = ?");
-        }
-        if row.telephone.is_none() && input.telephone.is_some() {
-            updates.push("telephone = ?");
-        }
-        if wants_driver && row.is_driver == 0 {
-            updates.push("is_driver = 1");
-        }
-        if wants_hipaa && row.hipaa_certified == 0 {
-            updates.push("hipaa_certified = 1");
-        }
-        if !updates.is_empty() {
-            let mut query = format!("UPDATE users SET {}, updated_at = datetime('now') WHERE id = ?", updates.join(", "));
-            let mut q = sqlx::query(&query);
-            if updates.contains(&"role = ?") {
-                q = q.bind(&update_role);
-            }
-            if updates.contains(&"email = ?") {
-                q = q.bind(&input.email);
-            }
-            if updates.contains(&"telephone = ?") {
-                q = q.bind(&input.telephone);
-            }
-            q = q.bind(&row.id);
-            q.execute(&state.pool).await.map_err(|e| e.to_string())?;
+        let mut updated = false;
+        let update_role = if role_rank(&role) > role_rank(&row.role) {
+            updated = true;
+            role.clone()
+        } else {
+            row.role.clone()
+        };
+        let update_email = if row.email.is_none() && input.email.is_some() {
+            updated = true;
+            input.email.clone()
+        } else {
+            row.email.clone()
+        };
+        let update_phone = if row.telephone.is_none() && input.telephone.is_some() {
+            updated = true;
+            input.telephone.clone()
+        } else {
+            row.telephone.clone()
+        };
+        let update_phys_line1 = if row.physical_address_line1.is_none() && input.physical_address_line1.is_some() {
+            updated = true;
+            input.physical_address_line1.clone()
+        } else {
+            row.physical_address_line1.clone()
+        };
+        let update_phys_line2 = if row.physical_address_line2.is_none() && input.physical_address_line2.is_some() {
+            updated = true;
+            input.physical_address_line2.clone()
+        } else {
+            row.physical_address_line2.clone()
+        };
+        let update_phys_city = if row.physical_address_city.is_none() && input.physical_address_city.is_some() {
+            updated = true;
+            input.physical_address_city.clone()
+        } else {
+            row.physical_address_city.clone()
+        };
+        let update_phys_state = if row.physical_address_state.is_none() && input.physical_address_state.is_some() {
+            updated = true;
+            input.physical_address_state.clone()
+        } else {
+            row.physical_address_state.clone()
+        };
+        let update_phys_postal = if row.physical_address_postal_code.is_none() && input.physical_address_postal_code.is_some() {
+            updated = true;
+            input.physical_address_postal_code.clone()
+        } else {
+            row.physical_address_postal_code.clone()
+        };
+        let update_mail_line1 = if row.mailing_address_line1.is_none() && input.mailing_address_line1.is_some() {
+            updated = true;
+            input.mailing_address_line1.clone()
+        } else {
+            row.mailing_address_line1.clone()
+        };
+        let update_mail_line2 = if row.mailing_address_line2.is_none() && input.mailing_address_line2.is_some() {
+            updated = true;
+            input.mailing_address_line2.clone()
+        } else {
+            row.mailing_address_line2.clone()
+        };
+        let update_mail_city = if row.mailing_address_city.is_none() && input.mailing_address_city.is_some() {
+            updated = true;
+            input.mailing_address_city.clone()
+        } else {
+            row.mailing_address_city.clone()
+        };
+        let update_mail_state = if row.mailing_address_state.is_none() && input.mailing_address_state.is_some() {
+            updated = true;
+            input.mailing_address_state.clone()
+        } else {
+            row.mailing_address_state.clone()
+        };
+        let update_mail_postal = if row.mailing_address_postal_code.is_none() && input.mailing_address_postal_code.is_some() {
+            updated = true;
+            input.mailing_address_postal_code.clone()
+        } else {
+            row.mailing_address_postal_code.clone()
+        };
+        let update_driver = if wants_driver && row.is_driver == 0 {
+            updated = true;
+            1
+        } else {
+            row.is_driver
+        };
+        let update_hipaa = if wants_hipaa && row.hipaa_certified == 0 {
+            updated = true;
+            1
+        } else {
+            row.hipaa_certified
+        };
+        if updated {
+            sqlx::query(
+                r#"
+                UPDATE users
+                SET role = ?,
+                    email = ?,
+                    telephone = ?,
+                    physical_address_line1 = ?,
+                    physical_address_line2 = ?,
+                    physical_address_city = ?,
+                    physical_address_state = ?,
+                    physical_address_postal_code = ?,
+                    mailing_address_line1 = ?,
+                    mailing_address_line2 = ?,
+                    mailing_address_city = ?,
+                    mailing_address_state = ?,
+                    mailing_address_postal_code = ?,
+                    is_driver = ?,
+                    hipaa_certified = ?,
+                    updated_at = datetime('now')
+                WHERE id = ?
+                "#,
+            )
+            .bind(&update_role)
+            .bind(&update_email)
+            .bind(&update_phone)
+            .bind(&update_phys_line1)
+            .bind(&update_phys_line2)
+            .bind(&update_phys_city)
+            .bind(&update_phys_state)
+            .bind(&update_phys_postal)
+            .bind(&update_mail_line1)
+            .bind(&update_mail_line2)
+            .bind(&update_mail_city)
+            .bind(&update_mail_state)
+            .bind(&update_mail_postal)
+            .bind(update_driver)
+            .bind(update_hipaa)
+            .bind(&row.id)
+            .execute(&state.pool)
+            .await
+            .map_err(|e| e.to_string())?;
         }
         audit_db(&state.pool, "ensure_user_exists", "system", &name).await;
         return Ok(row.id);
@@ -1288,14 +1583,34 @@ async fn ensure_user_exists(state: State<'_, AppState>, input: EnsureUserInput) 
     let hipaa = if wants_hipaa { 1 } else { 0 };
     sqlx::query(
         r#"
-        INSERT INTO users (id, name, email, telephone, role, is_driver, hipaa_certified, created_at, updated_at, is_deleted)
-        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+        INSERT INTO users (
+            id, name, email, telephone,
+            physical_address_line1, physical_address_line2, physical_address_city, physical_address_state, physical_address_postal_code,
+            mailing_address_line1, mailing_address_line2, mailing_address_city, mailing_address_state, mailing_address_postal_code,
+            role, is_driver, hipaa_certified, created_at, updated_at, is_deleted
+        )
+        VALUES (
+            ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, datetime('now'), datetime('now'), 0
+        )
         "#,
     )
     .bind(&id)
     .bind(&name)
     .bind(&input.email)
     .bind(&input.telephone)
+    .bind(&input.physical_address_line1)
+    .bind(&input.physical_address_line2)
+    .bind(&input.physical_address_city)
+    .bind(&input.physical_address_state)
+    .bind(&input.physical_address_postal_code)
+    .bind(&input.mailing_address_line1)
+    .bind(&input.mailing_address_line2)
+    .bind(&input.mailing_address_city)
+    .bind(&input.mailing_address_state)
+    .bind(&input.mailing_address_postal_code)
     .bind(&role)
     .bind(is_driver)
     .bind(hipaa)
@@ -1330,6 +1645,18 @@ struct DriverAvailabilityRow {
 #[derive(Debug, Deserialize)]
 struct UserUpdateInput {
     id: String,
+    email: Option<String>,
+    telephone: Option<String>,
+    physical_address_line1: Option<String>,
+    physical_address_line2: Option<String>,
+    physical_address_city: Option<String>,
+    physical_address_state: Option<String>,
+    physical_address_postal_code: Option<String>,
+    mailing_address_line1: Option<String>,
+    mailing_address_line2: Option<String>,
+    mailing_address_city: Option<String>,
+    mailing_address_state: Option<String>,
+    mailing_address_postal_code: Option<String>,
     availability_notes: Option<String>,
     availability_schedule: Option<String>,
     driver_license_status: Option<String>,
@@ -1419,7 +1746,19 @@ async fn update_user_flags(
     sqlx::query(
         r#"
         UPDATE users
-        SET availability_notes = ?,
+        SET email = ?,
+            telephone = ?,
+            physical_address_line1 = ?,
+            physical_address_line2 = ?,
+            physical_address_city = ?,
+            physical_address_state = ?,
+            physical_address_postal_code = ?,
+            mailing_address_line1 = ?,
+            mailing_address_line2 = ?,
+            mailing_address_city = ?,
+            mailing_address_state = ?,
+            mailing_address_postal_code = ?,
+            availability_notes = ?,
             availability_schedule = ?,
             driver_license_status = ?,
             driver_license_number = ?,
@@ -1431,6 +1770,18 @@ async fn update_user_flags(
         WHERE id = ?
         "#,
     )
+    .bind(&input.email)
+    .bind(&input.telephone)
+    .bind(&input.physical_address_line1)
+    .bind(&input.physical_address_line2)
+    .bind(&input.physical_address_city)
+    .bind(&input.physical_address_state)
+    .bind(&input.physical_address_postal_code)
+    .bind(&input.mailing_address_line1)
+    .bind(&input.mailing_address_line2)
+    .bind(&input.mailing_address_city)
+    .bind(&input.mailing_address_state)
+    .bind(&input.mailing_address_postal_code)
     .bind(&input.availability_notes)
     .bind(&input.availability_schedule)
     .bind(&status_clean)
@@ -1452,8 +1803,20 @@ struct CreateUserInput {
     name: String,
     email: Option<String>,
     telephone: Option<String>,
+    physical_address_line1: Option<String>,
+    physical_address_line2: Option<String>,
+    physical_address_city: Option<String>,
+    physical_address_state: Option<String>,
+    physical_address_postal_code: Option<String>,
+    mailing_address_line1: Option<String>,
+    mailing_address_line2: Option<String>,
+    mailing_address_city: Option<String>,
+    mailing_address_state: Option<String>,
+    mailing_address_postal_code: Option<String>,
     role: String,
     is_driver: Option<bool>,
+    username: String,
+    password: String,
 }
 
 #[tauri::command]
@@ -1468,6 +1831,30 @@ async fn create_user(
     }
     audit_db(&state.pool, "create_user", &role_val, &input.name).await;
 
+    let username = input.username.trim().to_lowercase();
+    if username.is_empty() {
+        return Err("Username is required".to_string());
+    }
+    let password = input.password.trim().to_string();
+    if password.is_empty() {
+        return Err("Password is required".to_string());
+    }
+    let existing_login = sqlx::query!(
+        r#"
+        SELECT id FROM auth_users
+        WHERE lower(username) = lower(?)
+          AND is_deleted = 0
+        LIMIT 1
+        "#,
+        username
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    if existing_login.is_some() {
+        return Err("Username already exists".to_string());
+    }
+
     let id = Uuid::new_v4().to_string();
     let is_driver = if input.is_driver.unwrap_or(false) {
         1
@@ -1477,21 +1864,126 @@ async fn create_user(
 
     sqlx::query(
         r#"
-        INSERT INTO users (id, name, email, telephone, role, is_driver, created_at, updated_at, is_deleted)
-        VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+        INSERT INTO users (
+            id, name, email, telephone,
+            physical_address_line1, physical_address_line2, physical_address_city, physical_address_state, physical_address_postal_code,
+            mailing_address_line1, mailing_address_line2, mailing_address_city, mailing_address_state, mailing_address_postal_code,
+            role, is_driver, created_at, updated_at, is_deleted
+        )
+        VALUES (
+            ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, datetime('now'), datetime('now'), 0
+        )
         "#
     )
     .bind(&id)
     .bind(&input.name)
     .bind(&input.email)
     .bind(&input.telephone)
+    .bind(&input.physical_address_line1)
+    .bind(&input.physical_address_line2)
+    .bind(&input.physical_address_city)
+    .bind(&input.physical_address_state)
+    .bind(&input.physical_address_postal_code)
+    .bind(&input.mailing_address_line1)
+    .bind(&input.mailing_address_line2)
+    .bind(&input.mailing_address_city)
+    .bind(&input.mailing_address_state)
+    .bind(&input.mailing_address_postal_code)
     .bind(&input.role)
     .bind(is_driver)
     .execute(&state.pool)
     .await
     .map_err(|e| e.to_string())?;
 
+    let login_id = Uuid::new_v4().to_string();
+    let hashed = hash(&password, DEFAULT_COST).map_err(|e| e.to_string())?;
+    sqlx::query(
+        r#"
+        INSERT INTO auth_users (id, user_id, username, password, created_at, updated_at, is_deleted)
+        VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+        "#,
+    )
+    .bind(&login_id)
+    .bind(&id)
+    .bind(&username)
+    .bind(&hashed)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
     Ok(id)
+}
+
+#[derive(Debug, Deserialize)]
+struct LoginInput {
+    username: String,
+    password: String,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct LoginResponse {
+    user_id: String,
+    name: String,
+    username: String,
+    role: String,
+    email: Option<String>,
+    telephone: Option<String>,
+    hipaa_certified: i64,
+    is_driver: i64,
+}
+
+#[tauri::command]
+async fn login_user(state: State<'_, AppState>, input: LoginInput) -> Result<LoginResponse, String> {
+    let username = input.username.trim().to_lowercase();
+    let password = input.password.trim().to_string();
+    if username.is_empty() || password.is_empty() {
+        return Err("Username and password are required".to_string());
+    }
+
+    let row = sqlx::query!(
+        r#"
+        SELECT
+            au.user_id as user_id,
+            u.name as name,
+            au.username as username,
+            u.role as role,
+            u.email as email,
+            u.telephone as telephone,
+            COALESCE(u.hipaa_certified, 0) as hipaa_certified,
+            COALESCE(u.is_driver, 0) as is_driver,
+            au.password as password
+        FROM auth_users au
+        JOIN users u ON u.id = au.user_id
+        WHERE lower(au.username) = lower(?)
+          AND au.is_deleted = 0
+          AND u.is_deleted = 0
+        LIMIT 1
+        "#
+    , username
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let row = row.ok_or_else(|| "Invalid username or password".to_string())?;
+    if !verify(&password, &row.password).map_err(|e| e.to_string())? {
+        return Err("Invalid username or password".to_string());
+    }
+
+    audit_db(&state.pool, "login_user", &row.role, &row.username).await;
+    Ok(LoginResponse {
+        user_id: row.user_id,
+        name: row.name,
+        username: row.username,
+        role: row.role,
+        email: row.email,
+        telephone: row.telephone,
+        hipaa_certified: row.hipaa_certified,
+        is_driver: row.is_driver,
+    })
 }
 
 #[tauri::command]
@@ -1922,6 +2414,7 @@ fn main() -> Result<()> {
             let database_url = resolve_database_url();
             tauri::async_runtime::block_on(async {
                 let pool = init_pool(&database_url).await?;
+                seed_default_logins(&pool).await?;
                 app.manage(AppState { pool });
                 Ok::<(), anyhow::Error>(())
             })?;
@@ -1948,6 +2441,7 @@ fn main() -> Result<()> {
             ensure_user_exists,
             update_user_flags,
             get_available_drivers,
+            login_user,
             list_motd,
             create_motd,
             delete_motd,
