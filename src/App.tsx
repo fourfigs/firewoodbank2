@@ -18,7 +18,7 @@ import {
   UserSession,
   WorkOrderRow,
 } from "./types";
-import { Clients, Inventory, WorkOrders } from "./pages";
+import { Clients, Inventory, WorkOrders, WorkerDirectory } from "./pages";
 
 const tabs = [
   "Dashboard",
@@ -279,6 +279,11 @@ function App() {
   const [newWorkOrderEntryDate, setNewWorkOrderEntryDate] = useState<string>("");
   const [workOrderError, setWorkOrderError] = useState<string | null>(null);
 
+  // Worker directory state
+  const [selectedWorker, setSelectedWorker] = useState<UserRow | null>(null);
+  const [workerEdit, setWorkerEdit] = useState<Partial<UserRow> | null>(null);
+  const [workerError, setWorkerError] = useState<string | null>(null);
+
   // Modal states
   const [showChangeRequestModal, setShowChangeRequestModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -524,15 +529,21 @@ function App() {
                   </div>
                 )}
 
-                {activeTab === "Worker Directory" && (
-                  <div className="stack">
-                    <div className="card muted">
-                      <div className="add-header">
-                        <h3>Worker Directory</h3>
-                        <p>Coming soon - extracted to src/pages/WorkerDirectory.tsx</p>
-                      </div>
-                    </div>
-                  </div>
+                {activeTab === "Worker Directory" && session && (
+                  <WorkerDirectory
+                    session={session}
+                    users={users}
+                    busy={busy}
+                    selectedWorker={selectedWorker}
+                    setSelectedWorker={setSelectedWorker}
+                    workerEdit={workerEdit}
+                    setWorkerEdit={setWorkerEdit}
+                    workerError={workerError}
+                    setWorkerError={setWorkerError}
+                    showWorkerForm={showWorkerForm}
+                    setShowWorkerForm={setShowWorkerForm}
+                    loadUsers={loadUsers}
+                  />
                 )}
 
                 {activeTab === "Reports" && session && <ReportsTab session={session} />}
