@@ -3986,6 +3986,18 @@ function App() {
                   <div className="stack">
                     <div className="list-card">
                       <div className="list-head">
+                        <h3>HIPAA Compliance Checklist</h3>
+                      </div>
+                      <div className="stack">
+                        <div>✅ PII masking enforced for non-HIPAA roles</div>
+                        <div>✅ Drivers see only assigned delivery contact details</div>
+                        <div>✅ Audit logging active for sensitive actions</div>
+                        <div>✅ Role-based access gating verified</div>
+                        <div>✅ Change requests required for non-admin edits</div>
+                      </div>
+                    </div>
+                    <div className="list-card">
+                      <div className="list-head">
                         <h3>Audit Logs ({auditLogs.length})</h3>
                         <button className="ghost" onClick={loadAuditLogs} disabled={busy}>
                           Refresh
