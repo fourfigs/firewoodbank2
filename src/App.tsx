@@ -6,6 +6,7 @@ import Dashboard from "./components/Dashboard";
 import AdminPanel from "./components/AdminPanel";
 import ChangeRequestModal from "./components/ChangeRequestModal";
 import ReportsTab from "./components/ReportsTab";
+import { Clients } from "./pages";
 import logo from "./assets/logo.png";
 import firewoodIcon from "./assets/logo.png";
 import "./index.css";
@@ -908,99 +909,37 @@ function App() {
 
                 {activeTab === "Admin" && session && <AdminPanel session={session} />}
 
-                {activeTab === "Clients" && (
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "1rem",
-                      position: "relative",
-                      minHeight: "400px",
-                    }}
-                  >
-                    {/* Left Sidebar - Mailing List */}
-                    <div
-                      style={{
-                        width: mailingListSidebarOpen ? "300px" : "0",
-                        overflow: "hidden",
-                        transition: "width 0.3s ease",
-                        borderRight: mailingListSidebarOpen ? "1px solid #ddd" : "none",
-                        paddingRight: mailingListSidebarOpen ? "1rem" : "0",
-                      }}
-                    >
-                      {mailingListSidebarOpen && (() => {
-                        // Calculate counts
-                        const emailCount = clients.filter(c => !!c.email).length;
-                        const newsletterCount = clients.filter(c => !!c.physical_address_line1).length;
-                        
-                        return (
-                        <div className="list-card">
-                          <div className="list-head">
-                            <h3>Mailing List</h3>
-                            <button
-                              className="ghost"
-                              type="button"
-                              onClick={() => setMailingListSidebarOpen(false)}
-                              style={{ padding: "0.25rem 0.5rem" }}
-                            >
-                              ×
-                            </button>
-                          </div>
-                          
-                          {/* Filter buttons with icons and counts */}
-                          <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
-                            <button
-                              type="button"
-                              onClick={() => setMailingListFilter("all")}
-                              style={{
-                                padding: "0.4rem 0.75rem",
-                                background: mailingListFilter === "all" ? "#e67f1e" : "#f5f5f5",
-                                color: mailingListFilter === "all" ? "white" : "#333",
-                                border: "none",
-                                borderRadius: "4px",
-                                cursor: "pointer",
-                                fontSize: "0.8rem",
-                                fontWeight: mailingListFilter === "all" ? "bold" : "normal",
-                              }}
-                            >
-                              All
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setMailingListFilter("email")}
-                              style={{
-                                padding: "0.4rem 0.75rem",
-                                background: mailingListFilter === "email" ? "#2196F3" : "#f5f5f5",
-                                color: mailingListFilter === "email" ? "white" : "#333",
-                                border: "none",
-                                borderRadius: "4px",
-                                cursor: "pointer",
-                                fontSize: "0.8rem",
-                                fontWeight: mailingListFilter === "email" ? "bold" : "normal",
-                              }}
-                              title="Email List"
-                            >
-                              ✉ Email
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setMailingListFilter("mail")}
-                              style={{
-                                padding: "0.4rem 0.75rem",
-                                background: mailingListFilter === "mail" ? "#4CAF50" : "#f5f5f5",
-                                color: mailingListFilter === "mail" ? "white" : "#333",
-                                border: "none",
-                                borderRadius: "4px",
-                                cursor: "pointer",
-                                fontSize: "0.8rem",
-                                fontWeight: mailingListFilter === "mail" ? "bold" : "normal",
-                              }}
-                              title="Newsletter (Mail)"
-                            >
-                              📬 Newsletter
-                            </button>
-                          </div>
+                {activeTab === "Clients" && session && (
+                  <Clients
+                    session={session}
+                    clients={clients}
+                    busy={busy}
+                    mailingListSidebarOpen={mailingListSidebarOpen}
+                    setMailingListSidebarOpen={setMailingListSidebarOpen}
+                    mailingListFilter={mailingListFilter}
+                    setMailingListFilter={setMailingListFilter}
+                    clientDetailSidebarOpen={clientDetailSidebarOpen}
+                    setClientDetailSidebarOpen={setClientDetailSidebarOpen}
+                    selectedClientForDetail={selectedClientForDetail}
+                    setSelectedClientForDetail={setSelectedClientForDetail}
+                    clientSearch={clientSearch}
+                    setClientSearch={setClientSearch}
+                    clientSortField={clientSortField}
+                    setClientSortField={setClientSortField}
+                    clientSortDirection={clientSortDirection}
+                    setClientSortDirection={setClientSortDirection}
+                    showClientForm={showClientForm}
+                    setShowClientForm={setShowClientForm}
+                    editingClientId={editingClientId}
+                    setEditingClientId={setEditingClientId}
+                    clientError={clientError}
+                    setClientError={setClientError}
+                    clientForm={clientForm}
+                    setClientForm={setClientForm}
+                  />
+                )}
 
-                          {/* Count badges */}
+                {/* Legacy Clients code removed - functionality moved to src/pages/Clients.tsx */}
                           <div style={{ display: "flex", gap: "1rem", marginBottom: "0.75rem", fontSize: "0.85rem" }}>
                             <span style={{ 
                               background: "#2196F3", 
