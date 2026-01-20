@@ -2815,7 +2815,8 @@ async fn update_work_order_status(
                 
                 // Only save mileage to client if NOT a half order
                 if !is_half_order {
-                    if let Some(client_id) = &wo.client_id {
+                    let client_id = &wo.client_id;
+                    if !client_id.is_empty() {
                         // Check if client already has default mileage
                         let client_mileage = sqlx::query!(
                             r#"SELECT default_mileage FROM clients WHERE id = ?"#,
