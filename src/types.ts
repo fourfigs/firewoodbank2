@@ -149,5 +149,10 @@ export type AuditLogRow = {
   event: string;
   role?: string | null;
   actor?: string | null;
+  entity?: string | null;
+  entity_id?: string | null;
+  field?: string | null;
+  old_value?: string | null;
+  new_value?: string | null;
   created_at: string;
 };

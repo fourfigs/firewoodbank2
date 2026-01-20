@@ -17,14 +17,57 @@ use uuid::Uuid;
 async fn audit_db(pool: &SqlitePool, event: &str, role: &str, actor: &str) {
     let _ = sqlx::query(
         r#"
-        INSERT INTO audit_logs (id, event, role, actor, created_at)
-        VALUES (?, ?, ?, ?, datetime('now'))
+        INSERT INTO audit_logs (
+            id, event, role, actor,
+            entity, entity_id, field, old_value, new_value,
+            created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         "#,
     )
     .bind(Uuid::new_v4().to_string())
     .bind(event)
     .bind(role)
     .bind(actor)
+    .bind::<Option<String>>(None)
+    .bind::<Option<String>>(None)
+    .bind::<Option<String>>(None)
+    .bind::<Option<String>>(None)
+    .bind::<Option<String>>(None)
+    .execute(pool)
+    .await;
+}
+
+async fn audit_change(
+    pool: &SqlitePool,
+    event: &str,
+    role: &str,
+    actor: &str,
+    entity: &str,
+    entity_id: &str,
+    field: &str,
+    old_value: Option<String>,
+    new_value: Option<String>,
+) {
+    let _ = sqlx::query(
+        r#"
+        INSERT INTO audit_logs (
+            id, event, role, actor,
+            entity, entity_id, field, old_value, new_value,
+            created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        "#,
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(event)
+    .bind(role)
+    .bind(actor)
+    .bind(entity)
+    .bind(entity_id)
+    .bind(field)
+    .bind(old_value)
+    .bind(new_value)
     .execute(pool)
     .await;
 }
@@ -773,11 +816,18 @@ async fn list_clients(
 }
 
 #[tauri::command]
-async fn update_client(state: State<'_, AppState>, input: ClientUpdateInput) -> Result<(), String> {
+async fn update_client(
+    state: State<'_, AppState>,
+    input: ClientUpdateInput,
+    role: Option<String>,
+    actor: Option<String>,
+) -> Result<(), String> {
     let approval_status = input
         .approval_status
         .unwrap_or_else(|| "pending".to_string());
-    audit_db(&state.pool, "update_client", "unknown", "unknown").await;
+    let role_val = role.unwrap_or_else(|| "unknown".to_string());
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
+    audit_db(&state.pool, "update_client", &role_val, &actor_val).await;
 
     // Extract first_name and last_name from input
     let first_name = input.first_name.as_deref().unwrap_or("").trim().to_string();
@@ -794,6 +844,27 @@ async fn update_client(state: State<'_, AppState>, input: ClientUpdateInput) -> 
     if name.is_empty() {
         return Err("Name cannot be empty.".to_string());
     }
+
+    let existing = sqlx::query!(
+        r#"
+        SELECT
+            client_title, name, first_name, last_name,
+            physical_address_line1, physical_address_line2, physical_address_city,
+            physical_address_state, physical_address_postal_code,
+            mailing_address_line1, mailing_address_line2, mailing_address_city,
+            mailing_address_state, mailing_address_postal_code,
+            telephone, email, date_of_onboarding,
+            how_did_they_hear_about_us, referring_agency,
+            approval_status, denial_reason, gate_combo, notes,
+            wood_size_label, wood_size_other, directions
+        FROM clients
+        WHERE id = ? AND is_deleted = 0
+        "#,
+        input.id
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
 
     let query = r#"
         UPDATE clients
@@ -858,6 +929,63 @@ async fn update_client(state: State<'_, AppState>, input: ClientUpdateInput) -> 
         .execute(&state.pool)
         .await
         .map_err(|e| e.to_string())?;
+
+    if let Some(prev) = existing {
+        let mut log_field = |field: &str, old_val: Option<String>, new_val: Option<String>| {
+            if old_val != new_val {
+                let pool = state.pool.clone();
+                let role = role_val.clone();
+                let actor = actor_val.clone();
+                let entity_id = input.id.clone();
+                let field = field.to_string();
+                tauri::async_runtime::spawn(async move {
+                    audit_change(
+                        &pool,
+                        "update_client",
+                        &role,
+                        &actor,
+                        "clients",
+                        &entity_id,
+                        &field,
+                        old_val,
+                        new_val,
+                    )
+                    .await;
+                });
+            }
+        };
+
+        log_field("client_title", prev.client_title, input.client_title.clone());
+        log_field("name", Some(prev.name), Some(name.clone()));
+        log_field("first_name", prev.first_name, input.first_name.clone());
+        log_field("last_name", prev.last_name, input.last_name.clone());
+        log_field(
+            "physical_address_line1",
+            Some(prev.physical_address_line1),
+            Some(input.physical_address_line1.clone()),
+        );
+        log_field("physical_address_line2", prev.physical_address_line2, input.physical_address_line2.clone());
+        log_field("physical_address_city", Some(prev.physical_address_city), Some(input.physical_address_city.clone()));
+        log_field("physical_address_state", Some(prev.physical_address_state), Some(input.physical_address_state.clone()));
+        log_field("physical_address_postal_code", Some(prev.physical_address_postal_code), Some(input.physical_address_postal_code.clone()));
+        log_field("mailing_address_line1", prev.mailing_address_line1, input.mailing_address_line1.clone());
+        log_field("mailing_address_line2", prev.mailing_address_line2, input.mailing_address_line2.clone());
+        log_field("mailing_address_city", prev.mailing_address_city, input.mailing_address_city.clone());
+        log_field("mailing_address_state", prev.mailing_address_state, input.mailing_address_state.clone());
+        log_field("mailing_address_postal_code", prev.mailing_address_postal_code, input.mailing_address_postal_code.clone());
+        log_field("telephone", prev.telephone, input.telephone.clone());
+        log_field("email", prev.email, input.email.clone());
+        log_field("date_of_onboarding", prev.date_of_onboarding, input.date_of_onboarding.clone());
+        log_field("how_did_they_hear_about_us", prev.how_did_they_hear_about_us, input.how_did_they_hear_about_us.clone());
+        log_field("referring_agency", prev.referring_agency, input.referring_agency.clone());
+        log_field("approval_status", Some(prev.approval_status), Some(approval_status.clone()));
+        log_field("denial_reason", prev.denial_reason, input.denial_reason.clone());
+        log_field("gate_combo", prev.gate_combo, input.gate_combo.clone());
+        log_field("notes", prev.notes, input.notes.clone());
+        log_field("wood_size_label", prev.wood_size_label, input.wood_size_label.clone());
+        log_field("wood_size_other", prev.wood_size_other, input.wood_size_other.clone());
+        log_field("directions", prev.directions, input.directions.clone());
+    }
 
     Ok(())
 }
@@ -973,8 +1101,24 @@ async fn list_inventory_items(state: State<'_, AppState>) -> Result<Vec<Inventor
 async fn update_inventory_item(
     state: State<'_, AppState>,
     input: InventoryUpdateInput,
+    role: Option<String>,
+    actor: Option<String>,
 ) -> Result<(), String> {
-    audit_db(&state.pool, "update_inventory_item", "unknown", "unknown").await;
+    let role_val = role.unwrap_or_else(|| "unknown".to_string());
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
+    audit_db(&state.pool, "update_inventory_item", &role_val, &actor_val).await;
+
+    let existing = sqlx::query!(
+        r#"
+        SELECT name, category, quantity_on_hand, unit, reorder_threshold, reorder_amount, notes
+        FROM inventory_items
+        WHERE id = ? AND is_deleted = 0
+        "#,
+        input.id
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
     sqlx::query(
         r#"
         UPDATE inventory_items
@@ -1000,6 +1144,50 @@ async fn update_inventory_item(
     .execute(&state.pool)
     .await
     .map_err(|e| e.to_string())?;
+    if let Some(prev) = existing {
+        let mut log_field = |field: &str, old_val: Option<String>, new_val: Option<String>| {
+            if old_val != new_val {
+                let pool = state.pool.clone();
+                let role = role_val.clone();
+                let actor = actor_val.clone();
+                let entity_id = input.id.clone();
+                let field = field.to_string();
+                tauri::async_runtime::spawn(async move {
+                    audit_change(
+                        &pool,
+                        "update_inventory_item",
+                        &role,
+                        &actor,
+                        "inventory_items",
+                        &entity_id,
+                        &field,
+                        old_val,
+                        new_val,
+                    )
+                    .await;
+                });
+            }
+        };
+        log_field("name", Some(prev.name), Some(input.name.clone()));
+        log_field("category", prev.category, input.category.clone());
+        log_field(
+            "quantity_on_hand",
+            Some(prev.quantity_on_hand.to_string()),
+            Some(input.quantity_on_hand.to_string()),
+        );
+        log_field("unit", Some(prev.unit), Some(input.unit.clone()));
+        log_field(
+            "reorder_threshold",
+            Some(prev.reorder_threshold.to_string()),
+            Some(input.reorder_threshold.to_string()),
+        );
+        log_field(
+            "reorder_amount",
+            prev.reorder_amount.map(|v| v.to_string()),
+            input.reorder_amount.map(|v| v.to_string()),
+        );
+        log_field("notes", prev.notes, input.notes.clone());
+    }
     Ok(())
 }
 
@@ -1768,12 +1956,33 @@ async fn update_user_flags(
     state: State<'_, AppState>,
     input: UserUpdateInput,
     role: Option<String>,
+    actor: Option<String>,
 ) -> Result<(), String> {
     let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
     if role_val != "admin" && role_val != "lead" {
         return Err("Only admins or leads can update users".to_string());
     }
-    audit_db(&state.pool, "update_user_flags", &role_val, "unknown").await;
+    audit_db(&state.pool, "update_user_flags", &role_val, &actor_val).await;
+
+    let existing = sqlx::query!(
+        r#"
+        SELECT email, telephone,
+               physical_address_line1, physical_address_line2, physical_address_city,
+               physical_address_state, physical_address_postal_code,
+               mailing_address_line1, mailing_address_line2, mailing_address_city,
+               mailing_address_state, mailing_address_postal_code,
+               availability_notes, availability_schedule,
+               driver_license_status, driver_license_number, driver_license_expires_on,
+               vehicle, hipaa_certified, is_driver
+        FROM users
+        WHERE id = ? AND is_deleted = 0
+        "#,
+        input.id
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
 
     let status_clean = input
         .driver_license_status
@@ -1841,6 +2050,52 @@ async fn update_user_flags(
     .execute(&state.pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    if let Some(prev) = existing {
+        let mut log_field = |field: &str, old_val: Option<String>, new_val: Option<String>| {
+            if old_val != new_val {
+                let pool = state.pool.clone();
+                let role = role_val.clone();
+                let actor = actor_val.clone();
+                let entity_id = input.id.clone();
+                let field = field.to_string();
+                tauri::async_runtime::spawn(async move {
+                    audit_change(
+                        &pool,
+                        "update_user_flags",
+                        &role,
+                        &actor,
+                        "users",
+                        &entity_id,
+                        &field,
+                        old_val,
+                        new_val,
+                    )
+                    .await;
+                });
+            }
+        };
+        log_field("email", prev.email, input.email.clone());
+        log_field("telephone", prev.telephone, input.telephone.clone());
+        log_field("physical_address_line1", prev.physical_address_line1, input.physical_address_line1.clone());
+        log_field("physical_address_line2", prev.physical_address_line2, input.physical_address_line2.clone());
+        log_field("physical_address_city", prev.physical_address_city, input.physical_address_city.clone());
+        log_field("physical_address_state", prev.physical_address_state, input.physical_address_state.clone());
+        log_field("physical_address_postal_code", prev.physical_address_postal_code, input.physical_address_postal_code.clone());
+        log_field("mailing_address_line1", prev.mailing_address_line1, input.mailing_address_line1.clone());
+        log_field("mailing_address_line2", prev.mailing_address_line2, input.mailing_address_line2.clone());
+        log_field("mailing_address_city", prev.mailing_address_city, input.mailing_address_city.clone());
+        log_field("mailing_address_state", prev.mailing_address_state, input.mailing_address_state.clone());
+        log_field("mailing_address_postal_code", prev.mailing_address_postal_code, input.mailing_address_postal_code.clone());
+        log_field("availability_notes", prev.availability_notes, input.availability_notes.clone());
+        log_field("availability_schedule", prev.availability_schedule, input.availability_schedule.clone());
+        log_field("driver_license_status", prev.driver_license_status, status_clean.clone());
+        log_field("driver_license_number", prev.driver_license_number, input.driver_license_number.clone());
+        log_field("driver_license_expires_on", prev.driver_license_expires_on, expiry_clean.clone());
+        log_field("vehicle", prev.vehicle, input.vehicle.clone());
+        log_field("hipaa_certified", Some(prev.hipaa_certified.to_string()), Some(hipaa.to_string()));
+        log_field("is_driver", Some(prev.is_driver.to_string()), Some(final_is_driver.to_string()));
+    }
 
     Ok(())
 }
@@ -2319,8 +2574,10 @@ async fn update_work_order_assignees(
     state: State<'_, AppState>,
     input: WorkOrderAssignmentInput,
     role: Option<String>,
+    actor: Option<String>,
 ) -> Result<(), String> {
     let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
     if role_val != "admin" && role_val != "lead" {
         return Err("Only admins or leads can assign drivers/helpers".to_string());
     }
@@ -2328,11 +2585,19 @@ async fn update_work_order_assignees(
         &state.pool,
         "update_work_order_assignees",
         &role_val,
-        "unknown",
+        &actor_val,
     )
     .await;
 
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
+
+    let existing = sqlx::query!(
+        r#"SELECT assignees_json FROM work_orders WHERE id = ? AND is_deleted = 0"#,
+        input.work_order_id
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
 
     sqlx::query(
         r#"
@@ -2360,6 +2625,25 @@ async fn update_work_order_assignees(
     .await
     .map_err(|e| e.to_string())?;
 
+    if let Some(prev) = existing {
+        let old_val = prev.assignees_json;
+        let new_val = input.assignees_json.clone();
+        if old_val != new_val {
+            audit_change(
+                &state.pool,
+                "update_work_order_assignees",
+                &role_val,
+                &actor_val,
+                "work_orders",
+                &input.work_order_id,
+                "assignees_json",
+                old_val,
+                new_val,
+            )
+            .await;
+        }
+    }
+
     tx.commit().await.map_err(|e| e.to_string())?;
 
     Ok(())
@@ -2370,21 +2654,23 @@ async fn update_work_order_status(
     state: State<'_, AppState>,
     input: WorkOrderStatusInput,
     role: Option<String>,
+    actor: Option<String>,
 ) -> Result<(), String> {
     let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
     let driver_capable = input.is_driver.unwrap_or(false);
     audit_db(
         &state.pool,
         "update_work_order_status",
         &role_val,
-        "unknown",
+        &actor_val,
     )
     .await;
 
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
 
     let existing = sqlx::query!(
-        r#"SELECT status, delivery_size_cords, pickup_quantity_cords FROM work_orders WHERE id = ? AND is_deleted = 0"#,
+        r#"SELECT status, mileage, delivery_size_cords, pickup_quantity_cords FROM work_orders WHERE id = ? AND is_deleted = 0"#,
         input.work_order_id
     )
     .fetch_optional(&mut *tx)
@@ -2446,6 +2732,36 @@ async fn update_work_order_status(
         adjust_inventory_for_transition_tx(&mut tx, &current_status, &next_status, delivery_size)
             .await
             .map_err(|e| e.to_string())?;
+    }
+
+    if current_status != next_status {
+        audit_change(
+            &state.pool,
+            "update_work_order_status",
+            &role_val,
+            &actor_val,
+            "work_orders",
+            &input.work_order_id,
+            "status",
+            Some(current_status),
+            Some(next_status.clone()),
+        )
+        .await;
+    }
+    let prev_mileage = existing.mileage;
+    if prev_mileage != input.mileage {
+        audit_change(
+            &state.pool,
+            "update_work_order_status",
+            &role_val,
+            &actor_val,
+            "work_orders",
+            &input.work_order_id,
+            "mileage",
+            prev_mileage.map(|v| v.to_string()),
+            input.mileage.map(|v| v.to_string()),
+        )
+        .await;
     }
 
     tx.commit().await.map_err(|e| e.to_string())?;
@@ -2685,6 +3001,11 @@ struct AuditLogRow {
     event: String,
     role: Option<String>,
     actor: Option<String>,
+    entity: Option<String>,
+    entity_id: Option<String>,
+    field: Option<String>,
+    old_value: Option<String>,
+    new_value: Option<String>,
     created_at: String,
 }
 
@@ -2697,7 +3018,7 @@ async fn list_audit_logs(
     let query = match filter_val.as_str() {
         "day" => {
             r#"
-            SELECT id, event, role, actor, created_at
+            SELECT id, event, role, actor, entity, entity_id, field, old_value, new_value, created_at
             FROM audit_logs
             WHERE date(created_at) = date('now')
             ORDER BY created_at DESC
@@ -2705,7 +3026,7 @@ async fn list_audit_logs(
         }
         "7days" => {
             r#"
-            SELECT id, event, role, actor, created_at
+            SELECT id, event, role, actor, entity, entity_id, field, old_value, new_value, created_at
             FROM audit_logs
             WHERE created_at >= datetime('now', '-7 days')
             ORDER BY created_at DESC
@@ -2713,7 +3034,7 @@ async fn list_audit_logs(
         }
         "month" => {
             r#"
-            SELECT id, event, role, actor, created_at
+            SELECT id, event, role, actor, entity, entity_id, field, old_value, new_value, created_at
             FROM audit_logs
             WHERE date(created_at) >= date('now', 'start of month')
             ORDER BY created_at DESC
@@ -2721,7 +3042,7 @@ async fn list_audit_logs(
         }
         "year" => {
             r#"
-            SELECT id, event, role, actor, created_at
+            SELECT id, event, role, actor, entity, entity_id, field, old_value, new_value, created_at
             FROM audit_logs
             WHERE date(created_at) >= date('now', 'start of year')
             ORDER BY created_at DESC
@@ -2730,7 +3051,7 @@ async fn list_audit_logs(
         _ => {
             // "all" or default
             r#"
-            SELECT id, event, role, actor, created_at
+            SELECT id, event, role, actor, entity, entity_id, field, old_value, new_value, created_at
             FROM audit_logs
             ORDER BY created_at DESC
             "#
@@ -2774,6 +3095,11 @@ mod tests {
                 event TEXT NOT NULL,
                 role TEXT,
                 actor TEXT,
+                entity TEXT,
+                entity_id TEXT,
+                field TEXT,
+                old_value TEXT,
+                new_value TEXT,
                 created_at TEXT NOT NULL
             )
             "#,

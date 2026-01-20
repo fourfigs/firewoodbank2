@@ -1199,6 +1199,8 @@ function App() {
                                         ...payload,
                                         id: editingClientId,
                                       },
+                                      role: session?.role ?? null,
+                                      actor: session?.username ?? null,
                                     });
                                   } else {
                                     await invokeTauri("create_client", { input: payload });
@@ -2286,6 +2288,8 @@ function App() {
                                     ...payload,
                                     id: editingInventoryId,
                                   },
+                                  role: session?.role ?? null,
+                                  actor: session?.username ?? null,
                                 });
                               } else {
                                 await invokeTauri("create_inventory_item", { input: payload });
@@ -2631,6 +2635,7 @@ function App() {
                                         is_driver: true,
                                       },
                                       role: session?.role ?? null,
+                                      actor: session?.username ?? null,
                                     });
                                     await loadWorkOrders();
                                   } finally {
@@ -3963,6 +3968,7 @@ function App() {
                                                 is_driver: isDriver,
                                               },
                                               role: session?.role ?? null,
+                                              actor: session?.username ?? null,
                                             });
                                             await loadWorkOrders();
                                           } finally {
@@ -4948,6 +4954,7 @@ function App() {
                                           new_password: workerPasswordReset.trim(),
                                         },
                                         role: session?.role ?? null,
+                                        actor: session?.username ?? null,
                                       });
                                       setWorkerPasswordReset("");
                                     } catch (err) {

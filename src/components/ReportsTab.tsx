@@ -101,6 +101,12 @@ export default function ReportsTab({
               </div>
               <div>
                 <strong>{log.event}</strong>
+                {log.entity && log.field && (
+                  <div className="muted">
+                    {log.entity} · {log.field}: {log.old_value ?? "—"} →{" "}
+                    {log.new_value ?? "—"}
+                  </div>
+                )}
               </div>
               <div className="muted">{log.role ?? "—"}</div>
               <div className="muted">{log.actor ?? "—"}</div>
