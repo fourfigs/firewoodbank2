@@ -372,7 +372,7 @@ function App() {
     mailingSameAsPhysical: true,
     assignees: [] as string[],
     helpers: [] as string[],
-    delivery_size_choice: "1_cord",
+    delivery_size_choice: "f250",
     delivery_size_other: "",
   });
 
@@ -1753,7 +1753,7 @@ function App() {
                                     mailingSameAsPhysical: true,
                                     assignees: [],
                                     helpers: [],
-                                    delivery_size_choice: "1_cord",
+                                    delivery_size_choice: "f250",
                                     delivery_size_other: "",
                                   });
                                   setShowWorkOrderForm(true);
@@ -2222,7 +2222,7 @@ function App() {
                                 mailingSameAsPhysical: true,
                                 assignees: [],
                                 helpers: [],
-                                delivery_size_choice: "1_cord",
+                                delivery_size_choice: "f250",
                                 delivery_size_other: "",
                               });
                               setWorkOrderNewClientEnabled(false);
@@ -2435,22 +2435,24 @@ function App() {
                               }
 
                               const deliveryChoice = workOrderForm.delivery_size_choice;
-                              let deliverySizeCords = 0;
+                              let deliverySizeCords: number | null = null;
                               let deliverySizeLabel = "";
-                              if (deliveryChoice === "1_cord") {
+                              if (deliveryChoice === "f250") {
                                 deliverySizeCords = 1;
-                                deliverySizeLabel = "1 cord";
-                              } else if (deliveryChoice === "one_third") {
+                                deliverySizeLabel = "Ford F-250";
+                              } else if (deliveryChoice === "f250_half") {
+                                deliverySizeCords = 0.5;
+                                deliverySizeLabel = "Ford F-250 1/2";
+                              } else if (deliveryChoice === "toyota") {
                                 deliverySizeCords = 0.33;
-                                deliverySizeLabel = "1/3 cord";
+                                deliverySizeLabel = "Toyota";
                               } else {
-                                const parsed = Number(workOrderForm.delivery_size_other);
-                                if (!Number.isFinite(parsed) || parsed <= 0) {
-                                  setWorkOrderError("Enter a valid delivery size (cords).");
+                                const details = workOrderForm.delivery_size_other.trim();
+                                if (!details) {
+                                  setWorkOrderError("Enter delivery vehicle details for Other.");
                                   return;
                                 }
-                                deliverySizeCords = parsed;
-                                deliverySizeLabel = `${parsed} cord(s)`;
+                                deliverySizeLabel = details;
                               }
 
                               setBusy(true);
@@ -2526,7 +2528,7 @@ function App() {
                                   mailingSameAsPhysical: true,
                                   assignees: [],
                                   helpers: [],
-                                  delivery_size_choice: "1_cord",
+                                      delivery_size_choice: "f250",
                                   delivery_size_other: "",
                                 });
                                 setWorkOrderNewClient({
@@ -2579,23 +2581,21 @@ function App() {
                               )}
                             </label>
                             <label>
-                              Delivery size
+                              Delivery vehicle
                               <select
                                 value={workOrderForm.delivery_size_choice}
                                 onChange={(e) => setWorkOrderForm({ ...workOrderForm, delivery_size_choice: e.target.value })}
                               >
-                                <option value="1_cord">1 cord</option>
-                                <option value="one_third">1/3 cord</option>
+                                <option value="f250">Ford F-250</option>
+                                <option value="f250_half">Ford F-250 1/2</option>
+                                <option value="toyota">Toyota</option>
                                 <option value="other">Other</option>
                               </select>
                             </label>
                             {workOrderForm.delivery_size_choice === "other" && (
                               <label>
-                                Delivery size (cords)
+                                Delivery vehicle (other)
                                 <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
                                   value={workOrderForm.delivery_size_other}
                                   onChange={(e) =>
                                     setWorkOrderForm({
@@ -2910,7 +2910,7 @@ function App() {
                                       !workOrderNewClient.physical_address_state
                                     )) || // New Client fields
                                     !workOrderForm.scheduled_date || // Date scheduled
-                                    (workOrderForm.delivery_size_choice === "other" && !workOrderForm.delivery_size_other) // Wood amount
+                                    (workOrderForm.delivery_size_choice === "other" && !workOrderForm.delivery_size_other) // Vehicle details
                                   ))
                                 }
                               >
