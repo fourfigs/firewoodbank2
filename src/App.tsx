@@ -2936,10 +2936,6 @@ function App() {
                                 );
                                 return;
                               }
-                              if (!workOrderForm.scheduled_date) {
-                                setWorkOrderError("Scheduled date/time is required.");
-                                return;
-                              }
                               if (
                                 workOrderForm.scheduled_date &&
                                 workOrderForm.assignees.length > 0
