@@ -341,6 +341,31 @@ function App() {
     setClients(data);
   };
 
+  const loadInventory = async () => {
+    const data = await invokeTauri<InventoryRow[]>("list_inventory_items");
+    setInventory(data);
+  };
+
+  const loadWorkOrders = async () => {
+    const data = await invokeTauri<WorkOrderRow[]>("list_work_orders", {
+      role: session?.role ?? null,
+      username: session?.username ?? null,
+      hipaa_certified: session?.hipaaCertified ?? false,
+      is_driver: session?.isDriver ?? false,
+    });
+    setWorkOrders(data);
+  };
+
+  const loadUsers = async () => {
+    const data = await invokeTauri<UserRow[]>("list_users");
+    const mapped = data.map((u) => ({
+      ...u,
+      is_driver: !!u.is_driver,
+      // hipaa_certified is already a number (0 or 1) from backend
+    }));
+    setUsers(mapped);
+  };
+
   const loadMotd = async () => {
     try {
       const items = await invokeTauri<MotdRow[]>("list_motd", { active_only: true });
