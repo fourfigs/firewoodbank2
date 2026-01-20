@@ -5,7 +5,7 @@ import Dashboard from "./components/Dashboard";
 import AdminPanel from "./components/AdminPanel";
 import ChangeRequestModal from "./components/ChangeRequestModal";
 import logo from "./assets/logo.png";
-import firewoodIcon from "./assets/firewoodBank-icon.png";
+import firewoodIcon from "./assets/logo.png";
 import "./index.css";
 
 const tabs = ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics", "Worker Directory", "Reports", "Admin"];
@@ -487,8 +487,8 @@ function App() {
 
   const [workOrderForm, setWorkOrderForm] = useState({
     client_id: "",
-    scheduled_date: formatDateTimeLocal(new Date()),
-    status: "scheduled",
+    scheduled_date: "",
+    status: "received",
     gate_combo: "",
     notes: "",
     other_heat_source_gas: false,
@@ -613,6 +613,16 @@ function App() {
     try {
       const tasks: Promise<unknown>[] = [];
       if (session?.role === "admin" || session?.role === "lead" || session?.role === "staff") {
+        await invoke("ensure_user_exists", {
+          input: {
+            name: session.name,
+            email: session.email ?? null,
+            telephone: null,
+            role: session.role,
+            is_driver: session.isDriver ?? false,
+            hipaa_certified: session.hipaaCertified ?? false,
+          },
+        });
         tasks.push(loadClients(), loadInventory(), loadUsers());
       }
       if (session?.role === "admin" || session?.role === "lead") {
@@ -731,6 +741,31 @@ function App() {
       .toUpperCase();
   }, [session]);
 
+  const workerDirectoryUsers = useMemo(() => {
+    const base = [...users];
+    if (session && (session.role === "admin" || session.role === "staff" || session.role === "lead")) {
+      const exists = base.some((u) => u.name.trim().toLowerCase() === session.name.trim().toLowerCase());
+      if (!exists) {
+        base.unshift({
+          id: `session-${session.username || session.name}`,
+          name: session.name,
+          email: session.email ?? null,
+          telephone: null,
+          role: session.role,
+          availability_notes: null,
+          availability_schedule: null,
+          driver_license_status: null,
+          driver_license_number: null,
+          driver_license_expires_on: null,
+          vehicle: null,
+          is_driver: session.isDriver ?? false,
+          hipaa_certified: session.hipaaCertified ? 1 : 0,
+        });
+      }
+    }
+    return base;
+  }, [session, users]);
+
   const userDeliveryHours = useMemo(() => {
     if (!session?.username) return { hours: 0, deliveries: 0, woodCreditCords: 0 };
     const uname = session.username.toLowerCase();
@@ -775,6 +810,15 @@ function App() {
     });
     return { hours: totalHours, deliveries: totalDeliveries, woodCreditCords: totalWoodCords };
   }, [deliveries, workOrders, session?.username, session?.name]);
+
+  const deliveredOrdersForClient = useMemo(() => {
+    if (!selectedClientForDetail) return [];
+    const name = selectedClientForDetail.name.trim().toLowerCase();
+    return workOrders.filter((wo) => {
+      const woName = (wo.client_name ?? "").trim().toLowerCase();
+      return woName === name && (wo.status ?? "").toLowerCase() === "completed";
+    });
+  }, [selectedClientForDetail, workOrders]);
 
   return (
     <div className="app">
@@ -1195,6 +1239,12 @@ function App() {
                                   onChange={(e) =>
                                     setClientForm({ ...clientForm, physical_address_city: e.target.value })
                                   }
+                                  onBlur={(e) =>
+                                    setClientForm((prev) => ({
+                                      ...prev,
+                                      physical_address_city: initCapCity(e.target.value),
+                                    }))
+                                  }
                                 />
                               </label>
                               <label>
@@ -1204,6 +1254,12 @@ function App() {
                                   tabIndex={6}
                                   value={clientForm.physical_address_state}
                                   onChange={(e) => setClientForm({ ...clientForm, physical_address_state: e.target.value })}
+                                  onBlur={(e) =>
+                                    setClientForm((prev) => ({
+                                      ...prev,
+                                      physical_address_state: normalizeState(e.target.value),
+                                    }))
+                                  }
                                 />
                               </label>
                               <label>
@@ -1280,6 +1336,12 @@ function App() {
                                       tabIndex={14}
                                       value={clientForm.mailing_address_city}
                                       onChange={(e) => setClientForm({ ...clientForm, mailing_address_city: e.target.value })}
+                                      onBlur={(e) =>
+                                        setClientForm((prev) => ({
+                                          ...prev,
+                                          mailing_address_city: initCapCity(e.target.value),
+                                        }))
+                                      }
                                     />
                                   </label>
                                   <label>
@@ -1289,6 +1351,12 @@ function App() {
                                       tabIndex={15}
                                       value={clientForm.mailing_address_state}
                                       onChange={(e) => setClientForm({ ...clientForm, mailing_address_state: e.target.value })}
+                                      onBlur={(e) =>
+                                        setClientForm((prev) => ({
+                                          ...prev,
+                                          mailing_address_state: normalizeState(e.target.value),
+                                        }))
+                                      }
                                     />
                                   </label>
                                   <label>
@@ -1718,6 +1786,36 @@ function App() {
                                 </button>
                               </div>
                             )}
+                            {canCreateWorkOrders && (
+                              <button
+                                className="ghost"
+                                style={{ fontSize: "0.8rem", width: "100%", textAlign: "left", justifyContent: "flex-start" }}
+                                onClick={() => {
+                                  setWorkOrderNewClientEnabled(false);
+                                  setWorkOrderForm({
+                                    client_id: selectedClientForDetail.id,
+                                    scheduled_date: "",
+                                    status: "received",
+                                    gate_combo: selectedClientForDetail.gate_combo ?? "",
+                                    notes: "",
+                                    other_heat_source_gas: false,
+                                    other_heat_source_electric: false,
+                                    other_heat_source_other: "",
+                                    mileage: "",
+                                    mailingSameAsPhysical: true,
+                                    assignees: [],
+                                    helpers: [],
+                                    delivery_size_choice: "1_cord",
+                                    delivery_size_other: "",
+                                  });
+                                  setShowWorkOrderForm(true);
+                                  setActiveTab("Work Orders");
+                                  setClientDetailSidebarOpen(false);
+                                }}
+                              >
+                                + New work order for this client
+                              </button>
+                            )}
                             {selectedClientForDetail.date_of_onboarding && (
                               <div><strong>Onboarding Date:</strong> {new Date(selectedClientForDetail.date_of_onboarding).toLocaleDateString()}</div>
                             )}
@@ -1761,6 +1859,27 @@ function App() {
                             {selectedClientForDetail.notes && (
                               <div><strong>Notes:</strong> <div style={{ marginTop: "0.25rem", whiteSpace: "pre-wrap" }}>{selectedClientForDetail.notes}</div></div>
                             )}
+                            <div style={{ marginTop: "0.75rem" }}>
+                              <strong>Delivered Work Orders</strong>
+                              {deliveredOrdersForClient.length ? (
+                                <div className="table" style={{ marginTop: "0.5rem" }}>
+                                  <div className="table-head">
+                                    <span>Date</span>
+                                    <span>Size</span>
+                                    <span>Mileage</span>
+                                  </div>
+                                  {deliveredOrdersForClient.map((wo) => (
+                                    <div className="table-row" key={`delivered-${wo.id}`}>
+                                      <div>{safeDate(wo.scheduled_date)}</div>
+                                      <div>{wo.delivery_size_label ?? "—"}</div>
+                                      <div>{wo.mileage ?? "—"}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="muted" style={{ marginTop: "0.5rem" }}>No delivered work orders yet.</div>
+                              )}
+                            </div>
 
                           </div>
                         </div>
@@ -2555,6 +2674,12 @@ function App() {
                                     onChange={(e) =>
                                       setWorkOrderNewClient({ ...workOrderNewClient, physical_address_city: e.target.value })
                                     }
+                                    onBlur={(e) =>
+                                      setWorkOrderNewClient((prev) => ({
+                                        ...prev,
+                                        physical_address_city: initCapCity(e.target.value),
+                                      }))
+                                    }
                                   />
                                 </label>
                                 <label>
@@ -2564,6 +2689,12 @@ function App() {
                                     value={workOrderNewClient.physical_address_state}
                                     onChange={(e) =>
                                       setWorkOrderNewClient({ ...workOrderNewClient, physical_address_state: e.target.value })
+                                    }
+                                    onBlur={(e) =>
+                                      setWorkOrderNewClient((prev) => ({
+                                        ...prev,
+                                        physical_address_state: normalizeState(e.target.value),
+                                      }))
                                     }
                                   />
                                 </label>
@@ -2585,6 +2716,12 @@ function App() {
                                     value={workOrderNewClient.telephone}
                                     onChange={(e) =>
                                       setWorkOrderNewClient({ ...workOrderNewClient, telephone: e.target.value })
+                                    }
+                                    onBlur={(e) =>
+                                      setWorkOrderNewClient((prev) => ({
+                                        ...prev,
+                                        telephone: normalizePhone(e.target.value),
+                                      }))
                                     }
                                   />
                                 </label>
@@ -2620,11 +2757,7 @@ function App() {
                                 value={workOrderForm.status}
                                 onChange={(e) => {
                                   const newStatus = e.target.value;
-                                  let updates: any = { status: newStatus };
-                                  if (newStatus === "scheduled" && !workOrderForm.scheduled_date) {
-                                    updates.scheduled_date = formatDateTimeLocal(new Date());
-                                  }
-                                  setWorkOrderForm({ ...workOrderForm, ...updates });
+                                  setWorkOrderForm({ ...workOrderForm, status: newStatus });
                                 }}
                               >
                                 <option value="received">received</option>
@@ -3193,7 +3326,7 @@ function App() {
                           <span>Schedule</span>
                           <span>Credentials</span>
                         </div>
-                        {users.map((u) => (
+                        {workerDirectoryUsers.map((u) => (
                           <div
                             className="table-row"
                             key={u.id}
@@ -3249,7 +3382,7 @@ function App() {
                             </div>
                           </div>
                         ))}
-                        {!users.length && <div className="table-row">No workers yet.</div>}
+                        {!workerDirectoryUsers.length && <div className="table-row">No workers yet.</div>}
                       </div>
                     </div>
 

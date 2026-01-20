@@ -31,6 +31,15 @@ struct AppState {
     pool: SqlitePool,
 }
 
+fn role_rank(role: &str) -> i32 {
+    match role {
+        "admin" => 3,
+        "lead" => 2,
+        "staff" => 1,
+        _ => 0,
+    }
+}
+
 fn resolve_database_url() -> String {
     // Prefer explicit env var if provided (absolute path recommended).
     if let Ok(url) = std::env::var("DATABASE_URL") {
@@ -1197,6 +1206,108 @@ async fn list_users(state: State<'_, AppState>) -> Result<Vec<UserRow>, String> 
 }
 
 #[derive(Debug, Deserialize)]
+struct EnsureUserInput {
+    name: String,
+    email: Option<String>,
+    telephone: Option<String>,
+    role: String,
+    is_driver: Option<bool>,
+    hipaa_certified: Option<bool>,
+}
+
+#[tauri::command]
+async fn ensure_user_exists(state: State<'_, AppState>, input: EnsureUserInput) -> Result<String, String> {
+    let name = input.name.trim().to_string();
+    if name.is_empty() {
+        return Err("Name is required".to_string());
+    }
+    let role = input.role.trim().to_lowercase();
+    let existing = sqlx::query!(
+        r#"
+        SELECT
+            id,
+            role,
+            email,
+            telephone,
+            COALESCE(is_driver, 0) as "is_driver!: i64",
+            COALESCE(hipaa_certified, 0) as "hipaa_certified!: i64"
+        FROM users
+        WHERE lower(name) = lower(?)
+          AND is_deleted = 0
+        LIMIT 1
+        "#,
+        name
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let wants_driver = input.is_driver.unwrap_or(false);
+    let wants_hipaa = input.hipaa_certified.unwrap_or(false);
+
+    if let Some(row) = existing {
+        let mut updates = Vec::new();
+        let mut update_role = row.role.clone();
+        if role_rank(&role) > role_rank(&row.role) {
+            update_role = role.clone();
+            updates.push("role = ?");
+        }
+        if row.email.is_none() && input.email.is_some() {
+            updates.push("email = ?");
+        }
+        if row.telephone.is_none() && input.telephone.is_some() {
+            updates.push("telephone = ?");
+        }
+        if wants_driver && row.is_driver == 0 {
+            updates.push("is_driver = 1");
+        }
+        if wants_hipaa && row.hipaa_certified == 0 {
+            updates.push("hipaa_certified = 1");
+        }
+        if !updates.is_empty() {
+            let mut query = format!("UPDATE users SET {}, updated_at = datetime('now') WHERE id = ?", updates.join(", "));
+            let mut q = sqlx::query(&query);
+            if updates.contains(&"role = ?") {
+                q = q.bind(&update_role);
+            }
+            if updates.contains(&"email = ?") {
+                q = q.bind(&input.email);
+            }
+            if updates.contains(&"telephone = ?") {
+                q = q.bind(&input.telephone);
+            }
+            q = q.bind(&row.id);
+            q.execute(&state.pool).await.map_err(|e| e.to_string())?;
+        }
+        audit_db(&state.pool, "ensure_user_exists", "system", &name).await;
+        return Ok(row.id);
+    }
+
+    let id = Uuid::new_v4().to_string();
+    let is_driver = if wants_driver { 1 } else { 0 };
+    let hipaa = if wants_hipaa { 1 } else { 0 };
+    sqlx::query(
+        r#"
+        INSERT INTO users (id, name, email, telephone, role, is_driver, hipaa_certified, created_at, updated_at, is_deleted)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+        "#,
+    )
+    .bind(&id)
+    .bind(&name)
+    .bind(&input.email)
+    .bind(&input.telephone)
+    .bind(&role)
+    .bind(is_driver)
+    .bind(hipaa)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    audit_db(&state.pool, "ensure_user_exists", "system", &name).await;
+    Ok(id)
+}
+
+#[derive(Debug, Deserialize)]
 struct WorkOrderAssignmentInput {
     work_order_id: String,
     assignees_json: Option<String>,
@@ -1834,6 +1945,7 @@ fn main() -> Result<()> {
             create_delivery_event,
             list_delivery_events,
             list_users,
+            ensure_user_exists,
             update_user_flags,
             get_available_drivers,
             list_motd,
