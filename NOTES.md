@@ -46,6 +46,9 @@ Review & Improvement Suggestions (Program Structure + Workflow):
 - ✅ Add centralized error handling — GlobalErrorBoundary component exists
 - Split `src/App.tsx` into feature modules (clients, inventory, work orders, invoices, worker directory) and centralize shared UI helpers. (App.tsx is 5000+ lines)
 - Replace `window.print()` with a Tauri-side print command for consistent native printing behavior.
+- Add printing capabilities for client lists (with numbers), worker lists (with phone numbers), individual work orders, and metrics - printable from both list and detail views.
+- Auto-generate login usernames when adding new workers: first initial + full last name (e.g., John Doe -> jdoe), with numeric suffix for duplicates (jdoe1, jdoe2, etc.).
+- Enhance worker profiles with schedule (Mon-Sun: AM/PM/Call to check/Call prior), certification flags (HIPAA, DL on file, waiver signed, working vehicle), and auto-set driver/HIPAA permissions based on certifications.
 - ✅ Add `dev` docs for DATABASE_URL encoding and `.env` usage — documented in README.md with Windows path encoding table and SQLx bootstrap instructions
 - Add tests: unit tests for Rust auth + work order status transitions; basic UI smoke tests for critical tabs.
 - ✅ Standardize role names across UI, Rust, docs, and seeds — roles are now `admin/lead/staff/volunteer`. The `lead` role is used for team leads with elevated permissions (can view PII if HIPAA certified).
