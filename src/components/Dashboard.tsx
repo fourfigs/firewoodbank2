@@ -159,14 +159,11 @@ export default function Dashboard({
     };
   }, [workOrders]);
 
-  // --- Unscheduled Orders ---
-  const unscheduledOrders = useMemo(() => {
+  // --- Open Work Orders (not completed/cancelled) ---
+  const openWorkOrders = useMemo(() => {
     return workOrders.filter((wo) => {
       const status = (wo.status || "").toLowerCase();
-      // Not completed, not cancelled, and no scheduled date
-      const isActive = !["completed", "cancelled", "picked_up"].includes(status);
-      const hasNoSchedule = !wo.scheduled_date;
-      return isActive && hasNoSchedule;
+      return !["completed", "cancelled", "picked_up"].includes(status);
     });
   }, [workOrders]);
 
@@ -582,47 +579,65 @@ export default function Dashboard({
             </>
           )}
 
-          {/* Unscheduled Orders */}
-          {unscheduledOrders.length > 0 && (
-            <div
-              className="card"
-              style={{ borderColor: "#ff9800", borderWidth: "2px" }}
-            >
-              <h3 style={{ color: "#e65100" }}>
-                Unscheduled Orders
+          {/* Open Work Orders - Single line list, color coded */}
+          {openWorkOrders.length > 0 && (
+            <div className="card">
+              <h3>
+                Open Orders
                 <span
                   className="badge"
-                  style={{ backgroundColor: "#ff9800", color: "white", marginLeft: "0.5rem" }}
+                  style={{ backgroundColor: "#e67f1e", color: "white", marginLeft: "0.5rem" }}
                 >
-                  {unscheduledOrders.length}
+                  {openWorkOrders.length}
                 </span>
               </h3>
-              <ul className="list" style={{ marginTop: "0.5rem" }}>
-                {unscheduledOrders.slice(0, 8).map((wo) => (
-                  <li key={wo.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <strong>{wo.client_name}</strong>
-                      <div style={{ fontSize: "0.8rem", color: "#666" }}>
-                        ID: {wo.id.slice(0, 8)}... • {wo.created_at ? new Date(wo.created_at).toLocaleDateString() : "—"}
-                      </div>
-                    </div>
-                    <span
-                      className="pill"
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "0.5rem",
+                  marginTop: "0.75rem",
+                }}
+              >
+                {openWorkOrders.map((wo) => {
+                  const status = (wo.status || "").toLowerCase();
+                  // Color coding by status
+                  let bgColor = "#e0e0e0";
+                  let textColor = "#333";
+                  if (status === "received") {
+                    bgColor = "#e3f2fd"; textColor = "#1565c0"; // Blue
+                  } else if (status === "pending") {
+                    bgColor = "#fff3e0"; textColor = "#e65100"; // Orange
+                  } else if (status === "scheduled") {
+                    bgColor = "#e8f5e9"; textColor = "#2e7d32"; // Green
+                  } else if (status === "in_progress") {
+                    bgColor = "#fff9c4"; textColor = "#f9a825"; // Yellow
+                  }
+
+                  return (
+                    <div
+                      key={wo.id}
                       style={{
-                        fontSize: "0.75rem",
-                        background: wo.status === "received" ? "#e3f2fd" : "#fff3e0",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.25rem",
+                        padding: "0.25rem 0.5rem",
+                        borderRadius: "4px",
+                        fontSize: "0.8rem",
+                        background: bgColor,
+                        color: textColor,
+                        whiteSpace: "nowrap",
                       }}
+                      title={`${wo.client_name} - ${wo.status}${wo.scheduled_date ? ` (${new Date(wo.scheduled_date).toLocaleDateString()})` : ""}`}
                     >
-                      {wo.status}
-                    </span>
-                  </li>
-                ))}
-                {unscheduledOrders.length > 8 && (
-                  <li className="muted" style={{ textAlign: "center" }}>
-                    +{unscheduledOrders.length - 8} more...
-                  </li>
-                )}
-              </ul>
+                      <span style={{ fontWeight: 500 }}>{wo.client_name}</span>
+                      <span style={{ opacity: 0.7, fontSize: "0.7rem" }}>
+                        {status}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
