@@ -7,203 +7,34 @@ import ChangeRequestModal from "./components/ChangeRequestModal";
 import logo from "./assets/logo.png";
 import firewoodIcon from "./assets/logo.png";
 import "./index.css";
+import {
+  AuditLogRow,
+  ClientConflictRow,
+  ClientRow,
+  DeliveryEventRow,
+  InventoryRow,
+  LoginResponse,
+  MotdRow,
+  Role,
+  UserRow,
+  UserSession,
+  WorkOrderRow,
+} from "./types";
+import {
+  initCapCity,
+  isSameDay,
+  isValidPhone,
+  isValidPostal,
+  isValidState,
+  normalizePhone,
+  normalizePostal,
+  normalizeState,
+  safeDate,
+} from "./utils/format";
 
 const tabs = ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics", "Worker Directory", "Reports", "Admin"];
 
-type Role = "admin" | "lead" | "staff" | "volunteer";
-
-type UserSession = {
-  userId: string;
-  name: string;
-  username: string;
-  role: Role;
-  hipaaCertified?: boolean;
-  isDriver?: boolean;
-  email?: string; // recovery; not used for login
-  telephone?: string | null;
-};
-
-type ClientRow = {
-  id: string;
-  name: string;
-  client_title?: string | null;
-  email?: string | null;
-  telephone?: string | null;
-  approval_status: string;
-  physical_address_line1: string;
-  physical_address_line2?: string | null;
-  physical_address_city: string;
-  physical_address_state: string;
-  physical_address_postal_code: string;
-  mailing_address_line1?: string | null;
-  mailing_address_line2?: string | null;
-  mailing_address_city?: string | null;
-  mailing_address_state?: string | null;
-  mailing_address_postal_code?: string | null;
-  how_did_they_hear_about_us?: string | null;
-  referring_agency?: string | null;
-  denial_reason?: string | null;
-  date_of_onboarding?: string | null;
-  gate_combo?: string | null;
-  notes?: string | null;
-  wood_size_label?: string | null;
-  wood_size_other?: string | null;
-  directions?: string | null;
-  created_at?: string | null;
-};
-
-type ClientConflictRow = {
-  id: string;
-  name: string;
-  physical_address_line1: string;
-  physical_address_city: string;
-  physical_address_state: string;
-};
-
-type InventoryRow = {
-  id: string;
-  name: string;
-  category?: string | null;
-  quantity_on_hand: number;
-  unit: string;
-  reorder_threshold: number;
-  reorder_amount?: number | null;
-  notes?: string | null;
-  reserved_quantity: number;
-};
-
-type WorkOrderRow = {
-  id: string;
-  client_name: string;
-  status: string;
-  scheduled_date?: string | null;
-  gate_combo?: string | null;
-  notes?: string | null;
-  mileage?: number | null;
-  town?: string | null;
-  telephone?: string | null;
-  physical_address_line1?: string | null;
-  physical_address_city?: string | null;
-  physical_address_state?: string | null;
-  physical_address_postal_code?: string | null;
-  wood_size_label?: string | null;
-  wood_size_other?: string | null;
-  delivery_size_label?: string | null;
-  delivery_size_cords?: number | null;
-  assignees_json?: string | null;
-  created_by_display?: string | null;
-};
-
-type UserRow = {
-  id: string;
-  name: string;
-  email?: string | null;
-  telephone?: string | null;
-  physical_address_line1?: string | null;
-  physical_address_line2?: string | null;
-  physical_address_city?: string | null;
-  physical_address_state?: string | null;
-  physical_address_postal_code?: string | null;
-  mailing_address_line1?: string | null;
-  mailing_address_line2?: string | null;
-  mailing_address_city?: string | null;
-  mailing_address_state?: string | null;
-  mailing_address_postal_code?: string | null;
-  role: Role;
-  availability_notes?: string | null;
-  availability_schedule?: string | null;
-  driver_license_status?: string | null;
-  driver_license_number?: string | null;
-  driver_license_expires_on?: string | null;
-  vehicle?: string | null;
-  is_driver?: boolean | null;
-  hipaa_certified?: number;
-};
-
-type LoginResponse = {
-  user_id: string;
-  name: string;
-  username: string;
-  role: Role;
-  email?: string | null;
-  telephone?: string | null;
-  hipaa_certified: number;
-  is_driver: number;
-};
-
-type DeliveryEventRow = {
-  id: string;
-  title: string;
-  event_type: string;
-  start_date: string;
-  end_date?: string | null;
-  work_order_id?: string | null;
-  color_code?: string | null;
-  assigned_user_ids_json?: string | null;
-};
-
-type MotdRow = {
-  id: string;
-  message: string;
-  active_from?: string | null;
-  active_to?: string | null;
-  created_at: string;
-};
-
-type AuditLogRow = {
-  id: string;
-  event: string;
-  role?: string | null;
-  actor?: string | null;
-  created_at: string;
-};
-
 // Client numbers removed — no generation function needed anymore.
-
-const normalizePhone = (value: string) => {
-  const digits = value.replace(/\D/g, "").slice(0, 10);
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  return value.trim();
-};
-
-const isValidPhone = (value: string) => /^\(\d{3}\) \d{3}-\d{4}$/.test(value);
-const normalizeState = (value: string) => value.trim().toUpperCase();
-const US_STATES = new Set([
-  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
-  "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
-  "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
-  "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
-  "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
-  "DC" // District of Columbia
-]);
-const isValidState = (value: string) => {
-  const normalized = normalizeState(value);
-  return /^[A-Z]{2}$/.test(normalized) && US_STATES.has(normalized);
-};
-const normalizePostal = (value: string) => value.trim();
-const isValidPostal = (value: string) => /^\d{5}(?:-\d{4})?$/.test(value);
-const initCapCity = (value: string) =>
-  value
-    .trim()
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part[0].toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ");
-
-const safeDate = (dateStr: string | null | undefined) => {
-  if (!dateStr) return "Unknown Date";
-  try {
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return "Invalid Date";
-    return date.toLocaleDateString();
-  } catch {
-    return "Error Date";
-  }
-};
-
-const isSameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
 
 function LoginCard({
   onLogin,
