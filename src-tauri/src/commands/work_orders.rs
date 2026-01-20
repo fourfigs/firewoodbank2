@@ -569,3 +569,147 @@ pub async fn update_work_order_status(
 
     Ok(())
 }
+
+#[tauri::command]
+pub async fn update_work_order_assignees(
+    state: State<'_, AppState>,
+    input: WorkOrderAssignmentInput,
+    role: Option<String>,
+    actor: Option<String>,
+) -> Result<(), String> {
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
+    if role_val != "admin" && role_val != "lead" {
+        return Err("Only admins or leads can assign drivers/helpers".to_string());
+    }
+
+    let existing = sqlx::query!(
+        "SELECT assignees_json FROM work_orders WHERE id = ? AND is_deleted = 0",
+        input.work_order_id
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        r#"
+        UPDATE work_orders
+        SET assignees_json = ?, updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+    )
+    .bind(&input.assignees_json)
+    .bind(&input.work_order_id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if let Some(prev) = existing {
+        audit_change(
+            &state.pool,
+            "update_work_order_assignees",
+            &role_val,
+            &actor_val,
+            "work_orders",
+            &input.work_order_id,
+            "assignees_json",
+            prev.assignees_json,
+            input.assignees_json,
+        )
+        .await;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn update_work_order_status(
+    state: State<'_, AppState>,
+    input: WorkOrderStatusInput,
+    role: Option<String>,
+    actor: Option<String>,
+) -> Result<(), String> {
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
+    let driver_capable = input.is_driver.unwrap_or(false);
+    audit_db(
+        &state.pool,
+        "update_work_order_status",
+        &role_val,
+        &actor_val,
+    )
+    .await;
+
+    let existing = sqlx::query!(
+        "SELECT status, mileage FROM work_orders WHERE id = ? AND is_deleted = 0",
+        input.work_order_id
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // Build update query dynamically
+    let mut query = "UPDATE work_orders SET updated_at = datetime('now')".to_string();
+    let mut binds: Vec<String> = vec![];
+
+    if let Some(status) = &input.status {
+        query.push_str(", status = ?");
+        binds.push(status.clone());
+    }
+
+    if let Some(mileage) = input.mileage {
+        if driver_capable {
+            query.push_str(", mileage = ?");
+            binds.push(mileage.to_string());
+        }
+    }
+
+    query.push_str(" WHERE id = ?");
+    binds.push(input.work_order_id.clone());
+
+    let mut sql_query = sqlx::query(&query);
+    for bind in binds {
+        sql_query = sql_query.bind(bind);
+    }
+
+    sql_query.execute(&state.pool).await.map_err(|e| e.to_string())?;
+
+    // Log changes
+    if let Some(prev) = existing {
+        if let Some(new_status) = &input.status {
+            if prev.status != *new_status {
+                audit_change(
+                    &state.pool,
+                    "update_work_order_status",
+                    &role_val,
+                    &actor_val,
+                    "work_orders",
+                    &input.work_order_id,
+                    "status",
+                    Some(prev.status),
+                    Some(new_status.clone()),
+                )
+                .await;
+            }
+        }
+
+        if let Some(new_mileage) = input.mileage {
+            if driver_capable && prev.mileage != Some(new_mileage) {
+                audit_change(
+                    &state.pool,
+                    "update_work_order_status",
+                    &role_val,
+                    &actor_val,
+                    "work_orders",
+                    &input.work_order_id,
+                    "mileage",
+                    prev.mileage.map(|m| m.to_string()),
+                    Some(new_mileage.to_string()),
+                )
+                .await;
+            }
+        }
+    }
+
+    Ok(())
+}
