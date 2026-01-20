@@ -661,18 +661,17 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
             created_by_user_id
         )
         VALUES (
-            ?, ?, ?, ?,
-            ?, ?,
             ?, ?, ?,
             ?, ?,
             ?, ?, ?,
             ?, ?,
             ?, ?, ?,
+            ?, ?,
             ?, ?, ?,
             ?, ?, ?,
-            ?,
-            ?, ?, ?, ?, ?,
-            ?, ?, ?
+            ?, ?, ?,
+            ?, ?, ?,
+            ?
         )
     "#;
 
