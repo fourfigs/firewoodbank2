@@ -284,6 +284,8 @@ function App() {
   const [clientSortDirection, setClientSortDirection] = useState<"asc" | "desc">("asc");
   const [motdItems, setMotdItems] = useState<MotdRow[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrderRow | null>(null);
+  const [workOrderDetailOpen, setWorkOrderDetailOpen] = useState(false);
 
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [showChangeRequestModal, setShowChangeRequestModal] = useState(false);
@@ -4063,7 +4065,16 @@ function App() {
                               )}
                             </div>
                             {visibleOrders.map((wo) => (
-                              <div className="table-row" key={wo.id}>
+                              <div
+                                className="table-row"
+                                key={wo.id}
+                                onDoubleClick={() => {
+                                  setSelectedWorkOrder(wo);
+                                  setWorkOrderDetailOpen(true);
+                                }}
+                                style={{ cursor: "pointer" }}
+                                title="Double-click to view details"
+                              >
                                 {session?.role === "volunteer" ? (
                                   <>
                                     <div>
@@ -4264,6 +4275,215 @@ function App() {
                           </div>
                         );
                       })()}
+                    </div>
+                  </div>
+                )}
+
+                {/* Work Order Detail Modal */}
+                {workOrderDetailOpen && selectedWorkOrder && (
+                  <div
+                    style={{
+                      position: "fixed",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      backgroundColor: "rgba(0, 0, 0, 0.5)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      zIndex: 1000,
+                    }}
+                    onClick={() => setWorkOrderDetailOpen(false)}
+                  >
+                    <div
+                      className="card"
+                      style={{
+                        minWidth: "500px",
+                        maxWidth: "700px",
+                        maxHeight: "80vh",
+                        overflow: "auto",
+                        backgroundColor: "white",
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="list-head" style={{ marginBottom: "1rem" }}>
+                        <h3>Work Order Details</h3>
+                        <button
+                          className="ghost"
+                          type="button"
+                          onClick={() => setWorkOrderDetailOpen(false)}
+                          style={{ padding: "0.25rem 0.5rem" }}
+                        >
+                          ×
+                        </button>
+                      </div>
+
+                      <div className="stack" style={{ gap: "0.75rem" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
+                        >
+                          <div>
+                            <strong style={{ fontSize: "1.1rem" }}>
+                              {selectedWorkOrder.client_name}
+                            </strong>
+                            <div className="muted" style={{ fontSize: "0.85rem" }}>
+                              Order ID: {selectedWorkOrder.id.slice(0, 8).toUpperCase()}
+                            </div>
+                          </div>
+                          <span
+                            className="pill"
+                            style={{
+                              background:
+                                selectedWorkOrder.status === "completed"
+                                  ? "#c8e6c9"
+                                  : selectedWorkOrder.status === "cancelled"
+                                    ? "#ffcdd2"
+                                    : selectedWorkOrder.status === "scheduled"
+                                      ? "#bbdefb"
+                                      : "#fff3e0",
+                            }}
+                          >
+                            {selectedWorkOrder.status}
+                          </span>
+                        </div>
+
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            gap: "0.75rem",
+                          }}
+                        >
+                          <div>
+                            <strong>Type:</strong>{" "}
+                            {selectedWorkOrder.pickup_delivery_type ?? "delivery"}
+                          </div>
+                          <div>
+                            <strong>Scheduled:</strong>{" "}
+                            {selectedWorkOrder.scheduled_date
+                              ? new Date(selectedWorkOrder.scheduled_date).toLocaleString()
+                              : "Not scheduled"}
+                          </div>
+                          {selectedWorkOrder.delivery_size_label && (
+                            <div>
+                              <strong>Delivery Size:</strong>{" "}
+                              {selectedWorkOrder.delivery_size_label}
+                              {selectedWorkOrder.delivery_size_cords != null &&
+                                ` (${selectedWorkOrder.delivery_size_cords} cords)`}
+                            </div>
+                          )}
+                          {selectedWorkOrder.pickup_quantity_cords != null && (
+                            <div>
+                              <strong>Pickup Quantity:</strong>{" "}
+                              {selectedWorkOrder.pickup_quantity_cords.toFixed(2)} cords
+                            </div>
+                          )}
+                          {selectedWorkOrder.mileage != null && (
+                            <div>
+                              <strong>Mileage:</strong> {selectedWorkOrder.mileage} miles
+                            </div>
+                          )}
+                          {selectedWorkOrder.created_at && (
+                            <div>
+                              <strong>Created:</strong>{" "}
+                              {new Date(selectedWorkOrder.created_at).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+
+                        {(session?.role === "admin" ||
+                          session?.role === "staff" ||
+                          session?.role === "lead") && (
+                          <>
+                            <hr style={{ border: "none", borderTop: "1px solid #eee" }} />
+                            <div>
+                              <strong>Address:</strong>
+                              <div style={{ marginTop: "0.25rem" }}>
+                                {selectedWorkOrder.physical_address_line1 ?? "—"}
+                                <br />
+                                {selectedWorkOrder.physical_address_city ?? ""},{" "}
+                                {selectedWorkOrder.physical_address_state ?? ""}{" "}
+                                {selectedWorkOrder.physical_address_postal_code ?? ""}
+                              </div>
+                            </div>
+                            {selectedWorkOrder.telephone && (
+                              <div>
+                                <strong>Phone:</strong> {selectedWorkOrder.telephone}
+                              </div>
+                            )}
+                            {selectedWorkOrder.gate_combo && (
+                              <div>
+                                <strong>Gate Combo:</strong> {selectedWorkOrder.gate_combo}
+                              </div>
+                            )}
+                            {selectedWorkOrder.wood_size_label && (
+                              <div>
+                                <strong>Wood Size:</strong>{" "}
+                                {selectedWorkOrder.wood_size_label === "other"
+                                  ? selectedWorkOrder.wood_size_other
+                                  : selectedWorkOrder.wood_size_label}{" "}
+                                in
+                              </div>
+                            )}
+                            {selectedWorkOrder.notes && (
+                              <div>
+                                <strong>Notes:</strong>
+                                <div
+                                  style={{
+                                    marginTop: "0.25rem",
+                                    whiteSpace: "pre-wrap",
+                                    background: "#f9f9f9",
+                                    padding: "0.5rem",
+                                    borderRadius: "4px",
+                                  }}
+                                >
+                                  {selectedWorkOrder.notes}
+                                </div>
+                              </div>
+                            )}
+                            {selectedWorkOrder.assignees_json && (
+                              <div>
+                                <strong>Assigned:</strong>{" "}
+                                {(() => {
+                                  try {
+                                    const arr = JSON.parse(selectedWorkOrder.assignees_json);
+                                    return Array.isArray(arr) ? arr.join(", ") : "—";
+                                  } catch {
+                                    return "—";
+                                  }
+                                })()}
+                              </div>
+                            )}
+                            {selectedWorkOrder.created_by_display && (
+                              <div>
+                                <strong>Created by:</strong> {selectedWorkOrder.created_by_display}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: "1.5rem",
+                          display: "flex",
+                          gap: "0.5rem",
+                          justifyContent: "flex-end",
+                        }}
+                      >
+                        <button
+                          className="ghost"
+                          type="button"
+                          onClick={() => setWorkOrderDetailOpen(false)}
+                        >
+                          Close
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
