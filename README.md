@@ -163,24 +163,49 @@ Migrations are automatically applied on startup. Current migrations:
 - `0010_remove_client_number.sql` - Remove client_number
 - `0011_add_user_logins_and_addresses.sql` - Login table + worker addresses
 - `0012_add_auth_user_unique.sql` - Unique login per worker
+- `0013_add_work_order_pickup_quantity.sql` - Pickup quantity fields
+- `0014_add_work_order_pickup_delivery_type.sql` - Pickup/delivery type field
+- `0015_add_audit_log_details.sql` - Audit log entity/field tracking
+- `0016_add_performance_indexes.sql` - Query performance indexes
 
 ### Environment Variables
 
-You can override the database location by setting:
+The app auto-detects the database location (`firewoodbank.db` in project root), but you can override it:
 
 ```bash
 DATABASE_URL=sqlite:///path/to/your/database.db
 ```
 
-On Windows paths with spaces, URL-encode them, e.g.:
+#### Windows Path Encoding (Important!)
+
+Windows paths with spaces **must be URL-encoded** for SQLite URLs:
+
+| Path Component | Encoding |
+|----------------|----------|
+| Space | `%20` |
+| Backslash | Use forward slashes `/` instead |
+
+**Example** (PowerShell):
+```powershell
+$env:DATABASE_URL="sqlite:///C:/firewood%20bank/firewoodbank2/firewoodbank.db"
+npm run dev
+```
+
+**Example** (.env file in project root - recommended):
 ```bash
 DATABASE_URL=sqlite:///C:/firewood%20bank/firewoodbank2/firewoodbank.db
 ```
 
-You can also create a local `.env` file in the repo root:
+#### SQLx Compile-Time Checks
+
+SQLx verifies SQL queries at compile time. If you add new migrations or get database schema errors:
+
 ```bash
-DATABASE_URL=sqlite:///C:/firewood%20bank/firewoodbank2/firewoodbank.db
+cd src-tauri
+cargo run --bin bootstrap_db
 ```
+
+This creates/updates the database and applies all migrations, allowing SQLx to verify queries during compilation.
 
 ---
 

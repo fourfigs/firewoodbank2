@@ -46,7 +46,7 @@ Review & Improvement Suggestions (Program Structure + Workflow):
 - ✅ Add centralized error handling — GlobalErrorBoundary component exists
 - Split `src/App.tsx` into feature modules (clients, inventory, work orders, invoices, worker directory) and centralize shared UI helpers. (App.tsx is 5000+ lines)
 - Replace `window.print()` with a Tauri-side print command for consistent native printing behavior.
-- Add `dev` docs for DATABASE_URL encoding and `.env` usage to avoid PowerShell pitfalls.
+- ✅ Add `dev` docs for DATABASE_URL encoding and `.env` usage — documented in README.md with Windows path encoding table and SQLx bootstrap instructions
 - Add tests: unit tests for Rust auth + work order status transitions; basic UI smoke tests for critical tabs.
 - ✅ Standardize role names across UI, Rust, docs, and seeds — roles are now `admin/lead/staff/volunteer`. The `lead` role is used for team leads with elevated permissions (can view PII if HIPAA certified).
 - Split `src-tauri/src/main.rs` into command modules (e.g., `commands/users.rs`, `commands/work_orders.rs`) and move shared SQL into `db`/`services` layers. (main.rs is 3000+ lines)
