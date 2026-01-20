@@ -18,7 +18,7 @@ import {
   UserSession,
   WorkOrderRow,
 } from "./types";
-import { Clients } from "./pages";
+import { Clients, Inventory } from "./pages";
 
 const tabs = [
   "Dashboard",
@@ -243,6 +243,11 @@ function App() {
   const [clientSortField, setClientSortField] = useState<string>("first_name");
   const [clientSortDirection, setClientSortDirection] = useState<"asc" | "desc">("asc");
 
+  // Inventory-specific state
+  const [showInventoryForm, setShowInventoryForm] = useState(false);
+  const [editingInventoryId, setEditingInventoryId] = useState<string | null>(null);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
+
   // Modal states
   const [showChangeRequestModal, setShowChangeRequestModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -270,6 +275,18 @@ function App() {
     notes: "",
     approval_status: "pending",
     denial_reason: "",
+  });
+
+  // Inventory form state
+  const [inventoryForm, setInventoryForm] = useState({
+    name: "",
+    category: "",
+    customCategory: "",
+    quantity_on_hand: 0,
+    unit: "pcs",
+    reorder_threshold: 0,
+    reorder_amount: 0,
+    notes: "",
   });
 
   useEffect(() => {
@@ -301,6 +318,7 @@ function App() {
   useEffect(() => {
     if (session) {
       loadClients();
+      loadInventory();
       // Load other data as needed
     } else {
       loadMotd();
@@ -415,15 +433,21 @@ function App() {
                   />
                 )}
 
-                {activeTab === "Inventory" && (
-                  <div className="stack">
-                    <div className="card muted">
-                      <div className="add-header">
-                        <h3>Inventory Management</h3>
-                        <p>Coming soon - extracted to src/pages/Inventory.tsx</p>
-                      </div>
-                    </div>
-                  </div>
+                {activeTab === "Inventory" && session && (
+                  <Inventory
+                    session={session}
+                    inventory={inventory}
+                    busy={busy}
+                    showInventoryForm={showInventoryForm}
+                    setShowInventoryForm={setShowInventoryForm}
+                    editingInventoryId={editingInventoryId}
+                    setEditingInventoryId={setEditingInventoryId}
+                    inventoryError={inventoryError}
+                    setInventoryError={setInventoryError}
+                    inventoryForm={inventoryForm}
+                    setInventoryForm={setInventoryForm}
+                    loadInventory={loadInventory}
+                  />
                 )}
 
                 {activeTab === "Work Orders" && (
