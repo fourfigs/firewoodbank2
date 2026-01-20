@@ -1975,6 +1975,11 @@ async fn list_pending_changes(state: State<'_, AppState>) -> Result<Vec<SyncReco
 }
 
 #[tauri::command]
+fn print_invoice(window: tauri::Window) -> Result<(), String> {
+    window.eval("window.print()").map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn create_invoice_from_work_order(
     state: State<'_, AppState>,
     input: CreateInvoiceInput,
@@ -2634,6 +2639,7 @@ fn main() -> Result<()> {
             list_invoices,
             create_invoice_from_work_order,
             list_pending_changes,
+            print_invoice,
             list_motd,
             create_motd,
             delete_motd,
