@@ -406,6 +406,12 @@ function App() {
     delivery_size_choice: "f250",
     delivery_size_other: "",
     delivery_size_other_cords: "",
+    pickup_quantity_mode: "cords",
+    pickup_quantity_cords: "",
+    pickup_length: "",
+    pickup_width: "",
+    pickup_height: "",
+    pickup_units: "ft",
   });
 
   const [workOrderNewClientEnabled, setWorkOrderNewClientEnabled] = useState(false);
@@ -2063,6 +2069,12 @@ function App() {
                                     delivery_size_choice: "f250",
                                     delivery_size_other: "",
                                     delivery_size_other_cords: "",
+                                    pickup_quantity_mode: "cords",
+                                    pickup_quantity_cords: "",
+                                    pickup_length: "",
+                                    pickup_width: "",
+                                    pickup_height: "",
+                                    pickup_units: "ft",
                                   });
                                   setShowWorkOrderForm(true);
                                   setActiveTab("Work Orders");
@@ -2659,6 +2671,12 @@ function App() {
                                 delivery_size_choice: "f250",
                                 delivery_size_other: "",
                                 delivery_size_other_cords: "",
+                                pickup_quantity_mode: "cords",
+                                pickup_quantity_cords: "",
+                                pickup_length: "",
+                                pickup_width: "",
+                                pickup_height: "",
+                                pickup_units: "ft",
                               });
                               setWorkOrderNewClientEnabled(false);
                               setWorkOrderNewClient({
@@ -2940,6 +2958,59 @@ function App() {
                                 deliverySizeLabel = details;
                               }
 
+                              let pickupQuantityCords: number | null = null;
+                              let pickupLength: number | null = null;
+                              let pickupWidth: number | null = null;
+                              let pickupHeight: number | null = null;
+                              let pickupUnits: string | null = null;
+                              if (workOrderForm.status === "picked_up") {
+                                if (workOrderForm.pickup_quantity_mode === "cords") {
+                                  const cordsParsed = Number(
+                                    workOrderForm.pickup_quantity_cords.trim(),
+                                  );
+                                  if (!Number.isFinite(cordsParsed) || cordsParsed <= 0) {
+                                    setWorkOrderError(
+                                      "Enter a valid pickup quantity in cords.",
+                                    );
+                                    return;
+                                  }
+                                  pickupQuantityCords = cordsParsed;
+                                } else {
+                                  const lengthRaw = Number(
+                                    workOrderForm.pickup_length.trim(),
+                                  );
+                                  const widthRaw = Number(
+                                    workOrderForm.pickup_width.trim(),
+                                  );
+                                  const heightRaw = Number(
+                                    workOrderForm.pickup_height.trim(),
+                                  );
+                                  if (
+                                    !Number.isFinite(lengthRaw) ||
+                                    !Number.isFinite(widthRaw) ||
+                                    !Number.isFinite(heightRaw) ||
+                                    lengthRaw <= 0 ||
+                                    widthRaw <= 0 ||
+                                    heightRaw <= 0
+                                  ) {
+                                    setWorkOrderError(
+                                      "Enter valid pickup dimensions.",
+                                    );
+                                    return;
+                                  }
+                                  pickupUnits = workOrderForm.pickup_units;
+                                  pickupLength = lengthRaw;
+                                  pickupWidth = widthRaw;
+                                  pickupHeight = heightRaw;
+                                  const scale = pickupUnits === "in" ? 1 / 12 : 1;
+                                  const lengthFt = lengthRaw * scale;
+                                  const widthFt = widthRaw * scale;
+                                  const heightFt = heightRaw * scale;
+                                  pickupQuantityCords =
+                                    (lengthFt * widthFt * heightFt) / 128;
+                                }
+                              }
+
                               setBusy(true);
                               try {
                                 try {
@@ -2988,6 +3059,11 @@ function App() {
                                       wood_size_other: targetClient.wood_size_other || null,
                                       delivery_size_label: deliverySizeLabel,
                                       delivery_size_cords: deliverySizeCords,
+                                      pickup_quantity_cords: pickupQuantityCords,
+                                      pickup_length: pickupLength,
+                                      pickup_width: pickupWidth,
+                                      pickup_height: pickupHeight,
+                                      pickup_units: pickupUnits,
                                       assignees_json: JSON.stringify([
                                         ...workOrderForm.assignees,
                                         ...workOrderForm.helpers
@@ -3026,6 +3102,12 @@ function App() {
                                   delivery_size_choice: "f250",
                                   delivery_size_other: "",
                                   delivery_size_other_cords: "",
+                                  pickup_quantity_mode: "cords",
+                                  pickup_quantity_cords: "",
+                                  pickup_length: "",
+                                  pickup_width: "",
+                                  pickup_height: "",
+                                  pickup_units: "ft",
                                 });
                                 setWorkOrderNewClient({
                                   first_name: "",
@@ -3141,6 +3223,105 @@ function App() {
                                     />
                                   </label>
                                 </>
+                              )}
+                              {workOrderForm.status === "picked_up" && (
+                                <div className="span-2" style={{ display: "grid", gap: 12 }}>
+                                  <label>
+                                    Pickup quantity (method)
+                                    <select
+                                      value={workOrderForm.pickup_quantity_mode}
+                                      onChange={(e) =>
+                                        setWorkOrderForm({
+                                          ...workOrderForm,
+                                          pickup_quantity_mode: e.target.value,
+                                        })
+                                      }
+                                    >
+                                      <option value="cords">Cords</option>
+                                      <option value="dimensions">Dimensions</option>
+                                    </select>
+                                  </label>
+                                  {workOrderForm.pickup_quantity_mode === "cords" ? (
+                                    <label>
+                                      Pickup quantity (cords)
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={workOrderForm.pickup_quantity_cords}
+                                        onChange={(e) =>
+                                          setWorkOrderForm({
+                                            ...workOrderForm,
+                                            pickup_quantity_cords: e.target.value,
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                  ) : (
+                                    <div className="form-grid">
+                                      <label>
+                                        Length
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="0.01"
+                                          value={workOrderForm.pickup_length}
+                                          onChange={(e) =>
+                                            setWorkOrderForm({
+                                              ...workOrderForm,
+                                              pickup_length: e.target.value,
+                                            })
+                                          }
+                                        />
+                                      </label>
+                                      <label>
+                                        Width
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="0.01"
+                                          value={workOrderForm.pickup_width}
+                                          onChange={(e) =>
+                                            setWorkOrderForm({
+                                              ...workOrderForm,
+                                              pickup_width: e.target.value,
+                                            })
+                                          }
+                                        />
+                                      </label>
+                                      <label>
+                                        Height
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="0.01"
+                                          value={workOrderForm.pickup_height}
+                                          onChange={(e) =>
+                                            setWorkOrderForm({
+                                              ...workOrderForm,
+                                              pickup_height: e.target.value,
+                                            })
+                                          }
+                                        />
+                                      </label>
+                                      <label>
+                                        Units
+                                        <select
+                                          value={workOrderForm.pickup_units}
+                                          onChange={(e) =>
+                                            setWorkOrderForm({
+                                              ...workOrderForm,
+                                              pickup_units: e.target.value,
+                                            })
+                                          }
+                                        >
+                                          <option value="ft">Feet</option>
+                                          <option value="in">Inches</option>
+                                        </select>
+                                      </label>
+                                    </div>
+                                  )}
+                                </div>
                               )}
                               <label className="span-2">
                                 Assign driver(s)
@@ -3385,6 +3566,7 @@ function App() {
                                   <option value="received">received</option>
                                   <option value="scheduled">scheduled</option>
                                   <option value="rescheduled">rescheduled</option>
+                                  <option value="picked_up">picked_up</option>
                                   <option value="completed">completed</option>
                                   <option value="cancelled">canceled</option>
                                 </select>
@@ -3482,20 +3664,27 @@ function App() {
                                     busy ||
                                     !canCreateWorkOrders ||
                                     (!workOrderNewClientEnabled && !workOrderForm.client_id) ||
-                                    (workOrderForm.status === "scheduled" &&
-                                      // Required fields check for scheduled status
-                                      ((!workOrderNewClientEnabled && !workOrderForm.client_id) || // Existing client
-                                        (workOrderNewClientEnabled &&
-                                          (!workOrderNewClient.first_name ||
-                                            !workOrderNewClient.last_name ||
-                                            !workOrderNewClient.telephone ||
-                                            !workOrderNewClient.physical_address_line1 ||
-                                            !workOrderNewClient.physical_address_city ||
-                                            !workOrderNewClient.physical_address_state)) || // New Client fields
-                                        !workOrderForm.scheduled_date || // Date scheduled
-                                        (workOrderForm.delivery_size_choice === "other" &&
-                                          (!workOrderForm.delivery_size_other ||
-                                            !workOrderForm.delivery_size_other_cords)))) // Vehicle details
+                                  (workOrderForm.status === "scheduled" &&
+                                    // Required fields check for scheduled status
+                                    ((!workOrderNewClientEnabled && !workOrderForm.client_id) || // Existing client
+                                      (workOrderNewClientEnabled &&
+                                        (!workOrderNewClient.first_name ||
+                                          !workOrderNewClient.last_name ||
+                                          !workOrderNewClient.telephone ||
+                                          !workOrderNewClient.physical_address_line1 ||
+                                          !workOrderNewClient.physical_address_city ||
+                                          !workOrderNewClient.physical_address_state)) || // New Client fields
+                                      !workOrderForm.scheduled_date)) || // Date scheduled
+                                  (workOrderForm.delivery_size_choice === "other" &&
+                                    (!workOrderForm.delivery_size_other ||
+                                      !workOrderForm.delivery_size_other_cords)) ||
+                                  (workOrderForm.status === "picked_up" &&
+                                    ((workOrderForm.pickup_quantity_mode === "cords" &&
+                                      !workOrderForm.pickup_quantity_cords) ||
+                                      (workOrderForm.pickup_quantity_mode === "dimensions" &&
+                                        (!workOrderForm.pickup_length ||
+                                          !workOrderForm.pickup_width ||
+                                          !workOrderForm.pickup_height))))
                                   }
                                 >
                                   Save work order
@@ -3600,6 +3789,16 @@ function App() {
                                           Delivery: {wo.delivery_size_label}
                                         </div>
                                       )}
+                                      {wo.pickup_quantity_cords != null && (
+                                        <div className="muted">
+                                          Pickup: {wo.pickup_quantity_cords.toFixed(2)} cords
+                                          {wo.pickup_length != null &&
+                                          wo.pickup_width != null &&
+                                          wo.pickup_height != null
+                                            ? ` (${wo.pickup_length}x${wo.pickup_width}x${wo.pickup_height} ${wo.pickup_units ?? ""})`
+                                            : ""}
+                                        </div>
+                                      )}
                                     </div>
                                     <div>
                                       <span className="pill">{wo.status}</span>
@@ -3620,6 +3819,16 @@ function App() {
                                       {wo.delivery_size_label && (
                                         <div className="muted">
                                           Delivery: {wo.delivery_size_label}
+                                        </div>
+                                      )}
+                                      {wo.pickup_quantity_cords != null && (
+                                        <div className="muted">
+                                          Pickup: {wo.pickup_quantity_cords.toFixed(2)} cords
+                                          {wo.pickup_length != null &&
+                                          wo.pickup_width != null &&
+                                          wo.pickup_height != null
+                                            ? ` (${wo.pickup_length}x${wo.pickup_width}x${wo.pickup_height} ${wo.pickup_units ?? ""})`
+                                            : ""}
                                         </div>
                                       )}
                                     </div>

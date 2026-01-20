@@ -382,6 +382,11 @@ struct WorkOrderInput {
     wood_size_other: Option<String>,
     delivery_size_label: Option<String>,
     delivery_size_cords: Option<f64>,
+    pickup_quantity_cords: Option<f64>,
+    pickup_length: Option<f64>,
+    pickup_width: Option<f64>,
+    pickup_height: Option<f64>,
+    pickup_units: Option<String>,
     assignees_json: Option<String>,
     created_by_user_id: Option<String>,
     created_by_display: Option<String>,
@@ -405,6 +410,11 @@ struct WorkOrderRow {
     wood_size_other: Option<String>,
     delivery_size_label: Option<String>,
     delivery_size_cords: Option<f64>,
+    pickup_quantity_cords: Option<f64>,
+    pickup_length: Option<f64>,
+    pickup_width: Option<f64>,
+    pickup_height: Option<f64>,
+    pickup_units: Option<String>,
     assignees_json: Option<String>,
     created_by_display: Option<String>,
 }
@@ -611,6 +621,7 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
             ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?,
+            ?, ?, ?, ?, ?,
             ?, ?, ?
         )
     "#;
@@ -1034,6 +1045,7 @@ async fn create_work_order(
             notes, scheduled_date, status,
             wood_size_label, wood_size_other,
             delivery_size_label, delivery_size_cords,
+            pickup_quantity_cords, pickup_length, pickup_width, pickup_height, pickup_units,
             assignees_json,
             created_by_user_id, created_by_display
         )
@@ -1086,6 +1098,11 @@ async fn create_work_order(
         .bind(&input.wood_size_other)
         .bind(&input.delivery_size_label)
         .bind(&input.delivery_size_cords)
+        .bind(&input.pickup_quantity_cords)
+        .bind(&input.pickup_length)
+        .bind(&input.pickup_width)
+        .bind(&input.pickup_height)
+        .bind(&input.pickup_units)
         .bind(&assignees_store)
         .bind(&input.created_by_user_id)
         .bind(&input.created_by_display)
@@ -1093,14 +1110,14 @@ async fn create_work_order(
         .await
         .map_err(|e| e.to_string())?;
 
-    adjust_inventory_for_transition_tx(
-        &mut tx,
-        "draft",
-        &status,
-        input.delivery_size_cords.unwrap_or(0.0),
-    )
-    .await
-    .map_err(|e| e.to_string())?;
+    let inventory_cords = if status.eq_ignore_ascii_case("picked_up") {
+        input.pickup_quantity_cords.unwrap_or(0.0)
+    } else {
+        input.delivery_size_cords.unwrap_or(0.0)
+    };
+    adjust_inventory_for_transition_tx(&mut tx, "draft", &status, inventory_cords)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let assigned_json = assignees_store.clone();
 
@@ -1162,6 +1179,11 @@ async fn list_work_orders(
             wood_size_other,
             delivery_size_label,
             delivery_size_cords,
+            pickup_quantity_cords,
+            pickup_length,
+            pickup_width,
+            pickup_height,
+            pickup_units,
             COALESCE(assignees_json, '[]') as assignees_json,
             created_by_display
         FROM work_orders
@@ -1290,7 +1312,9 @@ async fn adjust_inventory_for_transition_tx(
         reserved -= delivery_size_cords;
     }
 
-    if next_status.eq_ignore_ascii_case("completed") {
+    if next_status.eq_ignore_ascii_case("completed")
+        || next_status.eq_ignore_ascii_case("picked_up")
+    {
         on_hand -= delivery_size_cords;
     }
 
@@ -2354,7 +2378,7 @@ async fn update_work_order_status(
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
 
     let existing = sqlx::query!(
-        r#"SELECT status, delivery_size_cords FROM work_orders WHERE id = ? AND is_deleted = 0"#,
+        r#"SELECT status, delivery_size_cords, pickup_quantity_cords FROM work_orders WHERE id = ? AND is_deleted = 0"#,
         input.work_order_id
     )
     .fetch_optional(&mut *tx)
@@ -2371,7 +2395,13 @@ async fn update_work_order_status(
         .status
         .clone()
         .unwrap_or_else(|| current_status.clone());
-    let delivery_size = existing.delivery_size_cords.unwrap_or(0.0);
+    let delivery_size = if next_status.eq_ignore_ascii_case("picked_up")
+        || current_status.eq_ignore_ascii_case("picked_up")
+    {
+        existing.pickup_quantity_cords.unwrap_or(0.0)
+    } else {
+        existing.delivery_size_cords.unwrap_or(0.0)
+    };
 
     // Simple validation: mileage required if status completed
     if next_status == "completed" && input.mileage.is_none() {

@@ -78,6 +78,11 @@ export type WorkOrderRow = {
   wood_size_other?: string | null;
   delivery_size_label?: string | null;
   delivery_size_cords?: number | null;
+  pickup_quantity_cords?: number | null;
+  pickup_length?: number | null;
+  pickup_width?: number | null;
+  pickup_height?: number | null;
+  pickup_units?: string | null;
   assignees_json?: string | null;
   created_by_display?: string | null;
 };
