@@ -1647,16 +1647,6 @@ function App() {
                                   />
                                 </label>
                               )}
-                              <label>
-                                Gate Combo
-                                <input
-                                  tabIndex={20}
-                                  value={clientForm.gate_combo}
-                                  onChange={(e) =>
-                                    setClientForm({ ...clientForm, gate_combo: e.target.value })
-                                  }
-                                />
-                              </label>
                               {/* Directions (spans all 4 columns, 2 rows) - above divider */}
                               <label style={{ gridColumn: "1 / -1", gridRow: "span 2" }}>
                                 Directions
