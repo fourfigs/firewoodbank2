@@ -1,4 +1,4 @@
-export type Role = "admin" | "lead" | "staff" | "volunteer";
+export type Role = "admin" | "staff" | "employee" | "volunteer";
 
 export type UserSession = {
   userId: string;
@@ -14,7 +14,6 @@ export type UserSession = {
 export type ClientRow = {
   id: string;
   name: string;
-  client_title?: string | null;
   email?: string | null;
   telephone?: string | null;
   approval_status: string;

@@ -1,4 +1,4 @@
-Notable Gaps / Changes Needed (updated after Stage 5.4 completion)
+Notable Gaps / Changes Needed (updated after Stage 12 completion)
 
 Completed in Stages 5.2-5.4:
 - ✅ Client name split into first/last (Stage 5.2). Numeric client identifiers (formerly `client_number`) have been removed.
@@ -12,11 +12,11 @@ Completed in Stages 5.2-5.4:
 - ✅ Driver availability scheduling with weekly schedule (Stage 5.2)
 - ✅ Worker Directory tab for admin/lead (Stage 5.3)
 - ✅ Reports tab with audit log viewer and time filtering (Stage 5.4)
+- ✅ Inventory reservation validation added (2025-12-28) - prevents reserved_quantity exceeding available on-hand (backend validation in `adjust_inventory_for_transition_tx`).
 
 Remaining Items:
-- client_title field exists in schema but is old/unused - should be removed from database and code
+- ✅ client_title field removed from DTOs (types.ts, ts_dtos.ts, rust_structs.rs, App.tsx). Database column retained for backwards compatibility.
 - Inventory creation gating to be enforced with user CRUD/users stage (if needed)
-- ✅ Inventory reservation validation added (2025-12-28) - prevents reserved_quantity exceeding available on-hand (backend validation in `adjust_inventory_for_transition_tx`).
 
 Current Status:
 - Stage 5.2: ✅ COMPLETE
@@ -39,14 +39,20 @@ Notes:
 - For SQLx compile-time checks, run `cargo run --bin bootstrap_db` and set `DATABASE_URL` (URL-encode spaces)
 
 Review & Improvement Suggestions (Program Structure + Workflow):
-- Split `src/App.tsx` into feature modules (clients, inventory, work orders, invoices, worker directory) and centralize shared UI helpers.
-- Add a thin API layer (e.g., `src/api/*`) to wrap `invoke()` and keep request/response types in one place.
+- ✅ Add a thin API layer (e.g., `src/api/*`) to wrap `invoke()` — implemented in `src/api/tauri.ts`
+- ✅ Add form-level validation utilities (city/state/phone/zip) — implemented in `src/utils/validation.ts` and `src/utils/format.ts`
+- ✅ Introduce a real auth flow (password reset, change password) and store password hashes only — bcrypt hashes in auth_users, change_password command exists
+- ✅ Add lint/format config (ESLint/Prettier) — `.prettierrc` and `eslint.config.js` exist
+- ✅ Add centralized error handling — GlobalErrorBoundary component exists
+- Split `src/App.tsx` into feature modules (clients, inventory, work orders, invoices, worker directory) and centralize shared UI helpers. (App.tsx is 5000+ lines)
 - Replace `window.print()` with a Tauri-side print command for consistent native printing behavior.
-- Add form-level validation utilities (city/state/phone/zip) to avoid duplicated onBlur handlers.
-- Introduce a real auth flow (password reset, change password) and store password hashes only.
 - Add `dev` docs for DATABASE_URL encoding and `.env` usage to avoid PowerShell pitfalls.
 - Add tests: unit tests for Rust auth + work order status transitions; basic UI smoke tests for critical tabs.
-- Add lint/format config (ESLint/Prettier + rustfmt/clippy) and wire into CI scripts.
+- Standardize role names across UI, Rust, docs, and seeds (remove `lead` role; use `admin/staff/employee/volunteer`). NOTE: `types.ts` uses correct roles but code still references "lead" in 17 places, and `ts_dtos.ts` still has "lead".
+- Split `src-tauri/src/main.rs` into command modules (e.g., `commands/users.rs`, `commands/work_orders.rs`) and move shared SQL into `db`/`services` layers. (main.rs is 3000+ lines)
+- Add a `src/pages` (or `features`) directory and move tab content components out of `App.tsx` to reduce re-render scope and improve readability.
+- Add DB indexes for common filters (work_orders.status, work_orders.scheduled_date, audit_logs.created_at) to keep reports and lists fast. (only is_deleted indexes exist currently)
+- Add basic pagination/virtualization for large lists (clients, work orders, audit logs).
 
 Copyable prompts (Stage 0–5) for next agent:
 Stage 0 prompt
@@ -64,64 +70,3 @@ Output initial Rust/SQL schema and TypeScript DTOs for these entities.
 
 Keep names and types consistent so we can map to a future Postgres backend.
 
-Stage 1 prompt
-Implement Stage 1: scaffold the Windows desktop Tauri app with React + TypeScript.
-Tasks:
-
-Create a Tauri 2 project targeting Windows.
-
-Set up React + TypeScript frontend.
-
-Add a navigation shell with pages: Dashboard, Clients, Inventory, Work Orders, Admin (and a placeholder Driver view).
-
-Add a basic Tauri command ping that returns JSON and show a React component that calls it.
-Show me the key files and edits and how to run the app (commands).
-
-Stage 2 prompt
-Implement Stage 2: SQLite integration and sync‑ready tables.
-Tasks:
-
-Add SQLite to the Tauri backend and configure migrations.
-
-Create migrations for: User, Client, InventoryItem, WorkOrder, DeliveryEvent, Invoice, MOTD, ChangeRequest with sync fields.
-
-Implement Rust data access for Clients and InventoryItems (CRUD).
-
-Expose Tauri commands: createClient, updateClient, listClients, createInventoryItem, updateInventoryItem, listInventoryItems, using DTOs.
-
-Ensure createdAt/updatedAt/isDeleted and UUIDs are handled correctly.
-
-Stage 3 prompt
-Implement Stage 3: Clients module.
-Using the existing Client schema and Tauri commands, build:
-
-Client list with search/filter.
-
-Client detail/edit view with all onboard form fields (onboarding date, addresses, phones, email, how heard, referring agency, approvalStatus + denialReason, gateCombo, notes). Note: client_title is old/unused and should be removed. Numeric client identifiers (formerly `client_number`) have been removed from schema and UI.
-
-Placeholders for delivery metrics (week/month/year/all‑time) derived from DeliveryEvent.
-Wire up create/edit to the backend and update metadata fields automatically.
-
-Stage 4 prompt
-Implement Stage 4: Inventory module.
-Using InventoryItem schema and commands, build:
-
-Inventory list and detail views.
-
-CRUD for items like chainsaws, bar oil, gas, 2‑stroke oil, files, helmets, helmetsWithVisorsMufflers, gloves, chaps.
-
-Fields per item: name, category, currentQuantity, unit, reorderThreshold, isActive.
-
-Derived: belowThreshold flag and generated orderMessage.
-
-Expose a “Needs restock” view for later use on the dashboard/admin page.
-
-Stage 5 prompt
-Implement Stage 5: Work Orders and DeliveryEvents.
-Based on the Order form, build:
-
-WorkOrder list and detail screens with all fields (client link, client snapshot, addresses, directions, gate combo, heat source options, notes, dateOfOnboarding, scheduledDate, status).
-
-DeliveryEvent entity tied to WorkOrders (type, title, notes, start/end, colorCode).
-
-Ability to create a WorkOrder from a Client and auto‑create a DeliveryEvent when scheduled.

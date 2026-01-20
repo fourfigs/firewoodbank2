@@ -97,10 +97,14 @@ fn resolve_database_url() -> String {
         // Try local dir as last resort.
         root_db = PathBuf::from("firewoodbank.db");
     }
-    format!(
-        "sqlite://{}",
-        root_db.canonicalize().unwrap_or(root_db).to_string_lossy()
-    )
+    let canonical = root_db.canonicalize().unwrap_or(root_db);
+    // Convert Windows backslashes to forward slashes and URL-encode spaces for SQLite URL
+    let path_str = canonical.to_string_lossy().replace('\\', "/");
+    // Remove Windows extended path prefix if present (\\?\)
+    let path_str = path_str.strip_prefix("//?/").unwrap_or(&path_str);
+    // URL-encode spaces
+    let path_str = path_str.replace(' ', "%20");
+    format!("sqlite://{}", path_str)
 }
 
 async fn migrate_auth_passwords(pool: &SqlitePool) -> Result<(), String> {

@@ -70,8 +70,7 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
     setLoginError(null);
     try {
       const response = await invokeTauri<LoginResponse>("login_user", {
-        username,
-        password,
+        input: { username, password },
       });
       onLogin({
         userId: response.user_id,
@@ -91,10 +90,7 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
             ? error
             : "Login failed. Check your username and password.";
       setLoginError(message);
-    } finally {
-      if (isMounted.current) {
-        setSubmitting(false);
-      }
+      setSubmitting(false);
     }
   };
 
@@ -145,9 +141,9 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
               {submitting ? "Sending..." : "Send Reset Code"}
             </button>
             <div className="login-options" style={{ justifyContent: "center", marginTop: 16 }}>
-              <button
-                className="login-link"
-                type="button"
+              <button 
+                className="login-link" 
+                type="button" 
                 onClick={() => {
                   setIsForgot(false);
                   setResetMessage(null);
@@ -216,22 +212,22 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
             <button className="login-btn" type="submit" disabled={submitting}>
               {submitting ? "Signing in..." : "Sign In"}
             </button>
-
+            
             <div className="login-options" style={{ justifyContent: "center", marginTop: 16 }}>
-              <button className="login-link" type="button" onClick={() => setIsForgot(true)}>
-                Lost Password?
-              </button>
+                 <button className="login-link" type="button" onClick={() => setIsForgot(true)}>
+                    Lost Password?
+                 </button>
             </div>
           </form>
         </div>
       )}
-
+      
       <div className="login-footer-links">
         <a href="https://nm-era.org" target="_blank" rel="noreferrer">
           nm-era.org
         </a>
-        <span className="separator">•</span>
-        <a href="mailto:organize@nm-era.org">organize@nm-era.org</a>
+          <span className="separator">•</span>
+          <a href="mailto:organize@nm-era.org">organize@nm-era.org</a>
       </div>
     </div>
   );
@@ -1010,7 +1006,7 @@ function App() {
                                   const conflicts = await invokeTauri<ClientConflictRow[]>(
                                     "check_client_conflict",
                                     {
-                                      name: fullName,
+                                    name: fullName,
                                     },
                                   );
                                   const conflictAtOtherAddress = conflicts.some((c) => {
@@ -1131,13 +1127,13 @@ function App() {
                                   // Date will be auto-generated for new clients
                                   const mailing = clientForm.mailing_same_as_physical
                                     ? {
-                                        mailing_address_line1: clientForm.physical_address_line1,
+                                      mailing_address_line1: clientForm.physical_address_line1,
                                         mailing_address_line2:
                                           clientForm.physical_address_line2 || null,
-                                        mailing_address_city: normalizedCity,
+                                      mailing_address_city: normalizedCity,
                                         mailing_address_state: stateCheck.normalized,
                                         mailing_address_postal_code: postalCheck.normalized,
-                                      }
+                                    }
                                     : {
                                         mailing_address_line1:
                                           clientForm.mailing_address_line1 || null,
@@ -1157,7 +1153,7 @@ function App() {
                                                 clientForm.mailing_address_postal_code,
                                               ).normalized
                                             : null,
-                                      };
+                                    };
 
                                   // Default status to "pending" if no referring agency
                                   const defaultStatus = clientForm.referring_agency?.trim()
@@ -1213,10 +1209,10 @@ function App() {
                                   console.error("Error saving client:", error);
                                   const errorMessage =
                                     error instanceof Error
-                                      ? error.message
+                                    ? error.message
                                       : typeof error === "string"
-                                        ? error
-                                        : "Failed to save client. Please try again.";
+                                      ? error
+                                      : "Failed to save client. Please try again.";
                                   setClientError(errorMessage);
                                 } finally {
                                   setBusy(false);
@@ -2206,7 +2202,7 @@ function App() {
                                     <span>Date</span>
                                     <span>Size</span>
                                     <span>Mileage</span>
-                                  </div>
+                          </div>
                                   {deliveredOrdersForClient.map((wo) => (
                                     <div className="table-row" key={`delivered-${wo.id}`}>
                                       <div>{safeDate(wo.scheduled_date)}</div>
@@ -2856,7 +2852,7 @@ function App() {
                                 const conflicts = await invokeTauri<ClientConflictRow[]>(
                                   "check_client_conflict",
                                   {
-                                    name: fullName,
+                                  name: fullName,
                                   },
                                 );
                                 const conflictAtOtherAddress = conflicts.some((c) => {
@@ -2878,7 +2874,6 @@ function App() {
 
                                 const newClientId = await invokeTauri<string>("create_client", {
                                   input: {
-                                    client_title: null,
                                     name: fullName,
                                     physical_address_line1: nc.physical_address_line1,
                                     physical_address_line2: null,
@@ -2906,7 +2901,6 @@ function App() {
                                 targetClient = {
                                   id: newClientId,
                                   name: fullName,
-                                  client_title: null,
                                   email: nc.email || null,
                                   telephone: nc.telephone || null,
                                   approval_status: "pending",
@@ -2944,22 +2938,22 @@ function App() {
                               let deliverySizeLabel: string | null = null;
                               if (pickupType === "delivery") {
                                 if (deliveryChoice === "f250") {
-                                  deliverySizeCords = 1;
+                                deliverySizeCords = 1;
                                   deliverySizeLabel = "Ford F-250";
                                 } else if (deliveryChoice === "f250_half") {
                                   deliverySizeCords = 0.5;
                                   deliverySizeLabel = "Ford F-250 1/2";
                                 } else if (deliveryChoice === "toyota") {
-                                  deliverySizeCords = 0.33;
+                                deliverySizeCords = 0.33;
                                   deliverySizeLabel = "Toyota";
-                                } else {
+                              } else {
                                   const details = workOrderForm.delivery_size_other.trim();
                                   const cordsRaw = workOrderForm.delivery_size_other_cords.trim();
                                   const cordsParsed = Number(cordsRaw);
                                   if (!details) {
                                     setWorkOrderError("Enter delivery vehicle details for Other.");
-                                    return;
-                                  }
+                                  return;
+                                }
                                   if (!Number.isFinite(cordsParsed) || cordsParsed <= 0) {
                                     setWorkOrderError("Enter a valid cord amount for Other.");
                                     return;
@@ -3028,7 +3022,6 @@ function App() {
                                   await invokeTauri("create_work_order", {
                                     input: {
                                       client_id: targetClient.id,
-                                      client_title: null,
                                       client_name: targetClient.name,
                                       physical_address_line1: targetClient.physical_address_line1,
                                       physical_address_line2: targetClient.physical_address_line2,
@@ -3050,8 +3043,8 @@ function App() {
                                         : targetClient.mailing_address_state,
                                       mailing_address_postal_code:
                                         workOrderForm.mailingSameAsPhysical
-                                          ? targetClient.physical_address_postal_code
-                                          : targetClient.mailing_address_postal_code,
+                                        ? targetClient.physical_address_postal_code
+                                        : targetClient.mailing_address_postal_code,
                                       telephone: targetClient.telephone,
                                       email: targetClient.email,
                                       directions: targetClient.directions || null,
@@ -3140,7 +3133,7 @@ function App() {
                             }}
                           >
                             <div className="form-grid">
-                              <label className="span-2">
+                            <label className="span-2">
                                 <div
                                   style={{
                                     display: "flex",
@@ -3148,48 +3141,48 @@ function App() {
                                     alignItems: "center",
                                   }}
                                 >
-                                  <span>Client</span>
-                                  <button
-                                    type="button"
-                                    className="ghost"
+                                <span>Client</span>
+                                <button
+                                  type="button"
+                                  className="ghost"
                                     style={{ padding: "0 8px", height: "auto", fontSize: "0.8rem" }}
                                     onClick={() =>
                                       setWorkOrderNewClientEnabled(!workOrderNewClientEnabled)
                                     }
-                                  >
+                                >
                                     {workOrderNewClientEnabled
                                       ? "Select Existing"
                                       : "+ Add New Client"}
-                                  </button>
-                                </div>
-                                {!workOrderNewClientEnabled ? (
-                                  <select
-                                    required
-                                    value={workOrderForm.client_id}
+                                </button>
+                              </div>
+                              {!workOrderNewClientEnabled ? (
+                                <select
+                                  required
+                                  value={workOrderForm.client_id}
                                     onChange={(e) =>
                                       setWorkOrderForm({
                                         ...workOrderForm,
                                         client_id: e.target.value,
                                       })
                                     }
-                                  >
-                                    <option value="">Select client</option>
-                                    {clients.map((c) => (
-                                      <option key={c.id} value={c.id}>
-                                        {c.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                ) : (
+                                >
+                                  <option value="">Select client</option>
+                                  {clients.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                      {c.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
                                   <div
                                     className="muted"
                                     style={{ fontSize: "0.9rem", padding: "4px 0" }}
                                   >
-                                    Filling out new client form below...
-                                  </div>
-                                )}
-                              </label>
-                              <label>
+                                  Filling out new client form below...
+                                </div>
+                              )}
+                            </label>
+                            <label>
                                 Type
                                 <select
                                   value={workOrderForm.pickup_delivery_type}
@@ -3208,24 +3201,24 @@ function App() {
                                 <>
                                   <label>
                                     Delivery vehicle
-                                    <select
-                                      value={workOrderForm.delivery_size_choice}
+                              <select
+                                value={workOrderForm.delivery_size_choice}
                                       onChange={(e) =>
                                         setWorkOrderForm({
                                           ...workOrderForm,
                                           delivery_size_choice: e.target.value,
                                         })
                                       }
-                                    >
+                              >
                                       <option value="f250">Ford F-250</option>
                                       <option value="f250_half">Ford F-250 1/2</option>
                                       <option value="toyota">Toyota</option>
-                                      <option value="other">Other</option>
-                                    </select>
-                                  </label>
-                                  {workOrderForm.delivery_size_choice === "other" && (
+                                <option value="other">Other</option>
+                              </select>
+                            </label>
+                            {workOrderForm.delivery_size_choice === "other" && (
                                     <>
-                                      <label>
+                              <label>
                                         Delivery vehicle (other)
                                         <input
                                           value={workOrderForm.delivery_size_other}
@@ -3239,19 +3232,19 @@ function App() {
                                       </label>
                                       <label>
                                         Cord amount
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          step="0.01"
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
                                           value={workOrderForm.delivery_size_other_cords}
-                                          onChange={(e) =>
-                                            setWorkOrderForm({
-                                              ...workOrderForm,
+                                  onChange={(e) =>
+                                    setWorkOrderForm({
+                                      ...workOrderForm,
                                               delivery_size_other_cords: e.target.value,
-                                            })
-                                          }
-                                        />
-                                      </label>
+                                    })
+                                  }
+                                />
+                              </label>
                                     </>
                                   )}
                                 </>
@@ -3354,135 +3347,135 @@ function App() {
                                     </div>
                                   )}
                                 </div>
-                              )}
-                              <label className="span-2">
-                                Assign driver(s)
-                                <select
-                                  multiple
-                                  value={workOrderForm.assignees}
-                                  onChange={(e) => {
+                            )}
+                            <label className="span-2">
+                              Assign driver(s)
+                              <select
+                                multiple
+                                value={workOrderForm.assignees}
+                                onChange={(e) => {
                                     const selected = Array.from(e.target.selectedOptions).map(
                                       (o) => o.value,
                                     );
-                                    setWorkOrderForm({ ...workOrderForm, assignees: selected });
-                                  }}
-                                >
-                                  {users
-                                    .filter((u) => !!u.driver_license_status)
-                                    .map((u) => (
-                                      <option key={u.id} value={u.name}>
+                                  setWorkOrderForm({ ...workOrderForm, assignees: selected });
+                                }}
+                              >
+                                {users
+                                  .filter((u) => !!u.driver_license_status)
+                                  .map((u) => (
+                                    <option key={u.id} value={u.name}>
                                         {u.name} {u.vehicle ? `• ${u.vehicle}` : ""}{" "}
                                         {u.availability_notes ? `• ${u.availability_notes}` : ""}
-                                      </option>
-                                    ))}
-                                </select>
-                              </label>
-                              <div className="span-2" style={{ display: "grid", gap: 8 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                  <span className="muted">Workers (up to 4)</span>
+                                    </option>
+                                  ))}
+                              </select>
+                            </label>
+                            <div className="span-2" style={{ display: "grid", gap: 8 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span className="muted">Workers (up to 4)</span>
+                                <button
+                                  type="button"
+                                  className="ghost"
+                                  disabled={workOrderForm.helpers.length >= 4}
+                                  onClick={() => {
+                                    if (workOrderForm.helpers.length >= 4) return;
+                                    setWorkOrderForm({
+                                      ...workOrderForm,
+                                      helpers: [...workOrderForm.helpers, ""],
+                                    });
+                                  }}
+                                >
+                                  + Add Worker
+                                </button>
+                              </div>
+                              {workOrderForm.helpers.map((helper, idx) => (
+                                <div key={`helper-${idx}`} style={{ display: "flex", gap: 8 }}>
+                                  <input
+                                    type="text"
+                                    placeholder="Worker first and last name"
+                                    value={helper}
+                                    onChange={(e) => {
+                                      const next = [...workOrderForm.helpers];
+                                      next[idx] = e.target.value;
+                                      setWorkOrderForm({ ...workOrderForm, helpers: next });
+                                    }}
+                                  />
                                   <button
                                     type="button"
                                     className="ghost"
-                                    disabled={workOrderForm.helpers.length >= 4}
                                     onClick={() => {
-                                      if (workOrderForm.helpers.length >= 4) return;
-                                      setWorkOrderForm({
-                                        ...workOrderForm,
-                                        helpers: [...workOrderForm.helpers, ""],
-                                      });
+                                      const next = [...workOrderForm.helpers];
+                                      next.splice(idx, 1);
+                                      setWorkOrderForm({ ...workOrderForm, helpers: next });
                                     }}
                                   >
-                                    + Add Worker
+                                    Remove
                                   </button>
                                 </div>
-                                {workOrderForm.helpers.map((helper, idx) => (
-                                  <div key={`helper-${idx}`} style={{ display: "flex", gap: 8 }}>
-                                    <input
-                                      type="text"
-                                      placeholder="Worker first and last name"
-                                      value={helper}
-                                      onChange={(e) => {
-                                        const next = [...workOrderForm.helpers];
-                                        next[idx] = e.target.value;
-                                        setWorkOrderForm({ ...workOrderForm, helpers: next });
-                                      }}
-                                    />
-                                    <button
-                                      type="button"
-                                      className="ghost"
-                                      onClick={() => {
-                                        const next = [...workOrderForm.helpers];
-                                        next.splice(idx, 1);
-                                        setWorkOrderForm({ ...workOrderForm, helpers: next });
-                                      }}
-                                    >
-                                      Remove
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                              {/* New Client Checkbox removed in favor of button toggle, but state still used for conditional rendering */}
-                              {workOrderNewClientEnabled && (
-                                <>
-                                  <label>
-                                    First name
-                                    <input
-                                      required
-                                      value={workOrderNewClient.first_name}
-                                      onChange={(e) =>
-                                        setWorkOrderNewClient((prev) => ({
-                                          ...prev,
-                                          first_name: e.target.value,
-                                        }))
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    Last name
-                                    <input
-                                      required
-                                      value={workOrderNewClient.last_name}
-                                      onChange={(e) =>
-                                        setWorkOrderNewClient((prev) => ({
-                                          ...prev,
-                                          last_name: e.target.value,
-                                        }))
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    Onboarding date
-                                    <input
-                                      type="date"
-                                      required
-                                      value={workOrderNewClient.date_of_onboarding}
-                                      onChange={(e) =>
-                                        setWorkOrderNewClient({
-                                          ...workOrderNewClient,
-                                          date_of_onboarding: e.target.value,
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    Address line 1
-                                    <input
-                                      required
-                                      value={workOrderNewClient.physical_address_line1}
-                                      onChange={(e) =>
+                              ))}
+                            </div>
+                            {/* New Client Checkbox removed in favor of button toggle, but state still used for conditional rendering */}
+                            {workOrderNewClientEnabled && (
+                              <>
+                                <label>
+                                  First name
+                                  <input
+                                    required
+                                    value={workOrderNewClient.first_name}
+                                    onChange={(e) =>
+                                      setWorkOrderNewClient((prev) => ({
+                                        ...prev,
+                                        first_name: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  Last name
+                                  <input
+                                    required
+                                    value={workOrderNewClient.last_name}
+                                    onChange={(e) =>
+                                      setWorkOrderNewClient((prev) => ({
+                                        ...prev,
+                                        last_name: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  Onboarding date
+                                  <input
+                                    type="date"
+                                    required
+                                    value={workOrderNewClient.date_of_onboarding}
+                                    onChange={(e) =>
+                                      setWorkOrderNewClient({
+                                        ...workOrderNewClient,
+                                        date_of_onboarding: e.target.value,
+                                      })
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  Address line 1
+                                  <input
+                                    required
+                                    value={workOrderNewClient.physical_address_line1}
+                                    onChange={(e) =>
                                         setWorkOrderNewClient({
                                           ...workOrderNewClient,
                                           physical_address_line1: e.target.value,
                                         })
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    City
-                                    <input
-                                      required
-                                      value={workOrderNewClient.physical_address_city}
-                                      onChange={(e) =>
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  City
+                                  <input
+                                    required
+                                    value={workOrderNewClient.physical_address_city}
+                                    onChange={(e) =>
                                         setWorkOrderNewClient({
                                           ...workOrderNewClient,
                                           physical_address_city: e.target.value,
@@ -3493,15 +3486,15 @@ function App() {
                                           ...prev,
                                           physical_address_city: initCapCity(e.target.value),
                                         }))
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    State
-                                    <input
-                                      required
-                                      value={workOrderNewClient.physical_address_state}
-                                      onChange={(e) =>
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  State
+                                  <input
+                                    required
+                                    value={workOrderNewClient.physical_address_state}
+                                    onChange={(e) =>
                                         setWorkOrderNewClient({
                                           ...workOrderNewClient,
                                           physical_address_state: e.target.value,
@@ -3512,26 +3505,26 @@ function App() {
                                           ...prev,
                                           physical_address_state: normalizeState(e.target.value),
                                         }))
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    Postal code
-                                    <input
-                                      value={workOrderNewClient.physical_address_postal_code}
-                                      onChange={(e) =>
-                                        setWorkOrderNewClient({
-                                          ...workOrderNewClient,
-                                          physical_address_postal_code: e.target.value,
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    Telephone
-                                    <input
-                                      value={workOrderNewClient.telephone}
-                                      onChange={(e) =>
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  Postal code
+                                  <input
+                                    value={workOrderNewClient.physical_address_postal_code}
+                                    onChange={(e) =>
+                                      setWorkOrderNewClient({
+                                        ...workOrderNewClient,
+                                        physical_address_postal_code: e.target.value,
+                                      })
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  Telephone
+                                  <input
+                                    value={workOrderNewClient.telephone}
+                                    onChange={(e) =>
                                         setWorkOrderNewClient({
                                           ...workOrderNewClient,
                                           telephone: e.target.value,
@@ -3542,24 +3535,24 @@ function App() {
                                           ...prev,
                                           telephone: normalizePhone(e.target.value),
                                         }))
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    Email
-                                    <input
-                                      type="email"
-                                      value={workOrderNewClient.email}
-                                      onChange={(e) =>
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  Email
+                                  <input
+                                    type="email"
+                                    value={workOrderNewClient.email}
+                                    onChange={(e) =>
                                         setWorkOrderNewClient({
                                           ...workOrderNewClient,
                                           email: e.target.value,
                                         })
-                                      }
-                                    />
-                                  </label>
-                                </>
-                              )}
+                                    }
+                                  />
+                                </label>
+                              </>
+                            )}
                             </div>
 
                             <hr
@@ -3572,139 +3565,139 @@ function App() {
                             />
 
                             <div className="form-grid">
-                              <label>
-                                Scheduled date/time
-                                <input
-                                  type="datetime-local"
-                                  value={workOrderForm.scheduled_date}
+                            <label>
+                              Scheduled date/time
+                              <input
+                                type="datetime-local"
+                                value={workOrderForm.scheduled_date}
                                   onChange={(e) =>
                                     setWorkOrderForm({
                                       ...workOrderForm,
                                       scheduled_date: e.target.value,
                                     })
                                   }
-                                  disabled={session?.role === "staff"}
-                                />
-                              </label>
-                              <label>
-                                Status
-                                <select
-                                  value={workOrderForm.status}
-                                  onChange={(e) => {
-                                    const newStatus = e.target.value;
+                                disabled={session?.role === "staff"}
+                              />
+                            </label>
+                            <label>
+                              Status
+                              <select
+                                value={workOrderForm.status}
+                                onChange={(e) => {
+                                  const newStatus = e.target.value;
                                     setWorkOrderForm({ ...workOrderForm, status: newStatus });
-                                  }}
-                                >
-                                  <option value="received">received</option>
-                                  <option value="scheduled">scheduled</option>
-                                  <option value="rescheduled">rescheduled</option>
+                                }}
+                              >
+                                <option value="received">received</option>
+                                <option value="scheduled">scheduled</option>
+                                <option value="rescheduled">rescheduled</option>
                                   <option value="picked_up">picked_up</option>
-                                  <option value="completed">completed</option>
-                                  <option value="cancelled">canceled</option>
-                                </select>
-                              </label>
-                              <label>
-                                Mileage (required if status = completed)
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.1"
-                                  value={workOrderForm.mileage}
+                                <option value="completed">completed</option>
+                                <option value="cancelled">canceled</option>
+                              </select>
+                            </label>
+                            <label>
+                              Mileage (required if status = completed)
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                value={workOrderForm.mileage}
                                   onChange={(e) =>
                                     setWorkOrderForm({ ...workOrderForm, mileage: e.target.value })
                                   }
-                                />
-                              </label>
-                              <label>
-                                Gate combo
-                                <input
-                                  value={workOrderForm.gate_combo}
+                              />
+                            </label>
+                            <label>
+                              Gate combo
+                              <input
+                                value={workOrderForm.gate_combo}
                                   onChange={(e) =>
                                     setWorkOrderForm({
                                       ...workOrderForm,
                                       gate_combo: e.target.value,
                                     })
                                   }
-                                />
-                              </label>
-                              <label className="checkbox">
-                                <input
-                                  type="checkbox"
-                                  checked={workOrderForm.mailingSameAsPhysical}
-                                  onChange={(e) =>
+                              />
+                            </label>
+                            <label className="checkbox">
+                              <input
+                                type="checkbox"
+                                checked={workOrderForm.mailingSameAsPhysical}
+                                onChange={(e) =>
                                     setWorkOrderForm({
                                       ...workOrderForm,
                                       mailingSameAsPhysical: e.target.checked,
                                     })
-                                  }
-                                />
-                                Mailing same as physical
-                              </label>
-                              <label>
-                                Notes
-                                <textarea
-                                  rows={2}
-                                  value={workOrderForm.notes}
+                                }
+                              />
+                              Mailing same as physical
+                            </label>
+                            <label>
+                              Notes
+                              <textarea
+                                rows={2}
+                                value={workOrderForm.notes}
                                   onChange={(e) =>
                                     setWorkOrderForm({ ...workOrderForm, notes: e.target.value })
                                   }
-                                />
-                              </label>
-                              <div className="span-2">
-                                <label className="checkbox">
-                                  <input
-                                    type="checkbox"
-                                    checked={workOrderForm.other_heat_source_gas}
-                                    onChange={(e) =>
+                              />
+                            </label>
+                            <div className="span-2">
+                              <label className="checkbox">
+                                <input
+                                  type="checkbox"
+                                  checked={workOrderForm.other_heat_source_gas}
+                                  onChange={(e) =>
                                       setWorkOrderForm({
                                         ...workOrderForm,
                                         other_heat_source_gas: e.target.checked,
                                       })
-                                    }
-                                  />
-                                  Other heat source: Gas
-                                </label>
-                                <label className="checkbox">
-                                  <input
-                                    type="checkbox"
-                                    checked={workOrderForm.other_heat_source_electric}
-                                    onChange={(e) =>
-                                      setWorkOrderForm({
-                                        ...workOrderForm,
-                                        other_heat_source_electric: e.target.checked,
-                                      })
-                                    }
-                                  />
-                                  Other heat source: Electric
-                                </label>
+                                  }
+                                />
+                                Other heat source: Gas
+                              </label>
+                              <label className="checkbox">
                                 <input
-                                  placeholder="Other heat source detail"
-                                  value={workOrderForm.other_heat_source_other}
+                                  type="checkbox"
+                                  checked={workOrderForm.other_heat_source_electric}
                                   onChange={(e) =>
+                                    setWorkOrderForm({
+                                      ...workOrderForm,
+                                      other_heat_source_electric: e.target.checked,
+                                    })
+                                  }
+                                />
+                                Other heat source: Electric
+                              </label>
+                              <input
+                                placeholder="Other heat source detail"
+                                value={workOrderForm.other_heat_source_other}
+                                onChange={(e) =>
                                     setWorkOrderForm({
                                       ...workOrderForm,
                                       other_heat_source_other: e.target.value,
                                     })
-                                  }
-                                />
-                              </div>
-                              <div className="actions span-2">
-                                <button
-                                  className="ping"
-                                  type="submit"
-                                  disabled={
-                                    busy ||
-                                    !canCreateWorkOrders ||
-                                    (!workOrderNewClientEnabled && !workOrderForm.client_id) ||
+                                }
+                              />
+                            </div>
+                            <div className="actions span-2">
+                              <button
+                                className="ping"
+                                type="submit"
+                                disabled={
+                                  busy ||
+                                  !canCreateWorkOrders ||
+                                  (!workOrderNewClientEnabled && !workOrderForm.client_id) ||
                                   (workOrderForm.status === "scheduled" &&
                                     // Required fields check for scheduled status
                                     ((!workOrderNewClientEnabled && !workOrderForm.client_id) || // Existing client
                                       (workOrderNewClientEnabled &&
                                         (!workOrderNewClient.first_name ||
-                                          !workOrderNewClient.last_name ||
-                                          !workOrderNewClient.telephone ||
-                                          !workOrderNewClient.physical_address_line1 ||
-                                          !workOrderNewClient.physical_address_city ||
+                                      !workOrderNewClient.last_name ||
+                                      !workOrderNewClient.telephone ||
+                                      !workOrderNewClient.physical_address_line1 ||
+                                      !workOrderNewClient.physical_address_city ||
                                           !workOrderNewClient.physical_address_state)) || // New Client fields
                                       !workOrderForm.scheduled_date)) || // Date scheduled
                                   (workOrderForm.pickup_delivery_type === "delivery" &&
@@ -3718,21 +3711,21 @@ function App() {
                                         (!workOrderForm.pickup_length ||
                                           !workOrderForm.pickup_width ||
                                           !workOrderForm.pickup_height))))
-                                  }
-                                >
-                                  Save work order
-                                </button>
-                                <button
-                                  className="ghost"
-                                  type="button"
-                                  onClick={() => {
-                                    setShowWorkOrderForm(false);
-                                    setWorkOrderError(null);
-                                  }}
-                                >
-                                  Cancel
-                                </button>
-                              </div>
+                                }
+                              >
+                                Save work order
+                              </button>
+                              <button
+                                className="ghost"
+                                type="button"
+                                onClick={() => {
+                                  setShowWorkOrderForm(false);
+                                  setWorkOrderError(null);
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
                             </div>
                           </form>
                         </>
@@ -3752,17 +3745,17 @@ function App() {
                         const visibleOrders =
                           session?.role === "volunteer"
                             ? workOrders.filter((wo) => {
-                                const arr = (() => {
-                                  try {
-                                    return JSON.parse(wo.assignees_json ?? "[]");
-                                  } catch {
-                                    return [];
-                                  }
-                                })();
-                                return session?.username
-                                  ? Array.isArray(arr) && arr.includes(session.username)
-                                  : false;
-                              })
+                              const arr = (() => {
+                                try {
+                                  return JSON.parse(wo.assignees_json ?? "[]");
+                                } catch {
+                                  return [];
+                                }
+                              })();
+                              return session?.username
+                                ? Array.isArray(arr) && arr.includes(session.username)
+                                : false;
+                            })
                             : workOrders;
                         const showPII = canViewPII;
                         return (
@@ -4114,8 +4107,8 @@ function App() {
                 {activeTab === "Worker Directory" &&
                   session &&
                   (session.role === "admin" || session.role === "lead") && (
-                    <div className="stack">
-                      <div className="list-card">
+                  <div className="stack">
+                    <div className="list-card">
                         <div
                           className="list-head"
                           style={{
@@ -4132,34 +4125,34 @@ function App() {
                               alignItems: "center",
                             }}
                           >
-                            <h3>Workers & Drivers ({users.length})</h3>
-                            <div style={{ display: "flex", gap: "0.5rem" }}>
-                              <button className="ghost" onClick={loadUsers} disabled={busy}>
-                                Refresh
-                              </button>
-                            </div>
+                          <h3>Workers & Drivers ({users.length})</h3>
+                          <div style={{ display: "flex", gap: "0.5rem" }}>
+                            <button className="ghost" onClick={loadUsers} disabled={busy}>
+                              Refresh
+                            </button>
                           </div>
+                        </div>
 
-                          {/* Inline Worker Form */}
-                          {canManage && (
+                        {/* Inline Worker Form */}
+                        {canManage && (
                             <div
                               className="card muted"
                               style={{ width: "100%", marginTop: "0.5rem", padding: "1rem" }}
                             >
-                              <div className="add-header" style={{ marginBottom: "1rem" }}>
-                                <button
-                                  type="button"
-                                  className="icon-button"
-                                  title={showWorkerForm ? "Cancel Adding Worker" : "Add Worker"}
-                                  onClick={() => {
-                                    if (showWorkerForm) {
-                                      setShowWorkerForm(false);
-                                      setWorkerFormError(null);
-                                    } else {
-                                      setWorkerForm({
-                                        name: "",
-                                        email: "",
-                                        telephone: "",
+                            <div className="add-header" style={{ marginBottom: "1rem" }}>
+                              <button
+                                type="button"
+                                className="icon-button"
+                                title={showWorkerForm ? "Cancel Adding Worker" : "Add Worker"}
+                                onClick={() => {
+                                  if (showWorkerForm) {
+                                    setShowWorkerForm(false);
+                                    setWorkerFormError(null);
+                                  } else {
+                                    setWorkerForm({
+                                      name: "",
+                                      email: "",
+                                      telephone: "",
                                         username: "",
                                         password: "",
                                         physical_address_line1: "",
@@ -4172,32 +4165,32 @@ function App() {
                                         mailing_address_city: "",
                                         mailing_address_state: "",
                                         mailing_address_postal_code: "",
-                                        role: "volunteer",
-                                        is_driver: false,
-                                      });
-                                      setWorkerFormError(null);
-                                      setShowWorkerForm(true);
-                                    }
-                                  }}
-                                >
-                                  {showWorkerForm ? "×" : "+"}
-                                </button>
-                                <h3>{showWorkerForm ? "Add New Worker" : "Add Worker"}</h3>
-                              </div>
-
-                              {showWorkerForm && (
-                                <form
-                                  className="form-grid"
-                                  onSubmit={async (e) => {
-                                    e.preventDefault();
+                                      role: "volunteer",
+                                      is_driver: false,
+                                    });
                                     setWorkerFormError(null);
-                                    setBusy(true);
-                                    try {
+                                    setShowWorkerForm(true);
+                                  }
+                                }}
+                              >
+                                {showWorkerForm ? "×" : "+"}
+                              </button>
+                              <h3>{showWorkerForm ? "Add New Worker" : "Add Worker"}</h3>
+                            </div>
+
+                            {showWorkerForm && (
+                              <form
+                                className="form-grid"
+                                onSubmit={async (e) => {
+                                  e.preventDefault();
+                                  setWorkerFormError(null);
+                                  setBusy(true);
+                                  try {
                                       await invokeTauri("create_user", {
-                                        input: {
-                                          name: workerForm.name,
-                                          email: workerForm.email || null,
-                                          telephone: workerForm.telephone || null,
+                                      input: {
+                                        name: workerForm.name,
+                                        email: workerForm.email || null,
+                                        telephone: workerForm.telephone || null,
                                           physical_address_line1:
                                             workerForm.physical_address_line1 || null,
                                           physical_address_line2:
@@ -4218,17 +4211,17 @@ function App() {
                                             workerForm.mailing_address_state || null,
                                           mailing_address_postal_code:
                                             workerForm.mailing_address_postal_code || null,
-                                          role: workerForm.role,
-                                          is_driver: workerForm.is_driver,
+                                        role: workerForm.role,
+                                        is_driver: workerForm.is_driver,
                                           username: workerForm.username,
                                           password: workerForm.password,
                                         },
-                                      });
-                                      await loadUsers();
-                                      setWorkerForm({
-                                        name: "",
-                                        email: "",
-                                        telephone: "",
+                                    });
+                                    await loadUsers();
+                                    setWorkerForm({
+                                      name: "",
+                                      email: "",
+                                      telephone: "",
                                         username: "",
                                         password: "",
                                         physical_address_line1: "",
@@ -4241,20 +4234,20 @@ function App() {
                                         mailing_address_city: "",
                                         mailing_address_state: "",
                                         mailing_address_postal_code: "",
-                                        role: "volunteer",
-                                        is_driver: false,
-                                      });
-                                      setShowWorkerForm(false);
-                                    } catch (err: any) {
-                                      console.error(err);
+                                      role: "volunteer",
+                                      is_driver: false,
+                                    });
+                                    setShowWorkerForm(false);
+                                  } catch (err: any) {
+                                    console.error(err);
                                       setWorkerFormError(
                                         typeof err === "string" ? err : "Failed to create user",
                                       );
-                                    } finally {
-                                      setBusy(false);
-                                    }
-                                  }}
-                                >
+                                  } finally {
+                                    setBusy(false);
+                                  }
+                                }}
+                              >
                                   {workerFormError && (
                                     <div
                                       className="pill"
@@ -4268,18 +4261,18 @@ function App() {
                                     </div>
                                   )}
 
-                                  <label>
-                                    Full Name *
-                                    <input
-                                      required
-                                      value={workerForm.name}
+                                <label>
+                                  Full Name *
+                                  <input
+                                    required
+                                    value={workerForm.name}
                                       onChange={(e) =>
                                         setWorkerForm({ ...workerForm, name: e.target.value })
                                       }
-                                      placeholder="e.g. Jane Doe"
-                                      disabled={busy}
-                                    />
-                                  </label>
+                                    placeholder="e.g. Jane Doe"
+                                    disabled={busy}
+                                  />
+                                </label>
                                   <label>
                                     Username *
                                     <input
@@ -4305,38 +4298,38 @@ function App() {
                                       disabled={busy}
                                     />
                                   </label>
-                                  <label>
-                                    Role *
-                                    <select
-                                      value={workerForm.role}
+                                <label>
+                                  Role *
+                                  <select
+                                    value={workerForm.role}
                                       onChange={(e) =>
                                         setWorkerForm({ ...workerForm, role: e.target.value })
                                       }
-                                      disabled={busy}
-                                    >
-                                      <option value="volunteer">Volunteer</option>
-                                      <option value="staff">Staff</option>
-                                      <option value="lead">Lead</option>
-                                      <option value="admin">Admin</option>
-                                    </select>
-                                  </label>
-                                  <label>
-                                    Email
-                                    <input
-                                      type="email"
-                                      value={workerForm.email}
+                                    disabled={busy}
+                                  >
+                                    <option value="volunteer">Volunteer</option>
+                                    <option value="staff">Staff</option>
+                                    <option value="lead">Lead</option>
+                                    <option value="admin">Admin</option>
+                                  </select>
+                                </label>
+                                <label>
+                                  Email
+                                  <input
+                                    type="email"
+                                    value={workerForm.email}
                                       onChange={(e) =>
                                         setWorkerForm({ ...workerForm, email: e.target.value })
                                       }
-                                      placeholder="jane@example.com"
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                  <label>
-                                    Phone
-                                    <input
-                                      type="tel"
-                                      value={workerForm.telephone}
+                                    placeholder="jane@example.com"
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label>
+                                  Phone
+                                  <input
+                                    type="tel"
+                                    value={workerForm.telephone}
                                       onChange={(e) =>
                                         setWorkerForm({ ...workerForm, telephone: e.target.value })
                                       }
@@ -4346,10 +4339,10 @@ function App() {
                                           telephone: normalizePhone(e.target.value),
                                         })
                                       }
-                                      placeholder="(505) 555-0100"
-                                      disabled={busy}
-                                    />
-                                  </label>
+                                    placeholder="(505) 555-0100"
+                                    disabled={busy}
+                                  />
+                                </label>
                                   <label className="span-2">
                                     Address Line 1
                                     <input
@@ -4504,53 +4497,53 @@ function App() {
                                       disabled={busy}
                                     />
                                   </label>
-                                  <label className="checkbox span-2">
-                                    <input
-                                      type="checkbox"
-                                      checked={workerForm.is_driver}
+                                <label className="checkbox span-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={workerForm.is_driver}
                                       onChange={(e) =>
                                         setWorkerForm({
                                           ...workerForm,
                                           is_driver: e.target.checked,
                                         })
                                       }
-                                      disabled={busy}
-                                    />
-                                    Is Driver (Check if this person can drive for deliveries)
-                                  </label>
+                                    disabled={busy}
+                                  />
+                                  Is Driver (Check if this person can drive for deliveries)
+                                </label>
 
-                                  <div className="actions span-2">
-                                    <button className="ping" type="submit" disabled={busy}>
-                                      {busy ? "Creating..." : "Create Worker"}
-                                    </button>
-                                    <button
-                                      className="ghost"
-                                      type="button"
-                                      onClick={() => setShowWorkerForm(false)}
-                                      disabled={busy}
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </form>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        <div className="table">
-                          <div className="table-head">
-                            <span>Name</span>
-                            <span>Phone</span>
-                            <span>Schedule</span>
-                            <span>Credentials</span>
+                                <div className="actions span-2">
+                                  <button className="ping" type="submit" disabled={busy}>
+                                    {busy ? "Creating..." : "Create Worker"}
+                                  </button>
+                                  <button
+                                    className="ghost"
+                                    type="button"
+                                    onClick={() => setShowWorkerForm(false)}
+                                    disabled={busy}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </form>
+                            )}
                           </div>
+                        )}
+                      </div>
+                      <div className="table">
+                        <div className="table-head">
+                          <span>Name</span>
+                          <span>Phone</span>
+                          <span>Schedule</span>
+                          <span>Credentials</span>
+                        </div>
                           {workerDirectoryUsers.map((u) => (
-                            <div
-                              className="table-row"
-                              key={u.id}
-                              onDoubleClick={() => {
-                                setSelectedWorker(u);
-                                setWorkerEdit({
+                          <div
+                            className="table-row"
+                            key={u.id}
+                            onDoubleClick={() => {
+                              setSelectedWorker(u);
+                              setWorkerEdit({
                                   email: u.email ?? "",
                                   telephone: u.telephone ?? "",
                                   physical_address_line1: u.physical_address_line1 ?? "",
@@ -4564,30 +4557,19 @@ function App() {
                                   mailing_address_city: u.mailing_address_city ?? "",
                                   mailing_address_state: u.mailing_address_state ?? "",
                                   mailing_address_postal_code: u.mailing_address_postal_code ?? "",
-                                  availability_notes: u.availability_notes ?? "",
-                                  vehicle: u.vehicle ?? "",
-                                  driver_license_status: u.driver_license_status ?? "",
-                                  driver_license_number: u.driver_license_number ?? "",
-                                  driver_license_expires_on: u.driver_license_expires_on ?? "",
-                                  is_driver: !!u.is_driver,
-                                  hipaa_certified: u.hipaa_certified,
-                                });
-                                if (u.availability_schedule) {
-                                  try {
-                                    const parsed = JSON.parse(u.availability_schedule);
-                                    setWorkerAvailSchedule(parsed);
-                                  } catch {
-                                    setWorkerAvailSchedule({
-                                      monday: false,
-                                      tuesday: false,
-                                      wednesday: false,
-                                      thursday: false,
-                                      friday: false,
-                                      saturday: false,
-                                      sunday: false,
-                                    });
-                                  }
-                                } else {
+                                availability_notes: u.availability_notes ?? "",
+                                vehicle: u.vehicle ?? "",
+                                driver_license_status: u.driver_license_status ?? "",
+                                driver_license_number: u.driver_license_number ?? "",
+                                driver_license_expires_on: u.driver_license_expires_on ?? "",
+                                is_driver: !!u.is_driver,
+                                hipaa_certified: u.hipaa_certified,
+                              });
+                              if (u.availability_schedule) {
+                                try {
+                                  const parsed = JSON.parse(u.availability_schedule);
+                                  setWorkerAvailSchedule(parsed);
+                                } catch {
                                   setWorkerAvailSchedule({
                                     monday: false,
                                     tuesday: false,
@@ -4598,37 +4580,48 @@ function App() {
                                     sunday: false,
                                   });
                                 }
-                                setWorkerError(null);
-                              }}
-                              style={{ cursor: "pointer" }}
-                            >
-                              <div>
-                                <strong>{u.name}</strong>
-                                <div className="muted">{u.role}</div>
-                              </div>
-                              <div className="muted">{u.telephone ?? "—"}</div>
-                              <div className="muted">{u.availability_notes ?? "—"}</div>
-                              <div className="muted">
+                              } else {
+                                setWorkerAvailSchedule({
+                                  monday: false,
+                                  tuesday: false,
+                                  wednesday: false,
+                                  thursday: false,
+                                  friday: false,
+                                  saturday: false,
+                                  sunday: false,
+                                });
+                              }
+                              setWorkerError(null);
+                            }}
+                            style={{ cursor: "pointer" }}
+                          >
+                            <div>
+                              <strong>{u.name}</strong>
+                              <div className="muted">{u.role}</div>
+                            </div>
+                            <div className="muted">{u.telephone ?? "—"}</div>
+                            <div className="muted">{u.availability_notes ?? "—"}</div>
+                            <div className="muted">
                                 DL: {u.driver_license_status ?? "—"} | Driver:{" "}
                                 {u.is_driver ? "Yes" : "No"} | Vehicle: {u.vehicle ?? "—"} | HIPAA:{" "}
                                 {u.hipaa_certified ? "Yes" : "Unknown"}
-                              </div>
                             </div>
-                          ))}
+                          </div>
+                        ))}
                           {!workerDirectoryUsers.length && (
                             <div className="table-row">No workers yet.</div>
                           )}
-                        </div>
                       </div>
+                    </div>
 
-                      {selectedWorker && (
-                        <div className="card">
-                          <div className="list-head">
-                            <h3>{selectedWorker.name}</h3>
-                            <button className="ghost" onClick={() => setSelectedWorker(null)}>
-                              Close
-                            </button>
-                          </div>
+                    {selectedWorker && (
+                      <div className="card">
+                        <div className="list-head">
+                          <h3>{selectedWorker.name}</h3>
+                          <button className="ghost" onClick={() => setSelectedWorker(null)}>
+                            Close
+                          </button>
+                        </div>
                           {workerError && (
                             <div
                               className="pill"
@@ -4637,7 +4630,7 @@ function App() {
                               {workerError}
                             </div>
                           )}
-                          <div className="stack">
+                        <div className="stack">
                             <div>
                               <strong>Role:</strong> {selectedWorker.role}
                             </div>
@@ -4809,20 +4802,20 @@ function App() {
                                 }
                               />
                             </label>
-                            <label>
-                              Availability Notes
-                              <input
-                                value={workerEdit?.availability_notes ?? ""}
+                          <label>
+                            Availability Notes
+                            <input
+                              value={workerEdit?.availability_notes ?? ""}
                                 onChange={(e) =>
                                   setWorkerEdit((prev) => ({
                                     ...prev,
                                     availability_notes: e.target.value,
                                   }))
                                 }
-                              />
-                            </label>
-                            <div>
-                              <strong>Weekly Availability Schedule:</strong>
+                            />
+                          </label>
+                          <div>
+                            <strong>Weekly Availability Schedule:</strong>
                               <div
                                 style={{
                                   display: "flex",
@@ -4831,105 +4824,105 @@ function App() {
                                   marginTop: "0.5rem",
                                 }}
                               >
-                                {Object.keys(workerAvailSchedule).map((day) => (
+                              {Object.keys(workerAvailSchedule).map((day) => (
                                   <label
                                     key={day}
                                     className="checkbox"
                                     style={{ display: "flex", alignItems: "center" }}
                                   >
-                                    <input
-                                      type="checkbox"
-                                      checked={workerAvailSchedule[day]}
-                                      onChange={(e) =>
-                                        setWorkerAvailSchedule({
-                                          ...workerAvailSchedule,
-                                          [day]: e.target.checked,
-                                        })
-                                      }
-                                    />
+                                  <input
+                                    type="checkbox"
+                                    checked={workerAvailSchedule[day]}
+                                    onChange={(e) =>
+                                      setWorkerAvailSchedule({
+                                        ...workerAvailSchedule,
+                                        [day]: e.target.checked,
+                                      })
+                                    }
+                                  />
                                     <span
                                       style={{ marginLeft: "0.25rem", textTransform: "capitalize" }}
                                     >
-                                      {day}
-                                    </span>
-                                  </label>
-                                ))}
-                              </div>
+                                    {day}
+                                  </span>
+                                </label>
+                              ))}
                             </div>
-                            <label>
-                              Working vehicle
-                              <input
-                                value={workerEdit?.vehicle ?? ""}
+                          </div>
+                          <label>
+                            Working vehicle
+                            <input
+                              value={workerEdit?.vehicle ?? ""}
                                 onChange={(e) =>
                                   setWorkerEdit((prev) => ({ ...prev, vehicle: e.target.value }))
                                 }
-                              />
-                            </label>
-                            <label>
-                              Driver license status
-                              <input
-                                value={workerEdit?.driver_license_status ?? ""}
+                            />
+                          </label>
+                          <label>
+                            Driver license status
+                            <input
+                              value={workerEdit?.driver_license_status ?? ""}
                                 onChange={(e) =>
                                   setWorkerEdit((prev) => ({
                                     ...prev,
                                     driver_license_status: e.target.value,
                                   }))
                                 }
-                              />
-                            </label>
-                            <label>
-                              Driver license number
-                              <input
-                                value={workerEdit?.driver_license_number ?? ""}
+                            />
+                          </label>
+                          <label>
+                            Driver license number
+                            <input
+                              value={workerEdit?.driver_license_number ?? ""}
                                 onChange={(e) =>
                                   setWorkerEdit((prev) => ({
                                     ...prev,
                                     driver_license_number: e.target.value,
                                   }))
                                 }
-                              />
-                            </label>
-                            <label>
-                              Driver license expiration
-                              <input
-                                type="date"
-                                value={workerEdit?.driver_license_expires_on?.slice(0, 10) ?? ""}
+                            />
+                          </label>
+                          <label>
+                            Driver license expiration
+                            <input
+                              type="date"
+                              value={workerEdit?.driver_license_expires_on?.slice(0, 10) ?? ""}
                                 onChange={(e) =>
                                   setWorkerEdit((prev) => ({
                                     ...prev,
                                     driver_license_expires_on: e.target.value,
                                   }))
                                 }
-                              />
-                            </label>
-                            <label className="checkbox">
-                              <input
-                                type="checkbox"
-                                checked={!!workerEdit?.is_driver}
+                            />
+                          </label>
+                          <label className="checkbox">
+                            <input
+                              type="checkbox"
+                              checked={!!workerEdit?.is_driver}
                                 onChange={(e) =>
                                   setWorkerEdit((prev) => ({
                                     ...prev,
                                     is_driver: e.target.checked,
                                   }))
                                 }
-                              />
-                              Driver flag (requires DL status + expiration)
-                            </label>
-                            <label className="checkbox">
-                              <input
-                                type="checkbox"
-                                checked={!!workerEdit?.hipaa_certified}
+                            />
+                            Driver flag (requires DL status + expiration)
+                          </label>
+                          <label className="checkbox">
+                            <input
+                              type="checkbox"
+                              checked={!!workerEdit?.hipaa_certified}
                                 onChange={(e) =>
                                   setWorkerEdit((prev) => ({
                                     ...prev,
                                     hipaa_certified: e.target.checked ? 1 : 0,
                                   }))
                                 }
-                              />
-                              HIPAA certified
-                            </label>
-                            {(session?.role === "admin" || session?.role === "lead") && (
-                              <div style={{ display: "flex", gap: 8 }}>
+                            />
+                            HIPAA certified
+                          </label>
+                          {(session?.role === "admin" || session?.role === "lead") && (
+                            <div style={{ display: "flex", gap: 8 }}>
                                 <label style={{ flex: 1 }}>
                                   Reset Password
                                   <input
@@ -4968,30 +4961,30 @@ function App() {
                                 >
                                   Reset Password
                                 </button>
-                                <button
-                                  className="ping"
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={async () => {
-                                    setWorkerError(null);
-                                    const wantsDriver = !!workerEdit?.is_driver;
+                              <button
+                                className="ping"
+                                type="button"
+                                disabled={busy}
+                                onClick={async () => {
+                                  setWorkerError(null);
+                                  const wantsDriver = !!workerEdit?.is_driver;
                                     const hasStatus = !!(
                                       workerEdit?.driver_license_status ?? ""
                                     ).trim();
                                     const hasExpiry = !!(
                                       workerEdit?.driver_license_expires_on ?? ""
                                     ).trim();
-                                    if (wantsDriver && (!hasStatus || !hasExpiry)) {
+                                  if (wantsDriver && (!hasStatus || !hasExpiry)) {
                                       setWorkerError(
                                         "Driver flag requires license status and expiration.",
                                       );
-                                      return;
-                                    }
-                                    setBusy(true);
-                                    try {
+                                    return;
+                                  }
+                                  setBusy(true);
+                                  try {
                                       await invokeTauri("update_user_flags", {
-                                        input: {
-                                          id: selectedWorker.id,
+                                      input: {
+                                        id: selectedWorker.id,
                                           email: workerEdit?.email ?? null,
                                           telephone: workerEdit?.telephone ?? null,
                                           physical_address_line1:
@@ -5018,30 +5011,30 @@ function App() {
                                             workerEdit?.availability_notes ?? null,
                                           availability_schedule:
                                             JSON.stringify(workerAvailSchedule),
-                                          vehicle: workerEdit?.vehicle ?? null,
+                                        vehicle: workerEdit?.vehicle ?? null,
                                           driver_license_status:
                                             workerEdit?.driver_license_status ?? null,
                                           driver_license_number:
                                             workerEdit?.driver_license_number ?? null,
                                           driver_license_expires_on:
                                             workerEdit?.driver_license_expires_on
-                                              ? `${workerEdit.driver_license_expires_on}T00:00:00`
-                                              : null,
-                                          hipaa_certified: !!workerEdit?.hipaa_certified,
-                                          is_driver: wantsDriver,
-                                        },
-                                        role: session?.role ?? null,
-                                      });
-                                      await loadUsers();
-                                      setSelectedWorker(null);
+                                          ? `${workerEdit.driver_license_expires_on}T00:00:00`
+                                          : null,
+                                        hipaa_certified: !!workerEdit?.hipaa_certified,
+                                        is_driver: wantsDriver,
+                                      },
+                                      role: session?.role ?? null,
+                                    });
+                                    await loadUsers();
+                                    setSelectedWorker(null);
                                       setWorkerPasswordReset("");
-                                    } finally {
-                                      setBusy(false);
-                                    }
-                                  }}
-                                >
-                                  Save worker
-                                </button>
+                                  } finally {
+                                    setBusy(false);
+                                  }
+                                }}
+                              >
+                                Save worker
+                              </button>
                                 <button
                                   className="ghost"
                                   type="button"
@@ -5050,18 +5043,18 @@ function App() {
                                     setWorkerPasswordReset("");
                                   }}
                                 >
-                                  Cancel
-                                </button>
-                              </div>
-                            )}
-                            {!(session?.role === "admin" || session?.role === "lead") && (
-                              <div className="muted">Read-only (admin/lead can edit).</div>
-                            )}
-                          </div>
+                                Cancel
+                              </button>
+                            </div>
+                          )}
+                          {!(session?.role === "admin" || session?.role === "lead") && (
+                            <div className="muted">Read-only (admin/lead can edit).</div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <ReportsTab
                   activeTab={activeTab}
@@ -5079,75 +5072,75 @@ function App() {
           </main>
         </>
       ) : (
-        <div className="login-page-container">
+      <div className="login-page-container">
           {/* Header (100%) */}
           <div className="login-header">
-            <div className="header-brand">
-              <img src={logo} className="header-logo" alt="NMERA Logo" />
-              <div className="header-text">
-                <h1>Northern Mendocino</h1>
-                <h1>Ecosystem Recovery Alliance</h1>
-              </div>
-            </div>
+             <div className="header-brand">
+                <img src={logo} className="header-logo" alt="NMERA Logo" />
+                <div className="header-text">
+                   <h1>Northern Mendocino</h1>
+                   <h1>Ecosystem Recovery Alliance</h1>
+                </div>
+             </div>
           </div>
 
           <div className="login-content">
-            {/* Left Column (60%) */}
-            <div className="login-left-panel">
-              <div className="intro-section">
-                <img src={firewoodIcon} className="intro-logo" alt="Firewood Bank" />
-                <div className="intro-text">
-                  <h2>Welcome</h2>
-                  <p className="tagline">"Keeping eachother warm"</p>
+             {/* Left Column (60%) */}
+             <div className="login-left-panel">
+                <div className="intro-section">
+                    <img src={firewoodIcon} className="intro-logo" alt="Firewood Bank" />
+                    <div className="intro-text">
+                        <h2>Welcome</h2>
+                        <p className="tagline">"Keeping eachother warm"</p>
+                    </div>
                 </div>
-              </div>
-
-              <div className="motd-section">
-                <h3>Updates & Announcements</h3>
-                <div className="motd-scroll-container">
-                  {motdItems.length === 0 ? (
-                    <p className="muted">No recent announcements.</p>
-                  ) : (
-                    <div className="motd-list">
+                
+                <div className="motd-section">
+                    <h3>Updates & Announcements</h3>
+                    <div className="motd-scroll-container">
+                       {motdItems.length === 0 ? (
+                         <p className="muted">No recent announcements.</p>
+                       ) : (
+                         <div className="motd-list">
                       {motdItems.map((item) => (
-                        <div key={item.id} className="motd-item">
-                          <div className="motd-date">
+                             <div key={item.id} className="motd-item">
+                               <div className="motd-date">
                             {new Date(item.created_at).toLocaleDateString(undefined, {
                               weekday: "long",
                               year: "numeric",
                               month: "long",
                               day: "numeric",
                             })}
-                          </div>
-                          <div className="motd-msg">{item.message}</div>
-                        </div>
-                      ))}
+                               </div>
+                               <div className="motd-msg">{item.message}</div>
+                             </div>
+                           ))}
+                         </div>
+                       )}
                     </div>
-                  )}
                 </div>
-              </div>
-            </div>
+             </div>
 
-            {/* Right Column (40%) */}
-            <div className="login-right-panel">
-              <div className="login-form-container">
-                <LoginCard onLogin={setSession} />
+             {/* Right Column (40%) */}
+             <div className="login-right-panel">
+                <div className="login-form-container">
+                   <LoginCard onLogin={setSession} />
                 <div
                   style={{ marginTop: 32, textAlign: "center", fontSize: "0.85rem", color: "#888" }}
                 >
-                  &copy; {new Date().getFullYear()} NM-ERA Firewood Bank
+                     &copy; {new Date().getFullYear()} NM-ERA Firewood Bank
+                   </div>
                 </div>
-              </div>
-            </div>
+             </div>
           </div>
-        </div>
+      </div>
       )}
       {session && (
-        <ChangeRequestModal
-          isOpen={showChangeRequestModal}
-          onClose={() => setShowChangeRequestModal(false)}
-          userId={session.username}
-        />
+          <ChangeRequestModal
+            isOpen={showChangeRequestModal}
+            onClose={() => setShowChangeRequestModal(false)}
+            userId={session.username}
+          />
       )}
       {session && showPasswordModal && (
         <div className="modal-overlay">

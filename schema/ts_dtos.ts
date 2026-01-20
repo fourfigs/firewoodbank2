@@ -32,7 +32,6 @@ export type ApprovalStatus = "approved" | "denied" | "pending";
 export interface Client {
   meta: SyncMeta;
   clientNumber: string;
-  clientTitle?: string;
   name: string;
   physicalAddress: Address;
   mailingAddress?: Address;
@@ -65,7 +64,6 @@ export interface WorkOrder {
   meta: SyncMeta;
   clientId: UUID;
   clientNumber: string;
-  clientTitle?: string;
   clientName: string;
   physicalAddress: Address;
   mailingAddress?: Address;
@@ -98,7 +96,6 @@ export interface InvoiceLineItem {
 export interface ClientSnapshot {
   clientId: UUID;
   clientNumber: string;
-  clientTitle?: string;
   clientName: string;
   physicalAddress: Address;
   mailingAddress?: Address;
