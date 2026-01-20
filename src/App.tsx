@@ -13,12 +13,14 @@ const tabs = ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics", "Wo
 type Role = "admin" | "lead" | "staff" | "volunteer";
 
 type UserSession = {
+  userId: string;
   name: string;
   username: string;
   role: Role;
   hipaaCertified?: boolean;
   isDriver?: boolean;
   email?: string; // recovery; not used for login
+  telephone?: string | null;
 };
 
 type ClientRow = {
@@ -97,6 +99,16 @@ type UserRow = {
   name: string;
   email?: string | null;
   telephone?: string | null;
+  physical_address_line1?: string | null;
+  physical_address_line2?: string | null;
+  physical_address_city?: string | null;
+  physical_address_state?: string | null;
+  physical_address_postal_code?: string | null;
+  mailing_address_line1?: string | null;
+  mailing_address_line2?: string | null;
+  mailing_address_city?: string | null;
+  mailing_address_state?: string | null;
+  mailing_address_postal_code?: string | null;
   role: Role;
   availability_notes?: string | null;
   availability_schedule?: string | null;
@@ -106,6 +118,17 @@ type UserRow = {
   vehicle?: string | null;
   is_driver?: boolean | null;
   hipaa_certified?: number;
+};
+
+type LoginResponse = {
+  user_id: string;
+  name: string;
+  username: string;
+  role: Role;
+  email?: string | null;
+  telephone?: string | null;
+  hipaa_certified: number;
+  is_driver: number;
 };
 
 type DeliveryEventRow = {
@@ -188,8 +211,7 @@ function LoginCard({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [isDriverLogin, setIsDriverLogin] = useState(false);
-  const [hipaaCertified, setHipaaCertified] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   // Forgot Password State
   const [isForgot, setIsForgot] = useState(false);
@@ -207,37 +229,38 @@ function LoginCard({
     };
   }, []);
 
-  const resolveRole = (input: string): Role => {
-    const normalized = input.trim().toLowerCase();
-    if (normalized === "admin") return "admin";
-    if (normalized === "lead") return "lead";
-    if (normalized === "staff") return "staff";
-    if (normalized === "volunteer") return "volunteer";
-    // Default demo role if unknown
-    return "staff";
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    // Placeholder auth: accept any email/password and create a session immediately.
-    const normalized = username.trim().toUpperCase();
-    const sampleName = normalized || "USER";
-    const role: Role = resolveRole(username);
-    
-    // Simulate network delay for effect
-    setTimeout(() => {
-        onLogin({
-        name: sampleName,
-        username: normalized,
-        role,
-        hipaaCertified: hipaaCertified || role === "admin" || role === "lead",
-        isDriver: isDriverLogin,
-        });
-        if (isMounted.current) {
+    setLoginError(null);
+    try {
+      const response = await invoke<LoginResponse>("login_user", {
+        username,
+        password,
+      });
+      onLogin({
+        userId: response.user_id,
+        name: response.name,
+        username: response.username,
+        role: response.role,
+        hipaaCertified: response.hipaa_certified === 1,
+        isDriver: response.is_driver === 1,
+        email: response.email ?? undefined,
+        telephone: response.telephone ?? null,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Login failed. Check your username and password.";
+      setLoginError(message);
+    } finally {
+      if (isMounted.current) {
         setSubmitting(false);
-        }
-    }, 800);
+      }
+    }
   };
 
   const handleForgotSubmit = (e: React.FormEvent) => {
@@ -296,6 +319,11 @@ function LoginCard({
           <div className="badge" style={{ marginBottom: 24, background: "#e8f5e9", color: "var(--brand-green)", textAlign: "center", display: "block" }}>
             💡 Demo: admin/admin, lead/lead, staff/staff
           </div>
+          {loginError && (
+            <div className="pill" style={{ display: "block", marginBottom: 16, background: "#fbe2e2", color: "#b3261e" }}>
+              {loginError}
+            </div>
+          )}
           <form onSubmit={handleSubmit}>
             <div className="login-field">
               <label htmlFor="username">Username</label>
@@ -322,25 +350,6 @@ function LoginCard({
               />
             </div>
             
-            <div className="login-options">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={isDriverLogin}
-                  onChange={(e) => setIsDriverLogin(e.target.checked)}
-                />
-                Driver Mode
-              </label>
-              <label>
-              <input
-                  type="checkbox"
-                  checked={hipaaCertified}
-                  onChange={(e) => setHipaaCertified(e.target.checked)}
-                />
-                HIPAA
-              </label>
-            </div>
-
             <button className="login-btn" type="submit" disabled={submitting}>
               {submitting ? "Signing in..." : "Sign In"}
             </button>
@@ -419,12 +428,36 @@ function App() {
     name: string;
     email: string;
     telephone: string;
+    username: string;
+    password: string;
+    physical_address_line1: string;
+    physical_address_line2: string;
+    physical_address_city: string;
+    physical_address_state: string;
+    physical_address_postal_code: string;
+    mailing_address_line1: string;
+    mailing_address_line2: string;
+    mailing_address_city: string;
+    mailing_address_state: string;
+    mailing_address_postal_code: string;
     role: string;
     is_driver: boolean;
   }>({
     name: "",
     email: "",
     telephone: "",
+    username: "",
+    password: "",
+    physical_address_line1: "",
+    physical_address_line2: "",
+    physical_address_city: "",
+    physical_address_state: "",
+    physical_address_postal_code: "",
+    mailing_address_line1: "",
+    mailing_address_line2: "",
+    mailing_address_city: "",
+    mailing_address_state: "",
+    mailing_address_postal_code: "",
     role: "volunteer",
     is_driver: false,
   });
@@ -617,7 +650,17 @@ function App() {
           input: {
             name: session.name,
             email: session.email ?? null,
-            telephone: null,
+            telephone: session.telephone ?? null,
+            physical_address_line1: null,
+            physical_address_line2: null,
+            physical_address_city: null,
+            physical_address_state: null,
+            physical_address_postal_code: null,
+            mailing_address_line1: null,
+            mailing_address_line2: null,
+            mailing_address_city: null,
+            mailing_address_state: null,
+            mailing_address_postal_code: null,
             role: session.role,
             is_driver: session.isDriver ?? false,
             hipaa_certified: session.hipaaCertified ?? false,
@@ -750,7 +793,17 @@ function App() {
           id: `session-${session.username || session.name}`,
           name: session.name,
           email: session.email ?? null,
-          telephone: null,
+          telephone: session.telephone ?? null,
+          physical_address_line1: null,
+          physical_address_line2: null,
+          physical_address_city: null,
+          physical_address_state: null,
+          physical_address_postal_code: null,
+          mailing_address_line1: null,
+          mailing_address_line2: null,
+          mailing_address_city: null,
+          mailing_address_state: null,
+          mailing_address_postal_code: null,
           role: session.role,
           availability_notes: null,
           availability_schedule: null,
@@ -1829,6 +1882,18 @@ function App() {
                                     name: selectedClientForDetail.name,
                                     email: selectedClientForDetail.email || "",
                                     telephone: selectedClientForDetail.telephone || "",
+                                    username: "",
+                                    password: "",
+                                    physical_address_line1: selectedClientForDetail.physical_address_line1 || "",
+                                    physical_address_line2: selectedClientForDetail.physical_address_line2 || "",
+                                    physical_address_city: selectedClientForDetail.physical_address_city || "",
+                                    physical_address_state: selectedClientForDetail.physical_address_state || "",
+                                    physical_address_postal_code: selectedClientForDetail.physical_address_postal_code || "",
+                                    mailing_address_line1: selectedClientForDetail.mailing_address_line1 || "",
+                                    mailing_address_line2: selectedClientForDetail.mailing_address_line2 || "",
+                                    mailing_address_city: selectedClientForDetail.mailing_address_city || "",
+                                    mailing_address_state: selectedClientForDetail.mailing_address_state || "",
+                                    mailing_address_postal_code: selectedClientForDetail.mailing_address_postal_code || "",
                                     role: "volunteer",
                                     is_driver: false,
                                   });
@@ -3199,6 +3264,18 @@ function App() {
                                       name: "",
                                       email: "",
                                       telephone: "",
+                                      username: "",
+                                      password: "",
+                                      physical_address_line1: "",
+                                      physical_address_line2: "",
+                                      physical_address_city: "",
+                                      physical_address_state: "",
+                                      physical_address_postal_code: "",
+                                      mailing_address_line1: "",
+                                      mailing_address_line2: "",
+                                      mailing_address_city: "",
+                                      mailing_address_state: "",
+                                      mailing_address_postal_code: "",
                                       role: "volunteer",
                                       is_driver: false,
                                     });
@@ -3225,8 +3302,20 @@ function App() {
                                         name: workerForm.name,
                                         email: workerForm.email || null,
                                         telephone: workerForm.telephone || null,
+                                        physical_address_line1: workerForm.physical_address_line1 || null,
+                                        physical_address_line2: workerForm.physical_address_line2 || null,
+                                        physical_address_city: workerForm.physical_address_city || null,
+                                        physical_address_state: workerForm.physical_address_state || null,
+                                        physical_address_postal_code: workerForm.physical_address_postal_code || null,
+                                        mailing_address_line1: workerForm.mailing_address_line1 || null,
+                                        mailing_address_line2: workerForm.mailing_address_line2 || null,
+                                        mailing_address_city: workerForm.mailing_address_city || null,
+                                        mailing_address_state: workerForm.mailing_address_state || null,
+                                        mailing_address_postal_code: workerForm.mailing_address_postal_code || null,
                                         role: workerForm.role,
                                         is_driver: workerForm.is_driver,
+                                        username: workerForm.username,
+                                        password: workerForm.password,
                                       }
                                     });
                                     await loadUsers();
@@ -3234,6 +3323,18 @@ function App() {
                                       name: "",
                                       email: "",
                                       telephone: "",
+                                      username: "",
+                                      password: "",
+                                      physical_address_line1: "",
+                                      physical_address_line2: "",
+                                      physical_address_city: "",
+                                      physical_address_state: "",
+                                      physical_address_postal_code: "",
+                                      mailing_address_line1: "",
+                                      mailing_address_line2: "",
+                                      mailing_address_city: "",
+                                      mailing_address_state: "",
+                                      mailing_address_postal_code: "",
                                       role: "volunteer",
                                       is_driver: false,
                                     });
@@ -3255,6 +3356,27 @@ function App() {
                                     value={workerForm.name}
                                     onChange={(e) => setWorkerForm({ ...workerForm, name: e.target.value })}
                                     placeholder="e.g. Jane Doe"
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label>
+                                  Username *
+                                  <input
+                                    required
+                                    value={workerForm.username}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, username: e.target.value })}
+                                    placeholder="e.g. jdoe"
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label>
+                                  Password *
+                                  <input
+                                    required
+                                    type="password"
+                                    value={workerForm.password}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, password: e.target.value })}
+                                    placeholder="Set a password"
                                     disabled={busy}
                                   />
                                 </label>
@@ -3287,7 +3409,92 @@ function App() {
                                     type="tel"
                                     value={workerForm.telephone}
                                     onChange={(e) => setWorkerForm({ ...workerForm, telephone: e.target.value })}
+                                    onBlur={(e) => setWorkerForm({ ...workerForm, telephone: normalizePhone(e.target.value) })}
                                     placeholder="(505) 555-0100"
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label className="span-2">
+                                  Address Line 1
+                                  <input
+                                    value={workerForm.physical_address_line1}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, physical_address_line1: e.target.value })}
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label className="span-2">
+                                  Address Line 2
+                                  <input
+                                    value={workerForm.physical_address_line2}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, physical_address_line2: e.target.value })}
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label>
+                                  City
+                                  <input
+                                    value={workerForm.physical_address_city}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, physical_address_city: e.target.value })}
+                                    onBlur={(e) => setWorkerForm({ ...workerForm, physical_address_city: initCapCity(e.target.value) })}
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label>
+                                  State
+                                  <input
+                                    value={workerForm.physical_address_state}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, physical_address_state: e.target.value })}
+                                    onBlur={(e) => setWorkerForm({ ...workerForm, physical_address_state: normalizeState(e.target.value) })}
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label>
+                                  ZIP
+                                  <input
+                                    value={workerForm.physical_address_postal_code}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, physical_address_postal_code: e.target.value })}
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label className="span-2">
+                                  Mailing Line 1
+                                  <input
+                                    value={workerForm.mailing_address_line1}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, mailing_address_line1: e.target.value })}
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label className="span-2">
+                                  Mailing Line 2
+                                  <input
+                                    value={workerForm.mailing_address_line2}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, mailing_address_line2: e.target.value })}
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label>
+                                  Mailing City
+                                  <input
+                                    value={workerForm.mailing_address_city}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, mailing_address_city: e.target.value })}
+                                    onBlur={(e) => setWorkerForm({ ...workerForm, mailing_address_city: initCapCity(e.target.value) })}
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label>
+                                  Mailing State
+                                  <input
+                                    value={workerForm.mailing_address_state}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, mailing_address_state: e.target.value })}
+                                    onBlur={(e) => setWorkerForm({ ...workerForm, mailing_address_state: normalizeState(e.target.value) })}
+                                    disabled={busy}
+                                  />
+                                </label>
+                                <label>
+                                  Mailing ZIP
+                                  <input
+                                    value={workerForm.mailing_address_postal_code}
+                                    onChange={(e) => setWorkerForm({ ...workerForm, mailing_address_postal_code: e.target.value })}
                                     disabled={busy}
                                   />
                                 </label>
@@ -3333,6 +3540,18 @@ function App() {
                             onDoubleClick={() => {
                               setSelectedWorker(u);
                               setWorkerEdit({
+                                email: u.email ?? "",
+                                telephone: u.telephone ?? "",
+                                physical_address_line1: u.physical_address_line1 ?? "",
+                                physical_address_line2: u.physical_address_line2 ?? "",
+                                physical_address_city: u.physical_address_city ?? "",
+                                physical_address_state: u.physical_address_state ?? "",
+                                physical_address_postal_code: u.physical_address_postal_code ?? "",
+                                mailing_address_line1: u.mailing_address_line1 ?? "",
+                                mailing_address_line2: u.mailing_address_line2 ?? "",
+                                mailing_address_city: u.mailing_address_city ?? "",
+                                mailing_address_state: u.mailing_address_state ?? "",
+                                mailing_address_postal_code: u.mailing_address_postal_code ?? "",
                                 availability_notes: u.availability_notes ?? "",
                                 vehicle: u.vehicle ?? "",
                                 driver_license_status: u.driver_license_status ?? "",
@@ -3397,8 +3616,95 @@ function App() {
                         {workerError && <div className="pill" style={{ background: "#fbe2e2", color: "#b3261e" }}>{workerError}</div>}
                         <div className="stack">
                           <div><strong>Role:</strong> {selectedWorker.role}</div>
-                          <div><strong>Phone:</strong> {selectedWorker.telephone ?? "—"}</div>
-                          <div><strong>Email:</strong> {selectedWorker.email ?? "—"}</div>
+                          <label>
+                            Email
+                            <input
+                              value={workerEdit?.email ?? ""}
+                              onChange={(e) => setWorkerEdit((prev) => ({ ...prev, email: e.target.value }))}
+                            />
+                          </label>
+                          <label>
+                            Phone
+                            <input
+                              value={workerEdit?.telephone ?? ""}
+                              onChange={(e) => setWorkerEdit((prev) => ({ ...prev, telephone: e.target.value }))}
+                              onBlur={(e) => setWorkerEdit((prev) => ({ ...prev, telephone: normalizePhone(e.target.value) }))}
+                            />
+                          </label>
+                          <label>
+                            Address Line 1
+                            <input
+                              value={workerEdit?.physical_address_line1 ?? ""}
+                              onChange={(e) => setWorkerEdit((prev) => ({ ...prev, physical_address_line1: e.target.value }))}
+                            />
+                          </label>
+                          <label>
+                            Address Line 2
+                            <input
+                              value={workerEdit?.physical_address_line2 ?? ""}
+                              onChange={(e) => setWorkerEdit((prev) => ({ ...prev, physical_address_line2: e.target.value }))}
+                            />
+                          </label>
+                          <label>
+                            City
+                            <input
+                              value={workerEdit?.physical_address_city ?? ""}
+                              onChange={(e) => setWorkerEdit((prev) => ({ ...prev, physical_address_city: e.target.value }))}
+                              onBlur={(e) => setWorkerEdit((prev) => ({ ...prev, physical_address_city: initCapCity(e.target.value) }))}
+                            />
+                          </label>
+                          <label>
+                            State
+                            <input
+                              value={workerEdit?.physical_address_state ?? ""}
+                              onChange={(e) => setWorkerEdit((prev) => ({ ...prev, physical_address_state: e.target.value }))}
+                              onBlur={(e) => setWorkerEdit((prev) => ({ ...prev, physical_address_state: normalizeState(e.target.value) }))}
+                            />
+                          </label>
+                          <label>
+                            ZIP
+                            <input
+                              value={workerEdit?.physical_address_postal_code ?? ""}
+                              onChange={(e) => setWorkerEdit((prev) => ({ ...prev, physical_address_postal_code: e.target.value }))}
+                            />
+                          </label>
+                          <label>
+                            Mailing Line 1
+                            <input
+                              value={workerEdit?.mailing_address_line1 ?? ""}
+                              onChange={(e) => setWorkerEdit((prev) => ({ ...prev, mailing_address_line1: e.target.value }))}
+                            />
+                          </label>
+                          <label>
+                            Mailing Line 2
+                            <input
+                              value={workerEdit?.mailing_address_line2 ?? ""}
+                              onChange={(e) => setWorkerEdit((prev) => ({ ...prev, mailing_address_line2: e.target.value }))}
+                            />
+                          </label>
+                          <label>
+                            Mailing City
+                            <input
+                              value={workerEdit?.mailing_address_city ?? ""}
+                              onChange={(e) => setWorkerEdit((prev) => ({ ...prev, mailing_address_city: e.target.value }))}
+                              onBlur={(e) => setWorkerEdit((prev) => ({ ...prev, mailing_address_city: initCapCity(e.target.value) }))}
+                            />
+                          </label>
+                          <label>
+                            Mailing State
+                            <input
+                              value={workerEdit?.mailing_address_state ?? ""}
+                              onChange={(e) => setWorkerEdit((prev) => ({ ...prev, mailing_address_state: e.target.value }))}
+                              onBlur={(e) => setWorkerEdit((prev) => ({ ...prev, mailing_address_state: normalizeState(e.target.value) }))}
+                            />
+                          </label>
+                          <label>
+                            Mailing ZIP
+                            <input
+                              value={workerEdit?.mailing_address_postal_code ?? ""}
+                              onChange={(e) => setWorkerEdit((prev) => ({ ...prev, mailing_address_postal_code: e.target.value }))}
+                            />
+                          </label>
                           <label>
                             Availability Notes
                             <input
@@ -3493,6 +3799,18 @@ function App() {
                                     await invoke("update_user_flags", {
                                       input: {
                                         id: selectedWorker.id,
+                                        email: workerEdit?.email ?? null,
+                                        telephone: workerEdit?.telephone ?? null,
+                                        physical_address_line1: workerEdit?.physical_address_line1 ?? null,
+                                        physical_address_line2: workerEdit?.physical_address_line2 ?? null,
+                                        physical_address_city: workerEdit?.physical_address_city ?? null,
+                                        physical_address_state: workerEdit?.physical_address_state ?? null,
+                                        physical_address_postal_code: workerEdit?.physical_address_postal_code ?? null,
+                                        mailing_address_line1: workerEdit?.mailing_address_line1 ?? null,
+                                        mailing_address_line2: workerEdit?.mailing_address_line2 ?? null,
+                                        mailing_address_city: workerEdit?.mailing_address_city ?? null,
+                                        mailing_address_state: workerEdit?.mailing_address_state ?? null,
+                                        mailing_address_postal_code: workerEdit?.mailing_address_postal_code ?? null,
                                         availability_notes: workerEdit?.availability_notes ?? null,
                                         availability_schedule: JSON.stringify(workerAvailSchedule),
                                         vehicle: workerEdit?.vehicle ?? null,

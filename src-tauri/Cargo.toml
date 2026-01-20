@@ -18,6 +18,7 @@ sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "uuid", 
 uuid = { version = "1.9", features = ["serde", "v4"] }
 chrono = { version = "0.4", features = ["serde", "clock"] }
 anyhow = "1.0"
+bcrypt = "0.15"
 
 [profile.release]
 opt-level = 3
