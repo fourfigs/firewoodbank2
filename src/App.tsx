@@ -4979,8 +4979,16 @@ function App() {
                 {activeTab === "Worker Directory" &&
                   session &&
                   (session.role === "admin" || session.role === "lead") && (
-                  <div className="stack">
-                    <div className="list-card">
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "1rem",
+                      position: "relative",
+                      minHeight: "400px",
+                    }}
+                  >
+                    <div className="stack" style={{ flex: 1, minWidth: 0 }}>
+                      <div className="list-card">
                         <div
                           className="list-head"
                           style={{
@@ -4997,13 +5005,13 @@ function App() {
                               alignItems: "center",
                             }}
                           >
-                          <h3>Workers & Drivers ({users.length})</h3>
-                          <div style={{ display: "flex", gap: "0.5rem" }}>
-                            <button className="ghost" onClick={loadUsers} disabled={busy}>
-                              Refresh
-                            </button>
+                            <h3>Workers & Drivers ({users.length})</h3>
+                            <div style={{ display: "flex", gap: "0.5rem" }}>
+                              <button className="ghost" onClick={loadUsers} disabled={busy}>
+                                Refresh
+                              </button>
+                            </div>
                           </div>
-                        </div>
 
                         {/* Inline Worker Form */}
                         {canManage && (
@@ -5443,21 +5451,33 @@ function App() {
                           )}
                       </div>
                     </div>
+                    </div>
 
-                    {workerDetailOpen && selectedWorker && (
-                      <div className="card">
-                        <div className="list-head">
-                          <h3>{selectedWorker.name}</h3>
-                          <button
-                            className="ghost"
-                            onClick={() => {
-                              setWorkerDetailOpen(false);
-                              setSelectedWorker(null);
-                            }}
-                          >
-                            Close
-                          </button>
-                        </div>
+                    <div
+                      style={{
+                        width: workerDetailOpen ? "400px" : "0",
+                        overflow: "hidden",
+                        transition: "width 0.3s ease",
+                        borderLeft: workerDetailOpen ? "1px solid #ddd" : "none",
+                        paddingLeft: workerDetailOpen ? "1rem" : "0",
+                      }}
+                    >
+                      {workerDetailOpen && selectedWorker && (
+                        <div className="card">
+                          <div className="list-head">
+                            <h3>{selectedWorker.name}</h3>
+                            <button
+                              className="ghost"
+                              type="button"
+                              onClick={() => {
+                                setWorkerDetailOpen(false);
+                                setSelectedWorker(null);
+                              }}
+                              style={{ padding: "0.25rem 0.5rem" }}
+                            >
+                              ×
+                            </button>
+                          </div>
                           {workerError && (
                             <div
                               className="pill"
@@ -5887,8 +5907,9 @@ function App() {
                             <div className="muted">Read-only (admin/lead can edit).</div>
                           )}
                         </div>
-                      </div>
-                    )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
