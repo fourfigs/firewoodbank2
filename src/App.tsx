@@ -541,6 +541,62 @@ function App() {
     setUsers(mapped);
   };
 
+  const openWorkerDetail = (
+    u: { id: string; name: string; role: string } & Partial<Omit<UserRow, "id" | "name" | "role">>,
+  ) => {
+    setSelectedWorkerId(u.id);
+    setSelectedWorker({ ...u, role: u.role as UserRow["role"] } as UserRow);
+    setWorkerDetailOpen(true);
+    setWorkerEdit({
+      email: u.email ?? "",
+      telephone: u.telephone ?? "",
+      physical_address_line1: u.physical_address_line1 ?? "",
+      physical_address_line2: u.physical_address_line2 ?? "",
+      physical_address_city: u.physical_address_city ?? "",
+      physical_address_state: u.physical_address_state ?? "",
+      physical_address_postal_code: u.physical_address_postal_code ?? "",
+      mailing_address_line1: u.mailing_address_line1 ?? "",
+      mailing_address_line2: u.mailing_address_line2 ?? "",
+      mailing_address_city: u.mailing_address_city ?? "",
+      mailing_address_state: u.mailing_address_state ?? "",
+      mailing_address_postal_code: u.mailing_address_postal_code ?? "",
+      availability_notes: u.availability_notes ?? "",
+      vehicle: u.vehicle ?? "",
+      driver_license_status: u.driver_license_status ?? "",
+      driver_license_number: u.driver_license_number ?? "",
+      driver_license_expires_on: u.driver_license_expires_on ?? "",
+      is_driver: !!u.is_driver,
+      hipaa_certified: u.hipaa_certified,
+    });
+    if (u.availability_schedule) {
+      try {
+        const parsed = JSON.parse(u.availability_schedule);
+        setWorkerAvailSchedule(parsed);
+      } catch {
+        setWorkerAvailSchedule({
+          monday: false,
+          tuesday: false,
+          wednesday: false,
+          thursday: false,
+          friday: false,
+          saturday: false,
+          sunday: false,
+        });
+      }
+    } else {
+      setWorkerAvailSchedule({
+        monday: false,
+        tuesday: false,
+        wednesday: false,
+        thursday: false,
+        friday: false,
+        saturday: false,
+        sunday: false,
+      });
+    }
+    setWorkerError(null);
+  };
+
   const loadAuditLogs = async () => {
     const data = await invokeTauri<AuditLogRow[]>("list_audit_logs", {
       filter: auditLogFilter,
@@ -920,8 +976,7 @@ function App() {
                     workOrders={workOrders}
                     onWorkerSelect={(user) => {
                       if (session?.role === "admin" || session?.role === "staff" || session?.role === "lead") {
-                        setSelectedWorker(user);
-                        setWorkerEdit({ ...user });
+                        openWorkerDetail(user);
                         setActiveTab("Worker Directory");
                       }
                     }}
@@ -5360,58 +5415,7 @@ function App() {
                             key={u.id}
                             onClick={() => setSelectedWorkerId(u.id)}
                             onDoubleClick={() => {
-                              setSelectedWorkerId(u.id);
-                              setSelectedWorker(u);
-                              setWorkerDetailOpen(true);
-                              setWorkerEdit({
-                                  email: u.email ?? "",
-                                  telephone: u.telephone ?? "",
-                                  physical_address_line1: u.physical_address_line1 ?? "",
-                                  physical_address_line2: u.physical_address_line2 ?? "",
-                                  physical_address_city: u.physical_address_city ?? "",
-                                  physical_address_state: u.physical_address_state ?? "",
-                                  physical_address_postal_code:
-                                    u.physical_address_postal_code ?? "",
-                                  mailing_address_line1: u.mailing_address_line1 ?? "",
-                                  mailing_address_line2: u.mailing_address_line2 ?? "",
-                                  mailing_address_city: u.mailing_address_city ?? "",
-                                  mailing_address_state: u.mailing_address_state ?? "",
-                                  mailing_address_postal_code: u.mailing_address_postal_code ?? "",
-                                availability_notes: u.availability_notes ?? "",
-                                vehicle: u.vehicle ?? "",
-                                driver_license_status: u.driver_license_status ?? "",
-                                driver_license_number: u.driver_license_number ?? "",
-                                driver_license_expires_on: u.driver_license_expires_on ?? "",
-                                is_driver: !!u.is_driver,
-                                hipaa_certified: u.hipaa_certified,
-                              });
-                              if (u.availability_schedule) {
-                                try {
-                                  const parsed = JSON.parse(u.availability_schedule);
-                                  setWorkerAvailSchedule(parsed);
-                                } catch {
-                                  setWorkerAvailSchedule({
-                                    monday: false,
-                                    tuesday: false,
-                                    wednesday: false,
-                                    thursday: false,
-                                    friday: false,
-                                    saturday: false,
-                                    sunday: false,
-                                  });
-                                }
-                              } else {
-                                setWorkerAvailSchedule({
-                                  monday: false,
-                                  tuesday: false,
-                                  wednesday: false,
-                                  thursday: false,
-                                  friday: false,
-                                  saturday: false,
-                                  sunday: false,
-                                });
-                              }
-                              setWorkerError(null);
+                              openWorkerDetail(u);
                             }}
                             style={{
                               cursor: "pointer",
