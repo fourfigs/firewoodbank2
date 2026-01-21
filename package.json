@@ -1,0 +1,39 @@
+{
+  "name": "firewoodbank2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:ui\" \"npm:dev:tauri\"",
+    "dev:ui": "vite",
+    "dev:tauri": "tauri dev",
+    "build": "tauri build",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css,md}\"",
+    "lint:rust": "cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
+    "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.23.0",
+    "@typescript-eslint/parser": "^8.23.0",
+    "@tauri-apps/cli": "^2.0.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.19.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.5.4",
+    "vite": "^7.3.0"
+  }
+}

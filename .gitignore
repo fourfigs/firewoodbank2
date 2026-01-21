@@ -1,0 +1,22 @@
+node_modules
+dist
+.vite
+.turbo
+.vs
+*.log
+*.sqlite
+*.db
+src-tauri/target
+src-tauri/Cargo.lock
+src-tauri/gen
+target
+logo_nmera-Color-1.png
+Final-nmera-mailer-2025-front.pdf
+# Ignore generated/reference PDFs and app icons
+*.pdf
+firewoodBank-icon.png
+CommunityFirewoodBank_*.pdf
+
+
+/firewoodbank.db-shm
+/firewoodbank.db-wal
