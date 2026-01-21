@@ -285,7 +285,8 @@ function App() {
   const [motdItems, setMotdItems] = useState<MotdRow[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrderRow | null>(null);
-  const [workOrderDetailOpen, setWorkOrderDetailOpen] = useState(false);
+  const [workOrderDetailSidebarOpen, setWorkOrderDetailSidebarOpen] = useState(false);
+  const [workerDetailSidebarOpen, setWorkerDetailSidebarOpen] = useState(false);
   const [workOrderEditMode, setWorkOrderEditMode] = useState(false);
   const [workOrderEditForm, setWorkOrderEditForm] = useState({
     scheduled_date: "",
@@ -2388,6 +2389,639 @@ function App() {
                   </div>
                 )}
 
+                {/* Worker Detail Sidebar */}
+                {workerDetailSidebarOpen && selectedWorker && (
+                  <div
+                    style={{
+                      width: "500px",
+                      overflow: "hidden",
+                      transition: "width 0.3s ease",
+                      borderLeft: "1px solid #ddd",
+                      padding: "1rem",
+                    }}
+                  >
+                    <div className="card">
+                      <div className="list-head" style={{ marginBottom: "1rem" }}>
+                        <h3>Worker Details</h3>
+                        <button
+                          className="ghost"
+                          type="button"
+                          onClick={() => {
+                            setWorkerDetailSidebarOpen(false);
+                            setSelectedWorker(null);
+                          }}
+                          style={{ padding: "0.25rem 0.5rem" }}
+                        >
+                          ×
+                        </button>
+                      </div>
+
+                      <div className="stack" style={{ gap: "0.75rem" }}>
+                        <div>
+                          <strong style={{ fontSize: "1.1rem" }}>{selectedWorker.name}</strong>
+                          <div className="muted" style={{ fontSize: "0.85rem" }}>
+                            {selectedWorker.role}
+                            {selectedWorker.is_driver && " • Driver"}
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            gap: "0.75rem",
+                          }}
+                        >
+                          {selectedWorker.email && (
+                            <div>
+                              <strong>Email:</strong> {selectedWorker.email}
+                            </div>
+                          )}
+                          {selectedWorker.telephone && (
+                            <div>
+                              <strong>Phone:</strong> {selectedWorker.telephone}
+                            </div>
+                          )}
+                          <div>
+                            <strong>Role:</strong> {selectedWorker.role}
+                          </div>
+                          <div>
+                            <strong>Driver:</strong> {selectedWorker.is_driver ? "Yes" : "No"}
+                          </div>
+                          {selectedWorker.hipaa_certified != null && (
+                            <div>
+                              <strong>HIPAA Certified:</strong> {selectedWorker.hipaa_certified ? "Yes" : "No"}
+                            </div>
+                          )}
+                        </div>
+
+                        {(session?.role === "admin" || session?.role === "lead") && (
+                          <>
+                            <hr style={{ border: "none", borderTop: "1px solid #eee" }} />
+
+                            {/* Physical Address */}
+                            {(selectedWorker.physical_address_line1 ||
+                              selectedWorker.physical_address_city) && (
+                              <div>
+                                <strong>Physical Address:</strong>
+                                <div style={{ marginTop: "0.25rem" }}>
+                                  {selectedWorker.physical_address_line1 && (
+                                    <div>{selectedWorker.physical_address_line1}</div>
+                                  )}
+                                  {selectedWorker.physical_address_line2 && (
+                                    <div>{selectedWorker.physical_address_line2}</div>
+                                  )}
+                                  {(selectedWorker.physical_address_city ||
+                                    selectedWorker.physical_address_state ||
+                                    selectedWorker.physical_address_postal_code) && (
+                                    <div>
+                                      {selectedWorker.physical_address_city}
+                                      {selectedWorker.physical_address_city && ", "}
+                                      {selectedWorker.physical_address_state}{" "}
+                                      {selectedWorker.physical_address_postal_code}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Mailing Address */}
+                            {(selectedWorker.mailing_address_line1 ||
+                              selectedWorker.mailing_address_city) && (
+                              <div>
+                                <strong>Mailing Address:</strong>
+                                <div style={{ marginTop: "0.25rem" }}>
+                                  {selectedWorker.mailing_address_line1 && (
+                                    <div>{selectedWorker.mailing_address_line1}</div>
+                                  )}
+                                  {selectedWorker.mailing_address_line2 && (
+                                    <div>{selectedWorker.mailing_address_line2}</div>
+                                  )}
+                                  {(selectedWorker.mailing_address_city ||
+                                    selectedWorker.mailing_address_state ||
+                                    selectedWorker.mailing_address_postal_code) && (
+                                    <div>
+                                      {selectedWorker.mailing_address_city}
+                                      {selectedWorker.mailing_address_city && ", "}
+                                      {selectedWorker.mailing_address_state}{" "}
+                                      {selectedWorker.mailing_address_postal_code}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Driver License Info */}
+                            {selectedWorker.driver_license_status && (
+                              <div>
+                                <strong>Driver License:</strong> {selectedWorker.driver_license_status}
+                                {selectedWorker.driver_license_number && (
+                                  <div style={{ marginTop: "0.25rem" }}>
+                                    <strong>Number:</strong> {selectedWorker.driver_license_number}
+                                  </div>
+                                )}
+                                {selectedWorker.driver_license_expires_on && (
+                                  <div>
+                                    <strong>Expires:</strong>{" "}
+                                    {new Date(selectedWorker.driver_license_expires_on).toLocaleDateString()}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Vehicle */}
+                            {selectedWorker.vehicle && (
+                              <div>
+                                <strong>Vehicle:</strong> {selectedWorker.vehicle}
+                              </div>
+                            )}
+
+                            {/* Availability Notes */}
+                            {selectedWorker.availability_notes && (
+                              <div>
+                                <strong>Availability Notes:</strong>
+                                <div
+                                  style={{
+                                    marginTop: "0.25rem",
+                                    whiteSpace: "pre-wrap",
+                                    background: "#f9f9f9",
+                                    padding: "0.5rem",
+                                    borderRadius: "4px",
+                                  }}
+                                >
+                                  {selectedWorker.availability_notes}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Edit Button */}
+                            <div style={{ display: "flex", gap: "0.5rem" }}>
+                              <button
+                                className="primary"
+                                type="button"
+                                onClick={() => {
+                                  // Populate the edit form with current worker data
+                                  setWorkerEdit({
+                                    email: selectedWorker.email ?? "",
+                                    telephone: selectedWorker.telephone ?? "",
+                                    physical_address_line1: selectedWorker.physical_address_line1 ?? "",
+                                    physical_address_line2: selectedWorker.physical_address_line2 ?? "",
+                                    physical_address_city: selectedWorker.physical_address_city ?? "",
+                                    physical_address_state: selectedWorker.physical_address_state ?? "",
+                                    physical_address_postal_code: selectedWorker.physical_address_postal_code ?? "",
+                                    mailing_address_line1: selectedWorker.mailing_address_line1 ?? "",
+                                    mailing_address_line2: selectedWorker.mailing_address_line2 ?? "",
+                                    mailing_address_city: selectedWorker.mailing_address_city ?? "",
+                                    mailing_address_state: selectedWorker.mailing_address_state ?? "",
+                                    mailing_address_postal_code: selectedWorker.mailing_address_postal_code ?? "",
+                                    availability_notes: selectedWorker.availability_notes ?? "",
+                                    vehicle: selectedWorker.vehicle ?? "",
+                                    driver_license_status: selectedWorker.driver_license_status ?? "",
+                                    driver_license_number: selectedWorker.driver_license_number ?? "",
+                                    driver_license_expires_on: selectedWorker.driver_license_expires_on ?? "",
+                                    is_driver: !!selectedWorker.is_driver,
+                                    hipaa_certified: selectedWorker.hipaa_certified ?? false,
+                                  });
+
+                                  // Parse availability schedule
+                                  if (selectedWorker.availability_schedule) {
+                                    try {
+                                      const parsed = JSON.parse(selectedWorker.availability_schedule);
+                                      setWorkerAvailSchedule(parsed);
+                                    } catch {
+                                      setWorkerAvailSchedule({
+                                        monday: false,
+                                        tuesday: false,
+                                        wednesday: false,
+                                        thursday: false,
+                                        friday: false,
+                                        saturday: false,
+                                        sunday: false,
+                                      });
+                                    }
+                                  } else {
+                                    setWorkerAvailSchedule({
+                                      monday: false,
+                                      tuesday: false,
+                                      wednesday: false,
+                                      thursday: false,
+                                      friday: false,
+                                      saturday: false,
+                                      sunday: false,
+                                    });
+                                  }
+
+                                  setWorkerDetailSidebarOpen(false);
+                                  // This will switch to the edit view in the Worker Directory tab
+                                  setActiveTab("Worker Directory");
+                                }}
+                              >
+                                Edit Worker
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {workOrderDetailSidebarOpen && selectedWorkOrder && (
+                  <div
+                    style={{
+                      width: "500px",
+                      overflow: "hidden",
+                      transition: "width 0.3s ease",
+                      borderLeft: "1px solid #ddd",
+                      padding: "1rem",
+                    }}
+                  >
+                    <div className="card">
+                      <div className="list-head" style={{ marginBottom: "1rem" }}>
+                        <h3>Work Order Details</h3>
+                        <button
+                          className="ghost"
+                          type="button"
+                          onClick={() => {
+                            setWorkOrderDetailSidebarOpen(false);
+                            setWorkOrderEditMode(false);
+                            setSelectedWorkOrder(null);
+                          }}
+                          style={{ padding: "0.25rem 0.5rem" }}
+                        >
+                          ×
+                        </button>
+                      </div>
+
+                      <div className="stack" style={{ gap: "0.75rem" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
+                        >
+                          <div>
+                            <strong style={{ fontSize: "1.1rem" }}>
+                              {selectedWorkOrder.client_name}
+                            </strong>
+                            <div className="muted" style={{ fontSize: "0.85rem" }}>
+                              Order ID: {selectedWorkOrder.id.slice(0, 8).toUpperCase()}
+                            </div>
+                          </div>
+                          <span
+                            className="pill"
+                            style={{
+                              background:
+                                selectedWorkOrder.status === "completed"
+                                  ? "#c8e6c9"
+                                  : selectedWorkOrder.status === "cancelled"
+                                    ? "#ffcdd2"
+                                    : selectedWorkOrder.status === "scheduled"
+                                      ? "#bbdefb"
+                                      : "#fff3e0",
+                            }}
+                          >
+                            {selectedWorkOrder.status}
+                          </span>
+                        </div>
+
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            gap: "0.75rem",
+                          }}
+                        >
+                          <div>
+                            <strong>Type:</strong>{" "}
+                            {selectedWorkOrder.pickup_delivery_type ?? "delivery"}
+                          </div>
+                          <div>
+                            <strong>Scheduled:</strong>{" "}
+                            {selectedWorkOrder.scheduled_date
+                              ? new Date(selectedWorkOrder.scheduled_date).toLocaleString()
+                              : "Not scheduled"}
+                          </div>
+                          {selectedWorkOrder.delivery_size_label && (
+                            <div>
+                              <strong>Delivery Size:</strong>{" "}
+                              {selectedWorkOrder.delivery_size_label}
+                              {selectedWorkOrder.delivery_size_cords != null &&
+                                ` (${selectedWorkOrder.delivery_size_cords} cords)`}
+                            </div>
+                          )}
+                          {selectedWorkOrder.pickup_quantity_cords != null && (
+                            <div>
+                              <strong>Pickup Quantity:</strong>{" "}
+                              {selectedWorkOrder.pickup_quantity_cords.toFixed(2)} cords
+                            </div>
+                          )}
+                          {selectedWorkOrder.mileage != null && (
+                            <div>
+                              <strong>Mileage:</strong> {selectedWorkOrder.mileage} miles
+                            </div>
+                          )}
+                          {selectedWorkOrder.created_at && (
+                            <div>
+                              <strong>Created:</strong>{" "}
+                              {new Date(selectedWorkOrder.created_at).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+
+                        {(session?.role === "admin" ||
+                          session?.role === "staff" ||
+                          session?.role === "lead") && (
+                          <>
+                            <hr style={{ border: "none", borderTop: "1px solid #eee" }} />
+                            <div>
+                              <strong>Address:</strong>
+                              <div style={{ marginTop: "0.25rem" }}>
+                                {selectedWorkOrder.physical_address_line1 ?? "—"}
+                                <br />
+                                {selectedWorkOrder.physical_address_city ?? ""},{" "}
+                                {selectedWorkOrder.physical_address_state ?? ""}{" "}
+                                {selectedWorkOrder.physical_address_postal_code ?? ""}
+                              </div>
+                            </div>
+                            {selectedWorkOrder.telephone && (
+                              <div>
+                                <strong>Phone:</strong> {selectedWorkOrder.telephone}
+                              </div>
+                            )}
+                            {selectedWorkOrder.gate_combo && (
+                              <div>
+                                <strong>Gate Combo:</strong> {selectedWorkOrder.gate_combo}
+                              </div>
+                            )}
+                            {selectedWorkOrder.wood_size_label && (
+                              <div>
+                                <strong>Wood Size:</strong>{" "}
+                                {selectedWorkOrder.wood_size_label === "other"
+                                  ? selectedWorkOrder.wood_size_other
+                                  : selectedWorkOrder.wood_size_label}{" "}
+                                in
+                              </div>
+                            )}
+                            {selectedWorkOrder.notes && (
+                              <div>
+                                <strong>Notes:</strong>
+                                <div
+                                  style={{
+                                    marginTop: "0.25rem",
+                                    whiteSpace: "pre-wrap",
+                                    background: "#f9f9f9",
+                                    padding: "0.5rem",
+                                    borderRadius: "4px",
+                                  }}
+                                >
+                                  {selectedWorkOrder.notes}
+                                </div>
+                              </div>
+                            )}
+                            {selectedWorkOrder.assignees_json && (
+                              <div>
+                                <strong>Assigned:</strong>{" "}
+                                {(() => {
+                                  try {
+                                    const arr = JSON.parse(selectedWorkOrder.assignees_json);
+                                    return Array.isArray(arr) ? arr.join(", ") : "—";
+                                  } catch {
+                                    return "—";
+                                  }
+                                })()}
+                              </div>
+                            )}
+                            {selectedWorkOrder.created_by_display && (
+                              <div>
+                                <strong>Created by:</strong> {selectedWorkOrder.created_by_display}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+
+                      {/* Edit Form for Admin/Staff */}
+                      {workOrderEditMode && (session?.role === "admin" || session?.role === "staff") && (
+                        <>
+                          <hr style={{ border: "none", borderTop: "1px solid #eee" }} />
+                          <div className="stack" style={{ gap: "0.75rem" }}>
+                            <h4>Edit Work Order</h4>
+
+                            <label>
+                              Scheduled Date
+                              <input
+                                type="datetime-local"
+                                value={workOrderEditForm.scheduled_date}
+                                onChange={(e) =>
+                                  setWorkOrderEditForm((prev) => ({
+                                    ...prev,
+                                    scheduled_date: e.target.value,
+                                  }))
+                                }
+                              />
+                            </label>
+
+                            <label>
+                              Status
+                              <select
+                                value={workOrderEditForm.status}
+                                onChange={(e) =>
+                                  setWorkOrderEditForm((prev) => ({
+                                    ...prev,
+                                    status: e.target.value,
+                                  }))
+                                }
+                              >
+                                <option value="pending">Pending</option>
+                                <option value="scheduled">Scheduled</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="completed">Completed</option>
+                                <option value="cancelled">Cancelled</option>
+                              </select>
+                            </label>
+
+                            <label>
+                              Assign Workers
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                                {allUsers
+                                  .filter((u) => u.role === "staff" || u.role === "lead")
+                                  .map((user) => (
+                                    <label
+                                      key={user.id}
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "0.25rem",
+                                        fontSize: "0.85rem",
+                                        padding: "0.25rem 0.5rem",
+                                        border: "1px solid #ddd",
+                                        borderRadius: "4px",
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={workOrderEditForm.assignees.includes(user.id)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setWorkOrderEditForm((prev) => ({
+                                              ...prev,
+                                              assignees: [...prev.assignees, user.id],
+                                            }));
+                                          } else {
+                                            setWorkOrderEditForm((prev) => ({
+                                              ...prev,
+                                              assignees: prev.assignees.filter((id) => id !== user.id),
+                                            }));
+                                          }
+                                        }}
+                                      />
+                                      {user.name}
+                                    </label>
+                                  ))}
+                              </div>
+                            </label>
+
+                            <label>
+                              Mileage (for completed orders)
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={workOrderEditForm.mileage}
+                                onChange={(e) =>
+                                  setWorkOrderEditForm((prev) => ({
+                                    ...prev,
+                                    mileage: e.target.value,
+                                  }))
+                                }
+                                placeholder="Miles driven"
+                              />
+                            </label>
+
+                            <div style={{ display: "flex", gap: "0.5rem" }}>
+                              <button
+                                className="primary"
+                                type="button"
+                                disabled={busy}
+                                onClick={async () => {
+                                  setWorkOrderError(null);
+                                  setBusy(true);
+                                  try {
+                                    await invokeTauri("update_work_order", {
+                                      input: {
+                                        id: selectedWorkOrder.id,
+                                        scheduled_date: workOrderEditForm.scheduled_date
+                                          ? `${workOrderEditForm.scheduled_date}:00`
+                                          : null,
+                                        status: workOrderEditForm.status,
+                                        assignees_json: JSON.stringify(workOrderEditForm.assignees),
+                                        mileage: workOrderEditForm.mileage
+                                          ? parseFloat(workOrderEditForm.mileage)
+                                          : null,
+                                      },
+                                      role: session?.role ?? null,
+                                    });
+                                    await loadWorkOrders();
+                                    setWorkOrderEditMode(false);
+                                    setWorkOrderDetailSidebarOpen(false);
+                                    setSelectedWorkOrder(null);
+                                  } catch (e: any) {
+                                    setWorkOrderError(
+                                      typeof e === "string" ? e : JSON.stringify(e),
+                                    );
+                                  } finally {
+                                    setBusy(false);
+                                  }
+                                }}
+                              >
+                                {busy ? "Saving..." : "Save Changes"}
+                              </button>
+                              <button
+                                className="ghost"
+                                type="button"
+                                onClick={() => setWorkOrderEditMode(false)}
+                              >
+                                Cancel Edit
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {!workOrderEditMode && (
+                        <>
+                          <hr style={{ border: "none", borderTop: "1px solid #eee" }} />
+                          <div style={{ display: "flex", gap: "0.5rem" }}>
+                            {(session?.role === "admin" || session?.role === "staff") && (
+                              <button
+                                className="primary"
+                                type="button"
+                                onClick={() => {
+                                  setWorkOrderEditForm({
+                                    scheduled_date: selectedWorkOrder.scheduled_date
+                                      ? selectedWorkOrder.scheduled_date.slice(0, 16)
+                                      : "",
+                                    status: selectedWorkOrder.status,
+                                    assignees: (() => {
+                                      try {
+                                        const arr = JSON.parse(
+                                          selectedWorkOrder.assignees_json ?? "[]",
+                                        );
+                                        return Array.isArray(arr) ? arr : [];
+                                      } catch {
+                                        return [];
+                                      }
+                                    })(),
+                                    mileage: selectedWorkOrder.mileage?.toString() ?? "",
+                                  });
+                                  setWorkOrderEditMode(true);
+                                }}
+                              >
+                                Edit Order
+                              </button>
+                            )}
+                            {(session?.role === "admin" || session?.role === "staff") && (
+                              <button
+                                className="ghost"
+                                type="button"
+                                onClick={async () => {
+                                  if (
+                                    !window.confirm(
+                                      `Delete work order for ${selectedWorkOrder.client_name}?`,
+                                    )
+                                  )
+                                    return;
+                                  setBusy(true);
+                                  try {
+                                    await invokeTauri("delete_work_order", {
+                                      id: selectedWorkOrder.id,
+                                      role: session?.role ?? null,
+                                    });
+                                    await loadWorkOrders();
+                                    setWorkOrderDetailSidebarOpen(false);
+                                    setSelectedWorkOrder(null);
+                                  } finally {
+                                    setBusy(false);
+                                  }
+                                }}
+                                style={{
+                                  padding: "0.25rem 0.5rem",
+                                  fontSize: "0.85rem",
+                                  color: "#b3261e",
+                                }}
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {activeTab === "Inventory" && (
                   <div className="stack">
                     <div className="card muted">
@@ -3214,2766 +3848,4 @@ function App() {
                                   if (!Number.isFinite(cordsParsed) || cordsParsed <= 0) {
                                     setWorkOrderError("Enter a valid cord amount for Other.");
                                     return;
-                                  }
-                                  deliverySizeCords = cordsParsed;
-                                  deliverySizeLabel = details;
-                                }
-                              }
-
-                              let pickupQuantityCords: number | null = null;
-                              let pickupLength: number | null = null;
-                              let pickupWidth: number | null = null;
-                              let pickupHeight: number | null = null;
-                              let pickupUnits: string | null = null;
-                              if (workOrderForm.status === "picked_up") {
-                                if (workOrderForm.pickup_quantity_mode === "cords") {
-                                  const cordsParsed = Number(
-                                    workOrderForm.pickup_quantity_cords.trim(),
-                                  );
-                                  if (!Number.isFinite(cordsParsed) || cordsParsed <= 0) {
-                                    setWorkOrderError(
-                                      "Enter a valid pickup quantity in cords.",
-                                    );
-                                    return;
-                                  }
-                                  pickupQuantityCords = cordsParsed;
-                                } else {
-                                  const lengthRaw = Number(
-                                    workOrderForm.pickup_length.trim(),
-                                  );
-                                  const widthRaw = Number(
-                                    workOrderForm.pickup_width.trim(),
-                                  );
-                                  const heightRaw = Number(
-                                    workOrderForm.pickup_height.trim(),
-                                  );
-                                  if (
-                                    !Number.isFinite(lengthRaw) ||
-                                    !Number.isFinite(widthRaw) ||
-                                    !Number.isFinite(heightRaw) ||
-                                    lengthRaw <= 0 ||
-                                    widthRaw <= 0 ||
-                                    heightRaw <= 0
-                                  ) {
-                                    setWorkOrderError(
-                                      "Enter valid pickup dimensions.",
-                                    );
-                                    return;
-                                  }
-                                  pickupUnits = workOrderForm.pickup_units;
-                                  pickupLength = lengthRaw;
-                                  pickupWidth = widthRaw;
-                                  pickupHeight = heightRaw;
-                                  const scale = pickupUnits === "in" ? 1 / 12 : 1;
-                                  const lengthFt = lengthRaw * scale;
-                                  const widthFt = widthRaw * scale;
-                                  const heightFt = heightRaw * scale;
-                                  pickupQuantityCords =
-                                    (lengthFt * widthFt * heightFt) / 128;
-                                }
-                              }
-
-                              setBusy(true);
-                              try {
-                                try {
-                                  await invokeTauri("create_work_order", {
-                                    input: {
-                                      client_id: targetClient.id,
-                                      client_name: targetClient.name,
-                                      physical_address_line1: targetClient.physical_address_line1,
-                                      physical_address_line2: targetClient.physical_address_line2,
-                                      physical_address_city: targetClient.physical_address_city,
-                                      physical_address_state: targetClient.physical_address_state,
-                                      physical_address_postal_code:
-                                        targetClient.physical_address_postal_code,
-                                      mailing_address_line1: workOrderForm.mailingSameAsPhysical
-                                        ? targetClient.physical_address_line1
-                                        : targetClient.mailing_address_line1,
-                                      mailing_address_line2: workOrderForm.mailingSameAsPhysical
-                                        ? targetClient.physical_address_line2
-                                        : targetClient.mailing_address_line2,
-                                      mailing_address_city: workOrderForm.mailingSameAsPhysical
-                                        ? targetClient.physical_address_city
-                                        : targetClient.mailing_address_city,
-                                      mailing_address_state: workOrderForm.mailingSameAsPhysical
-                                        ? targetClient.physical_address_state
-                                        : targetClient.mailing_address_state,
-                                      mailing_address_postal_code:
-                                        workOrderForm.mailingSameAsPhysical
-                                        ? targetClient.physical_address_postal_code
-                                        : targetClient.mailing_address_postal_code,
-                                      telephone: targetClient.telephone,
-                                      email: targetClient.email,
-                                      directions: targetClient.directions || null,
-                                      gate_combo:
-                                        workOrderForm.gate_combo || targetClient.gate_combo,
-                                      mileage: mileageValue,
-                                      other_heat_source_gas: workOrderForm.other_heat_source_gas,
-                                      other_heat_source_electric:
-                                        workOrderForm.other_heat_source_electric,
-                                      other_heat_source_other:
-                                        workOrderForm.other_heat_source_other || null,
-                                      notes: workOrderForm.notes || null,
-                                      scheduled_date: workOrderForm.scheduled_date || null,
-                                      status: workOrderForm.status,
-                                      wood_size_label: targetClient.wood_size_label || null,
-                                      wood_size_other: targetClient.wood_size_other || null,
-                                      delivery_size_label: deliverySizeLabel,
-                                      delivery_size_cords: deliverySizeCords,
-                                      pickup_delivery_type: pickupType,
-                                      pickup_quantity_cords: pickupQuantityCords,
-                                      pickup_length: pickupLength,
-                                      pickup_width: pickupWidth,
-                                      pickup_height: pickupHeight,
-                                      pickup_units: pickupUnits,
-                                      assignees_json: JSON.stringify([
-                                        ...workOrderForm.assignees,
-                                        ...workOrderForm.helpers
-                                          .map((h) => h.trim())
-                                          .filter((h) => h.length > 0),
-                                      ]),
-                                      created_by_user_id: null,
-                                      created_by_display:
-                                        session?.name ?? session?.username ?? null,
-                                      paired_order_id: workOrderForm.paired_order_id || null,
-                                    },
-                                    role: session?.role ?? null,
-                                  });
-                                } catch (e: any) {
-                                  console.error(e);
-                                  setWorkOrderError(
-                                    typeof e === "string"
-                                      ? e
-                                      : "Failed to create work order: " + JSON.stringify(e),
-                                  );
-                                  return;
-                                }
-                                await loadWorkOrders();
-                                setWorkOrderForm({
-                                  client_id: "",
-                                  scheduled_date: "",
-                                  status: "received",
-                                  gate_combo: "",
-                                  notes: "",
-                                  other_heat_source_gas: false,
-                                  other_heat_source_electric: false,
-                                  other_heat_source_other: "",
-                                  mileage: "",
-                                  mailingSameAsPhysical: true,
-                                  assignees: [],
-                                  helpers: [],
-                                  delivery_size_choice: "f250",
-                                  delivery_size_other: "",
-                                  delivery_size_other_cords: "",
-                                  pickup_delivery_type: "delivery",
-                                  pickup_quantity_mode: "cords",
-                                  pickup_quantity_cords: "",
-                                  pickup_length: "",
-                                  pickup_width: "",
-                                  pickup_height: "",
-                                  pickup_units: "ft",
-                                  paired_order_id: "",
-                                });
-                                setWorkOrderNewClient({
-                                  first_name: "",
-                                  last_name: "",
-                                  date_of_onboarding: new Date().toISOString().slice(0, 10),
-                                  physical_address_line1: "",
-                                  physical_address_city: "",
-                                  physical_address_state: "",
-                                  physical_address_postal_code: "",
-                                  telephone: "",
-                                  email: "",
-                                  how_did_they_hear_about_us: "",
-                                  wood_size_label: "",
-                                  wood_size_other: "",
-                                });
-                                setShowWorkOrderForm(false);
-                              } finally {
-                                setBusy(false);
-                              }
-                            }}
-                          >
-                            <div className="form-grid">
-                            <label className="span-2">
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    alignItems: "center",
-                                  }}
-                                >
-                                <span>Client</span>
-                                <button
-                                  type="button"
-                                  className="ghost"
-                                    style={{ padding: "0 8px", height: "auto", fontSize: "0.8rem" }}
-                                    onClick={() =>
-                                      setWorkOrderNewClientEnabled(!workOrderNewClientEnabled)
-                                    }
-                                >
-                                    {workOrderNewClientEnabled
-                                      ? "Select Existing"
-                                      : "+ Add New Client"}
-                                </button>
-                              </div>
-                              {!workOrderNewClientEnabled ? (
-                                <select
-                                  required
-                                  value={workOrderForm.client_id}
-                                    onChange={(e) => {
-                                      const selectedClient = clients.find((c) => c.id === e.target.value);
-                                      setWorkOrderForm({
-                                        ...workOrderForm,
-                                        client_id: e.target.value,
-                                        // Auto-fill mileage from client's default if available and mileage is empty
-                                        mileage: workOrderForm.mileage === "" && selectedClient?.default_mileage != null
-                                          ? String(selectedClient.default_mileage)
-                                          : workOrderForm.mileage,
-                                        gate_combo: selectedClient?.gate_combo ?? workOrderForm.gate_combo,
-                                      });
-                                    }}
-                                >
-                                  <option value="">Select client</option>
-                                  {clients.map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                      {c.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                  <div
-                                    className="muted"
-                                    style={{ fontSize: "0.9rem", padding: "4px 0" }}
-                                  >
-                                  Filling out new client form below...
-                                </div>
-                              )}
-                            </label>
-                            <label>
-                                Type
-                                <select
-                                  value={workOrderForm.pickup_delivery_type}
-                                  onChange={(e) =>
-                                    setWorkOrderForm({
-                                      ...workOrderForm,
-                                      pickup_delivery_type: e.target.value,
-                                    })
-                                  }
-                                >
-                                  <option value="delivery">delivery</option>
-                                  <option value="pickup">pickup</option>
-                                </select>
-                              </label>
-                              {workOrderForm.pickup_delivery_type === "delivery" && (
-                                <>
-                                  <label>
-                                    Delivery vehicle
-                              <select
-                                value={workOrderForm.delivery_size_choice}
-                                      onChange={(e) =>
-                                        setWorkOrderForm({
-                                          ...workOrderForm,
-                                          delivery_size_choice: e.target.value,
-                                        })
-                                      }
-                              >
-                                      <option value="f250">Ford F-250</option>
-                                      <option value="f250_half">Ford F-250 1/2</option>
-                                      <option value="toyota">Toyota</option>
-                                <option value="other">Other</option>
-                              </select>
-                            </label>
-                            {workOrderForm.delivery_size_choice === "other" && (
-                                    <>
-                              <label>
-                                        Delivery vehicle (other)
-                                        <input
-                                          value={workOrderForm.delivery_size_other}
-                                          onChange={(e) =>
-                                            setWorkOrderForm({
-                                              ...workOrderForm,
-                                              delivery_size_other: e.target.value,
-                                            })
-                                          }
-                                        />
-                                      </label>
-                                      <label>
-                                        Cord amount
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                          value={workOrderForm.delivery_size_other_cords}
-                                  onChange={(e) =>
-                                    setWorkOrderForm({
-                                      ...workOrderForm,
-                                              delivery_size_other_cords: e.target.value,
-                                    })
-                                  }
-                                />
-                              </label>
-                                    </>
-                                  )}
-                            {workOrderForm.delivery_size_choice === "f250_half" && (
-                              <div
-                                className="card"
-                                style={{
-                                  gridColumn: "1 / -1",
-                                  background: "#fff9f0",
-                                  border: "1px dashed #e67f1e",
-                                  padding: "0.75rem",
-                                }}
-                              >
-                                <strong style={{ color: "#e67f1e" }}>Half Load Pairing</strong>
-                                <p className="muted" style={{ fontSize: "0.85rem", margin: "0.5rem 0" }}>
-                                  Half F-250 orders should be scheduled together. Select another half order to pair with,
-                                  or leave empty to pair later. Mileage will be entered once for the combined trip.
-                                </p>
-                                <label>
-                                  Pair with existing order
-                                  <select
-                                    value={workOrderForm.paired_order_id}
-                                    onChange={(e) =>
-                                      setWorkOrderForm({
-                                        ...workOrderForm,
-                                        paired_order_id: e.target.value,
-                                      })
-                                    }
-                                  >
-                                    <option value="">— No pairing (schedule later) —</option>
-                                    {availableHalfOrders
-                                      .filter((ho) => ho.client_id !== workOrderForm.client_id)
-                                      .map((ho) => (
-                                        <option key={ho.id} value={ho.id}>
-                                          {ho.client_name} — {ho.physical_address_city || "Unknown city"}{" "}
-                                          ({ho.status})
-                                        </option>
-                                      ))}
-                                  </select>
-                                </label>
-                                {availableHalfOrders.filter((ho) => ho.client_id !== workOrderForm.client_id).length === 0 && (
-                                  <p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.5rem" }}>
-                                    No other unpaired half orders available. This order can be paired later.
-                                  </p>
-                                )}
-                              </div>
-                            )}
-                                </>
-                              )}
-                              {workOrderForm.status === "picked_up" && (
-                                <div className="span-2" style={{ display: "grid", gap: 12 }}>
-                                  <label>
-                                    Pickup quantity (method)
-                                    <select
-                                      value={workOrderForm.pickup_quantity_mode}
-                                      onChange={(e) =>
-                                        setWorkOrderForm({
-                                          ...workOrderForm,
-                                          pickup_quantity_mode: e.target.value,
-                                        })
-                                      }
-                                    >
-                                      <option value="cords">Cords</option>
-                                      <option value="dimensions">Dimensions</option>
-                                    </select>
-                                  </label>
-                                  {workOrderForm.pickup_quantity_mode === "cords" ? (
-                                    <label>
-                                      Pickup quantity (cords)
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={workOrderForm.pickup_quantity_cords}
-                                        onChange={(e) =>
-                                          setWorkOrderForm({
-                                            ...workOrderForm,
-                                            pickup_quantity_cords: e.target.value,
-                                          })
-                                        }
-                                      />
-                                    </label>
-                                  ) : (
-                                    <div className="form-grid">
-                                      <label>
-                                        Length
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          step="0.01"
-                                          value={workOrderForm.pickup_length}
-                                          onChange={(e) =>
-                                            setWorkOrderForm({
-                                              ...workOrderForm,
-                                              pickup_length: e.target.value,
-                                            })
-                                          }
-                                        />
-                                      </label>
-                                      <label>
-                                        Width
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          step="0.01"
-                                          value={workOrderForm.pickup_width}
-                                          onChange={(e) =>
-                                            setWorkOrderForm({
-                                              ...workOrderForm,
-                                              pickup_width: e.target.value,
-                                            })
-                                          }
-                                        />
-                                      </label>
-                                      <label>
-                                        Height
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          step="0.01"
-                                          value={workOrderForm.pickup_height}
-                                          onChange={(e) =>
-                                            setWorkOrderForm({
-                                              ...workOrderForm,
-                                              pickup_height: e.target.value,
-                                            })
-                                          }
-                                        />
-                                      </label>
-                                      <label>
-                                        Units
-                                        <select
-                                          value={workOrderForm.pickup_units}
-                                          onChange={(e) =>
-                                            setWorkOrderForm({
-                                              ...workOrderForm,
-                                              pickup_units: e.target.value,
-                                            })
-                                          }
-                                        >
-                                          <option value="ft">Feet</option>
-                                          <option value="in">Inches</option>
-                                        </select>
-                                      </label>
-                                    </div>
-                                  )}
-                                </div>
-                            )}
-                            <label className="span-2">
-                              Assign driver(s)
-                              <select
-                                multiple
-                                value={workOrderForm.assignees}
-                                onChange={(e) => {
-                                    const selected = Array.from(e.target.selectedOptions).map(
-                                      (o) => o.value,
-                                    );
-                                  setWorkOrderForm({ ...workOrderForm, assignees: selected });
-                                }}
-                              >
-                                {users
-                                  .filter((u) => !!u.driver_license_status)
-                                  .map((u) => (
-                                    <option key={u.id} value={u.name}>
-                                        {u.name} {u.vehicle ? `• ${u.vehicle}` : ""}{" "}
-                                        {u.availability_notes ? `• ${u.availability_notes}` : ""}
-                                    </option>
-                                  ))}
-                              </select>
-                            </label>
-                            <div className="span-2" style={{ display: "grid", gap: 8 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <span className="muted">Workers (up to 4)</span>
-                                <button
-                                  type="button"
-                                  className="ghost"
-                                  disabled={workOrderForm.helpers.length >= 4}
-                                  onClick={() => {
-                                    if (workOrderForm.helpers.length >= 4) return;
-                                    setWorkOrderForm({
-                                      ...workOrderForm,
-                                      helpers: [...workOrderForm.helpers, ""],
-                                    });
-                                  }}
-                                >
-                                  + Add Worker
-                                </button>
-                              </div>
-                              {workOrderForm.helpers.map((helper, idx) => (
-                                <div key={`helper-${idx}`} style={{ display: "flex", gap: 8 }}>
-                                  <input
-                                    type="text"
-                                    placeholder="Worker first and last name"
-                                    value={helper}
-                                    onChange={(e) => {
-                                      const next = [...workOrderForm.helpers];
-                                      next[idx] = e.target.value;
-                                      setWorkOrderForm({ ...workOrderForm, helpers: next });
-                                    }}
-                                  />
-                                  <button
-                                    type="button"
-                                    className="ghost"
-                                    onClick={() => {
-                                      const next = [...workOrderForm.helpers];
-                                      next.splice(idx, 1);
-                                      setWorkOrderForm({ ...workOrderForm, helpers: next });
-                                    }}
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                            {/* New Client Checkbox removed in favor of button toggle, but state still used for conditional rendering */}
-                            {workOrderNewClientEnabled && (
-                              <>
-                                <label>
-                                  First name
-                                  <input
-                                    required
-                                    value={workOrderNewClient.first_name}
-                                    onChange={(e) =>
-                                      setWorkOrderNewClient((prev) => ({
-                                        ...prev,
-                                        first_name: e.target.value,
-                                      }))
-                                    }
-                                  />
-                                </label>
-                                <label>
-                                  Last name
-                                  <input
-                                    required
-                                    value={workOrderNewClient.last_name}
-                                    onChange={(e) =>
-                                      setWorkOrderNewClient((prev) => ({
-                                        ...prev,
-                                        last_name: e.target.value,
-                                      }))
-                                    }
-                                  />
-                                </label>
-                                <label>
-                                  Onboarding date
-                                  <input
-                                    type="date"
-                                    required
-                                    value={workOrderNewClient.date_of_onboarding}
-                                    onChange={(e) =>
-                                      setWorkOrderNewClient({
-                                        ...workOrderNewClient,
-                                        date_of_onboarding: e.target.value,
-                                      })
-                                    }
-                                  />
-                                </label>
-                                <label>
-                                  Address line 1
-                                  <input
-                                    required
-                                    value={workOrderNewClient.physical_address_line1}
-                                    onChange={(e) =>
-                                        setWorkOrderNewClient({
-                                          ...workOrderNewClient,
-                                          physical_address_line1: e.target.value,
-                                        })
-                                    }
-                                  />
-                                </label>
-                                <label>
-                                  City
-                                  <input
-                                    required
-                                    value={workOrderNewClient.physical_address_city}
-                                    onChange={(e) =>
-                                        setWorkOrderNewClient({
-                                          ...workOrderNewClient,
-                                          physical_address_city: e.target.value,
-                                        })
-                                      }
-                                      onBlur={(e) =>
-                                        setWorkOrderNewClient((prev) => ({
-                                          ...prev,
-                                          physical_address_city: initCapCity(e.target.value),
-                                        }))
-                                    }
-                                  />
-                                </label>
-                                <label>
-                                  State
-                                  <input
-                                    required
-                                    value={workOrderNewClient.physical_address_state}
-                                    onChange={(e) =>
-                                        setWorkOrderNewClient({
-                                          ...workOrderNewClient,
-                                          physical_address_state: e.target.value,
-                                        })
-                                      }
-                                      onBlur={(e) =>
-                                        setWorkOrderNewClient((prev) => ({
-                                          ...prev,
-                                          physical_address_state: normalizeState(e.target.value),
-                                        }))
-                                    }
-                                  />
-                                </label>
-                                <label>
-                                  Postal code *
-                                  <input
-                                    required
-                                    value={workOrderNewClient.physical_address_postal_code}
-                                    onChange={(e) =>
-                                      setWorkOrderNewClient({
-                                        ...workOrderNewClient,
-                                        physical_address_postal_code: e.target.value,
-                                      })
-                                    }
-                                  />
-                                </label>
-                                <label>
-                                  How Did You Hear *
-                                  <input
-                                    required
-                                    value={workOrderNewClient.how_did_they_hear_about_us}
-                                    onChange={(e) =>
-                                      setWorkOrderNewClient({
-                                        ...workOrderNewClient,
-                                        how_did_they_hear_about_us: e.target.value,
-                                      })
-                                    }
-                                  />
-                                </label>
-                                <label>
-                                  Wood Size *
-                                  <select
-                                    required
-                                    value={workOrderNewClient.wood_size_label}
-                                    onChange={(e) =>
-                                      setWorkOrderNewClient({
-                                        ...workOrderNewClient,
-                                        wood_size_label: e.target.value,
-                                      })
-                                    }
-                                  >
-                                    <option value="">Select size</option>
-                                    <option value="12">12 in</option>
-                                    <option value="14">14 in</option>
-                                    <option value="16">16 in</option>
-                                    <option value="other">Other</option>
-                                  </select>
-                                </label>
-                                {workOrderNewClient.wood_size_label === "other" && (
-                                  <label>
-                                    Wood Size (Other, Inches)
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      required
-                                      value={workOrderNewClient.wood_size_other}
-                                      onChange={(e) =>
-                                        setWorkOrderNewClient({
-                                          ...workOrderNewClient,
-                                          wood_size_other: e.target.value,
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                )}
-                                <label>
-                                  Telephone
-                                  <input
-                                    value={workOrderNewClient.telephone}
-                                    onChange={(e) =>
-                                        setWorkOrderNewClient({
-                                          ...workOrderNewClient,
-                                          telephone: e.target.value,
-                                        })
-                                      }
-                                      onBlur={(e) =>
-                                        setWorkOrderNewClient((prev) => ({
-                                          ...prev,
-                                          telephone: normalizePhone(e.target.value),
-                                        }))
-                                    }
-                                  />
-                                </label>
-                                <label>
-                                  Email
-                                  <input
-                                    type="email"
-                                    value={workOrderNewClient.email}
-                                    onChange={(e) =>
-                                        setWorkOrderNewClient({
-                                          ...workOrderNewClient,
-                                          email: e.target.value,
-                                        })
-                                    }
-                                  />
-                                </label>
-                              </>
-                            )}
-                            </div>
-
-                            <hr
-                              style={{
-                                borderTop: "1px solid #e6d8c8",
-                                borderBottom: 0,
-                                margin: "20px 0",
-                                opacity: 0.6,
-                              }}
-                            />
-
-                            <div className="form-grid">
-                            <label>
-                              Scheduled date/time
-                              <input
-                                type="datetime-local"
-                                value={workOrderForm.scheduled_date}
-                                  onChange={(e) =>
-                                    setWorkOrderForm({
-                                      ...workOrderForm,
-                                      scheduled_date: e.target.value,
-                                    })
-                                  }
-                                disabled={session?.role === "staff"}
-                              />
-                            </label>
-                            <label>
-                              Status
-                              <select
-                                value={workOrderForm.status}
-                                onChange={(e) => {
-                                  const newStatus = e.target.value;
-                                    setWorkOrderForm({ ...workOrderForm, status: newStatus });
-                                }}
-                              >
-                                <option value="received">received</option>
-                                <option value="scheduled">scheduled</option>
-                                <option value="rescheduled">rescheduled</option>
-                                  <option value="picked_up">picked_up</option>
-                                <option value="completed">completed</option>
-                                <option value="cancelled">canceled</option>
-                              </select>
-                            </label>
-                            <label>
-                              Mileage (required if status = completed)
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.1"
-                                value={workOrderForm.mileage}
-                                  onChange={(e) =>
-                                    setWorkOrderForm({ ...workOrderForm, mileage: e.target.value })
-                                  }
-                              />
-                            </label>
-                            <label>
-                              Gate combo
-                              <input
-                                value={workOrderForm.gate_combo}
-                                  onChange={(e) =>
-                                    setWorkOrderForm({
-                                      ...workOrderForm,
-                                      gate_combo: e.target.value,
-                                    })
-                                  }
-                              />
-                            </label>
-                            <label className="checkbox">
-                              <input
-                                type="checkbox"
-                                checked={workOrderForm.mailingSameAsPhysical}
-                                onChange={(e) =>
-                                    setWorkOrderForm({
-                                      ...workOrderForm,
-                                      mailingSameAsPhysical: e.target.checked,
-                                    })
-                                }
-                              />
-                              Mailing same as physical
-                            </label>
-                            <label>
-                              Notes
-                              <textarea
-                                rows={2}
-                                value={workOrderForm.notes}
-                                  onChange={(e) =>
-                                    setWorkOrderForm({ ...workOrderForm, notes: e.target.value })
-                                  }
-                              />
-                            </label>
-                            <div className="span-2">
-                              <label className="checkbox">
-                                <input
-                                  type="checkbox"
-                                  checked={workOrderForm.other_heat_source_gas}
-                                  onChange={(e) =>
-                                      setWorkOrderForm({
-                                        ...workOrderForm,
-                                        other_heat_source_gas: e.target.checked,
-                                      })
-                                  }
-                                />
-                                Other heat source: Gas
-                              </label>
-                              <label className="checkbox">
-                                <input
-                                  type="checkbox"
-                                  checked={workOrderForm.other_heat_source_electric}
-                                  onChange={(e) =>
-                                    setWorkOrderForm({
-                                      ...workOrderForm,
-                                      other_heat_source_electric: e.target.checked,
-                                    })
-                                  }
-                                />
-                                Other heat source: Electric
-                              </label>
-                              <input
-                                placeholder="Other heat source detail"
-                                value={workOrderForm.other_heat_source_other}
-                                onChange={(e) =>
-                                    setWorkOrderForm({
-                                      ...workOrderForm,
-                                      other_heat_source_other: e.target.value,
-                                    })
-                                }
-                              />
-                            </div>
-                            <div className="actions span-2">
-                              <button
-                                className="ping"
-                                type="submit"
-                                disabled={
-                                  busy ||
-                                  !canCreateWorkOrders ||
-                                  (!workOrderNewClientEnabled && !workOrderForm.client_id) ||
-                                  (workOrderForm.status === "scheduled" &&
-                                    // Required fields check for scheduled status
-                                    ((!workOrderNewClientEnabled && !workOrderForm.client_id) || // Existing client
-                                      (workOrderNewClientEnabled &&
-                                        (!workOrderNewClient.first_name ||
-                                      !workOrderNewClient.last_name ||
-                                      !workOrderNewClient.telephone ||
-                                      !workOrderNewClient.physical_address_line1 ||
-                                      !workOrderNewClient.physical_address_city ||
-                                          !workOrderNewClient.physical_address_state)) || // New Client fields
-                                      !workOrderForm.scheduled_date)) || // Date scheduled
-                                  (workOrderForm.pickup_delivery_type === "delivery" &&
-                                    workOrderForm.delivery_size_choice === "other" &&
-                                    (!workOrderForm.delivery_size_other ||
-                                      !workOrderForm.delivery_size_other_cords)) ||
-                                  (workOrderForm.status === "picked_up" &&
-                                    ((workOrderForm.pickup_quantity_mode === "cords" &&
-                                      !workOrderForm.pickup_quantity_cords) ||
-                                      (workOrderForm.pickup_quantity_mode === "dimensions" &&
-                                        (!workOrderForm.pickup_length ||
-                                          !workOrderForm.pickup_width ||
-                                          !workOrderForm.pickup_height))))
-                                }
-                              >
-                                Save work order
-                              </button>
-                              <button
-                                className="ghost"
-                                type="button"
-                                onClick={() => {
-                                  setShowWorkOrderForm(false);
-                                  setWorkOrderError(null);
-                                }}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                            </div>
-                          </form>
-                        </>
-                      ) : (
-                        <p className="muted">Press + to schedule a work order.</p>
-                      )}
-                    </div>
-
-                    <div className="list-card">
-                      <div className="list-head">
-                        <h3>Work orders ({workOrders.length})</h3>
-                        <button className="ghost" onClick={loadWorkOrders} disabled={busy}>
-                          Refresh
-                        </button>
-                      </div>
-                      {(() => {
-                        const visibleOrders =
-                          session?.role === "volunteer"
-                            ? workOrders.filter((wo) => {
-                              const arr = (() => {
-                                try {
-                                  return JSON.parse(wo.assignees_json ?? "[]");
-                                } catch {
-                                  return [];
-                                }
-                              })();
-                              return session?.username
-                                ? Array.isArray(arr) && arr.includes(session.username)
-                                : false;
-                            })
-                            : workOrders;
-                        const showPII = canViewPII;
-                        return (
-                          <div className="table">
-                            <div className="table-head">
-                              {session?.role === "volunteer" ? (
-                                <>
-                                  <span>Town</span>
-                                  <span>Status</span>
-                                  <span>Scheduled</span>
-                                  <span>Mileage</span>
-                                </>
-                              ) : isDriver ? (
-                                <>
-                                  <span>Client</span>
-                                  <span>Status</span>
-                                  <span>Scheduled</span>
-                                  <span>Contact</span>
-                                </>
-                              ) : (
-                                <>
-                                  <span>Client</span>
-                                  <span>Status</span>
-                                  <span>Scheduled</span>
-                                  <span>Notes</span>
-                                </>
-                              )}
-                            </div>
-                            {visibleOrders.map((wo) => (
-                              <div
-                                className="table-row"
-                                key={wo.id}
-                                onDoubleClick={() => {
-                                  setSelectedWorkOrder(wo);
-                                  setWorkOrderDetailOpen(true);
-                                }}
-                                style={{ cursor: "pointer" }}
-                                title="Double-click to view details"
-                              >
-                                {session?.role === "volunteer" ? (
-                                  <>
-                                    <div>
-                                      <strong>
-                                        {wo.town ?? (wo as any)?.physical_address_city ?? "—"}
-                                      </strong>
-                                    </div>
-                                    <div>
-                                      <span className="pill">{wo.status}</span>
-                                    </div>
-                                    <div>{wo.scheduled_date ?? "—"}</div>
-                                    <div className="muted">
-                                      {wo.mileage != null ? `${wo.mileage} mi` : "—"}
-                                    </div>
-                                  </>
-                                ) : isDriver ? (
-                                  <>
-                                    <div>
-                                      <strong>{wo.client_name}</strong>
-                                      <div className="muted">
-                                        {wo.physical_address_line1
-                                          ? `${wo.physical_address_line1}, ${wo.physical_address_city ?? ""}, ${wo.physical_address_state ?? ""} ${wo.physical_address_postal_code ?? ""}`
-                                          : "—"}
-                                      </div>
-                                      {wo.pickup_delivery_type && (
-                                        <div className="muted">
-                                          Type: {wo.pickup_delivery_type}
-                                        </div>
-                                      )}
-                                      {wo.delivery_size_label && (
-                                        <div className="muted">
-                                          Delivery: {wo.delivery_size_label}
-                                        </div>
-                                      )}
-                                      {wo.pickup_quantity_cords != null && (
-                                        <div className="muted">
-                                          Pickup: {wo.pickup_quantity_cords.toFixed(2)} cords
-                                          {wo.pickup_length != null &&
-                                          wo.pickup_width != null &&
-                                          wo.pickup_height != null
-                                            ? ` (${wo.pickup_length}x${wo.pickup_width}x${wo.pickup_height} ${wo.pickup_units ?? ""})`
-                                            : ""}
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div>
-                                      <span className="pill">{wo.status}</span>
-                                    </div>
-                                    <div>{wo.scheduled_date ?? "—"}</div>
-                                    <div className="muted">{wo.telephone ?? "—"}</div>
-                                  </>
-                                ) : (
-                                  <>
-                                    <div>
-                                      <strong>{wo.client_name}</strong>
-
-                                      {wo.created_by_display && (
-                                        <div className="muted">
-                                          Created by: {wo.created_by_display}
-                                        </div>
-                                      )}
-                                      {wo.pickup_delivery_type && (
-                                        <div className="muted">
-                                          Type: {wo.pickup_delivery_type}
-                                        </div>
-                                      )}
-                                      {wo.delivery_size_label && (
-                                        <div className="muted">
-                                          Delivery: {wo.delivery_size_label}
-                                        </div>
-                                      )}
-                                      {wo.pickup_quantity_cords != null && (
-                                        <div className="muted">
-                                          Pickup: {wo.pickup_quantity_cords.toFixed(2)} cords
-                                          {wo.pickup_length != null &&
-                                          wo.pickup_width != null &&
-                                          wo.pickup_height != null
-                                            ? ` (${wo.pickup_length}x${wo.pickup_width}x${wo.pickup_height} ${wo.pickup_units ?? ""})`
-                                            : ""}
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div>
-                                      <span className="pill">{wo.status}</span>
-                                    </div>
-                                    <div>{wo.scheduled_date ?? "—"}</div>
-                                    <div className="muted">
-                                      {showPII ? (wo.notes ?? "—") : "PII hidden"}
-                                    </div>
-                                  </>
-                                )}
-                                {(isDriver ||
-                                  session?.role === "lead" ||
-                                  session?.role === "admin") && (
-                                  <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
-                                    <div
-                                      style={{
-                                        display: "flex",
-                                        gap: 8,
-                                        flexWrap: "wrap",
-                                        alignItems: "center",
-                                      }}
-                                    >
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        step="0.1"
-                                        value={progressEdits[wo.id]?.mileage ?? ""}
-                                        onChange={(e) =>
-                                          setProgressEdits({
-                                            ...progressEdits,
-                                            [wo.id]: {
-                                              status: progressEdits[wo.id]?.status ?? wo.status,
-                                              mileage: e.target.value,
-                                            },
-                                          })
-                                        }
-                                        placeholder="Mileage"
-                                        style={{ width: 100 }}
-                                      />
-                                      {(session?.role === "lead" || session?.role === "admin") && (
-                                        <select
-                                          value={progressEdits[wo.id]?.status ?? wo.status}
-                                          onChange={(e) =>
-                                            setProgressEdits({
-                                              ...progressEdits,
-                                              [wo.id]: {
-                                                status: e.target.value,
-                                                mileage: progressEdits[wo.id]?.mileage ?? "",
-                                              },
-                                            })
-                                          }
-                                        >
-                                          <option value="draft">draft</option>
-                                          <option value="scheduled">scheduled</option>
-                                          <option value="in_progress">in_progress</option>
-                                          <option value="completed">completed</option>
-                                          <option value="cancelled">cancelled</option>
-                                        </select>
-                                      )}
-                                      <button
-                                        className="ghost"
-                                        type="button"
-                                        disabled={busy}
-                                        onClick={async () => {
-                                          const edit = progressEdits[wo.id] ?? {
-                                            status: wo.status,
-                                            mileage: "",
-                                          };
-                                          if (
-                                            (session?.role === "lead" ||
-                                              session?.role === "admin") &&
-                                            edit.status === "completed" &&
-                                            edit.mileage === ""
-                                          ) {
-                                            setWorkOrderError(
-                                              "Mileage is required to mark completed.",
-                                            );
-                                            return;
-                                          }
-                                          setBusy(true);
-                                          try {
-                                            await invokeTauri("update_work_order_status", {
-                                              input: {
-                                                work_order_id: wo.id,
-                                                status:
-                                                  session?.role === "lead" ||
-                                                  session?.role === "admin"
-                                                    ? edit.status
-                                                    : "in_progress",
-                                                mileage:
-                                                  edit.mileage === "" ? null : Number(edit.mileage),
-                                                is_driver: isDriver,
-                                              },
-                                              role: session?.role ?? null,
-                                              actor: session?.username ?? null,
-                                            });
-                                            await loadWorkOrders();
-                                          } finally {
-                                            setBusy(false);
-                                          }
-                                        }}
-                                      >
-                                        Save status/mileage
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                            {!visibleOrders.length && (
-                              <div className="table-row">
-                                {session?.role === "volunteer"
-                                  ? "No assigned work orders."
-                                  : "No work orders yet."}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                )}
-
-                {/* Work Order Detail Modal */}
-                {workOrderDetailOpen && selectedWorkOrder && (
-                  <div
-                    style={{
-                      position: "fixed",
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      backgroundColor: "rgba(0, 0, 0, 0.5)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      zIndex: 1000,
-                    }}
-                    onClick={() => {
-                      setWorkOrderDetailOpen(false);
-                      setWorkOrderEditMode(false);
-                    }}
-                  >
-                    <div
-                      className="card"
-                      style={{
-                        minWidth: "500px",
-                        maxWidth: "700px",
-                        maxHeight: "80vh",
-                        overflow: "auto",
-                        backgroundColor: "white",
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="list-head" style={{ marginBottom: "1rem" }}>
-                        <h3>Work Order Details</h3>
-                        <button
-                          className="ghost"
-                          type="button"
-                          onClick={() => {
-                            setWorkOrderDetailOpen(false);
-                            setWorkOrderEditMode(false);
-                          }}
-                          style={{ padding: "0.25rem 0.5rem" }}
-                        >
-                          ×
-                        </button>
-                      </div>
-
-                      <div className="stack" style={{ gap: "0.75rem" }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                          }}
-                        >
-                          <div>
-                            <strong style={{ fontSize: "1.1rem" }}>
-                              {selectedWorkOrder.client_name}
-                            </strong>
-                            <div className="muted" style={{ fontSize: "0.85rem" }}>
-                              Order ID: {selectedWorkOrder.id.slice(0, 8).toUpperCase()}
-                            </div>
-                          </div>
-                          <span
-                            className="pill"
-                            style={{
-                              background:
-                                selectedWorkOrder.status === "completed"
-                                  ? "#c8e6c9"
-                                  : selectedWorkOrder.status === "cancelled"
-                                    ? "#ffcdd2"
-                                    : selectedWorkOrder.status === "scheduled"
-                                      ? "#bbdefb"
-                                      : "#fff3e0",
-                            }}
-                          >
-                            {selectedWorkOrder.status}
-                          </span>
-                        </div>
-
-                        <div
-                          style={{
-                            display: "grid",
-                            gridTemplateColumns: "1fr 1fr",
-                            gap: "0.75rem",
-                          }}
-                        >
-                          <div>
-                            <strong>Type:</strong>{" "}
-                            {selectedWorkOrder.pickup_delivery_type ?? "delivery"}
-                          </div>
-                          <div>
-                            <strong>Scheduled:</strong>{" "}
-                            {selectedWorkOrder.scheduled_date
-                              ? new Date(selectedWorkOrder.scheduled_date).toLocaleString()
-                              : "Not scheduled"}
-                          </div>
-                          {selectedWorkOrder.delivery_size_label && (
-                            <div>
-                              <strong>Delivery Size:</strong>{" "}
-                              {selectedWorkOrder.delivery_size_label}
-                              {selectedWorkOrder.delivery_size_cords != null &&
-                                ` (${selectedWorkOrder.delivery_size_cords} cords)`}
-                            </div>
-                          )}
-                          {selectedWorkOrder.pickup_quantity_cords != null && (
-                            <div>
-                              <strong>Pickup Quantity:</strong>{" "}
-                              {selectedWorkOrder.pickup_quantity_cords.toFixed(2)} cords
-                            </div>
-                          )}
-                          {selectedWorkOrder.mileage != null && (
-                            <div>
-                              <strong>Mileage:</strong> {selectedWorkOrder.mileage} miles
-                            </div>
-                          )}
-                          {selectedWorkOrder.created_at && (
-                            <div>
-                              <strong>Created:</strong>{" "}
-                              {new Date(selectedWorkOrder.created_at).toLocaleString()}
-                            </div>
-                          )}
-                        </div>
-
-                        {(session?.role === "admin" ||
-                          session?.role === "staff" ||
-                          session?.role === "lead") && (
-                          <>
-                            <hr style={{ border: "none", borderTop: "1px solid #eee" }} />
-                            <div>
-                              <strong>Address:</strong>
-                              <div style={{ marginTop: "0.25rem" }}>
-                                {selectedWorkOrder.physical_address_line1 ?? "—"}
-                                <br />
-                                {selectedWorkOrder.physical_address_city ?? ""},{" "}
-                                {selectedWorkOrder.physical_address_state ?? ""}{" "}
-                                {selectedWorkOrder.physical_address_postal_code ?? ""}
-                              </div>
-                            </div>
-                            {selectedWorkOrder.telephone && (
-                              <div>
-                                <strong>Phone:</strong> {selectedWorkOrder.telephone}
-                              </div>
-                            )}
-                            {selectedWorkOrder.gate_combo && (
-                              <div>
-                                <strong>Gate Combo:</strong> {selectedWorkOrder.gate_combo}
-                              </div>
-                            )}
-                            {selectedWorkOrder.wood_size_label && (
-                              <div>
-                                <strong>Wood Size:</strong>{" "}
-                                {selectedWorkOrder.wood_size_label === "other"
-                                  ? selectedWorkOrder.wood_size_other
-                                  : selectedWorkOrder.wood_size_label}{" "}
-                                in
-                              </div>
-                            )}
-                            {selectedWorkOrder.notes && (
-                              <div>
-                                <strong>Notes:</strong>
-                                <div
-                                  style={{
-                                    marginTop: "0.25rem",
-                                    whiteSpace: "pre-wrap",
-                                    background: "#f9f9f9",
-                                    padding: "0.5rem",
-                                    borderRadius: "4px",
-                                  }}
-                                >
-                                  {selectedWorkOrder.notes}
-                                </div>
-                              </div>
-                            )}
-                            {selectedWorkOrder.assignees_json && (
-                              <div>
-                                <strong>Assigned:</strong>{" "}
-                                {(() => {
-                                  try {
-                                    const arr = JSON.parse(selectedWorkOrder.assignees_json);
-                                    return Array.isArray(arr) ? arr.join(", ") : "—";
-                                  } catch {
-                                    return "—";
-                                  }
-                                })()}
-                              </div>
-                            )}
-                            {selectedWorkOrder.created_by_display && (
-                              <div>
-                                <strong>Created by:</strong> {selectedWorkOrder.created_by_display}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-
-                      {/* Edit Form for Admin/Staff */}
-                      {workOrderEditMode && (session?.role === "admin" || session?.role === "staff" || session?.role === "lead") && (
-                        <div style={{ marginTop: "1rem", borderTop: "1px solid #eee", paddingTop: "1rem" }}>
-                          <h4 style={{ marginBottom: "0.75rem" }}>Edit Work Order</h4>
-                          <div className="form-grid" style={{ gap: "0.75rem" }}>
-                            <label>
-                              Scheduled Date/Time
-                              <input
-                                type="datetime-local"
-                                value={workOrderEditForm.scheduled_date}
-                                onChange={(e) =>
-                                  setWorkOrderEditForm({ ...workOrderEditForm, scheduled_date: e.target.value })
-                                }
-                              />
-                            </label>
-                            <label>
-                              Status
-                              <select
-                                value={workOrderEditForm.status}
-                                onChange={(e) =>
-                                  setWorkOrderEditForm({ ...workOrderEditForm, status: e.target.value })
-                                }
-                              >
-                                <option value="received">received</option>
-                                <option value="pending">pending</option>
-                                <option value="scheduled">scheduled</option>
-                                <option value="in_progress">in_progress</option>
-                                <option value="completed">completed</option>
-                                <option value="cancelled">cancelled</option>
-                              </select>
-                            </label>
-                            <label className="span-2">
-                              Assign Drivers
-                              <select
-                                multiple
-                                value={workOrderEditForm.assignees}
-                                onChange={(e) => {
-                                  const selected = Array.from(e.target.selectedOptions, (opt) => opt.value);
-                                  setWorkOrderEditForm({ ...workOrderEditForm, assignees: selected });
-                                }}
-                                style={{ minHeight: "80px" }}
-                              >
-                                {users
-                                  .filter((u) => u.is_driver)
-                                  .map((u) => (
-                                    <option key={u.id} value={u.name}>
-                                      {u.name}
-                                    </option>
-                                  ))}
-                              </select>
-                              <span className="muted" style={{ fontSize: "0.8rem" }}>
-                                Hold Ctrl/Cmd to select multiple
-                              </span>
-                            </label>
-                            <label>
-                              Mileage
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.1"
-                                value={workOrderEditForm.mileage}
-                                onChange={(e) =>
-                                  setWorkOrderEditForm({ ...workOrderEditForm, mileage: e.target.value })
-                                }
-                              />
-                            </label>
-                            <label className="span-2">
-                              Notes
-                              <textarea
-                                value={workOrderEditForm.notes}
-                                onChange={(e) =>
-                                  setWorkOrderEditForm({ ...workOrderEditForm, notes: e.target.value })
-                                }
-                                rows={3}
-                              />
-                            </label>
-                          </div>
-                        </div>
-                      )}
-
-                      <div
-                        style={{
-                          marginTop: "1.5rem",
-                          display: "flex",
-                          gap: "0.5rem",
-                          justifyContent: "flex-end",
-                        }}
-                      >
-                        {(session?.role === "admin" || session?.role === "staff" || session?.role === "lead") && !workOrderEditMode && (
-                          <button
-                            className="ghost"
-                            type="button"
-                            onClick={() => {
-                              // Populate edit form with current values
-                              const assignees: string[] = (() => {
-                                try {
-                                  const arr = JSON.parse(selectedWorkOrder.assignees_json || "[]");
-                                  return Array.isArray(arr) ? arr : [];
-                                } catch {
-                                  return [];
-                                }
-                              })();
-                              setWorkOrderEditForm({
-                                scheduled_date: selectedWorkOrder.scheduled_date
-                                  ? selectedWorkOrder.scheduled_date.slice(0, 16)
-                                  : "",
-                                status: selectedWorkOrder.status || "received",
-                                assignees,
-                                mileage: selectedWorkOrder.mileage != null ? String(selectedWorkOrder.mileage) : "",
-                                notes: selectedWorkOrder.notes || "",
-                              });
-                              setWorkOrderEditMode(true);
-                            }}
-                          >
-                            Edit
-                          </button>
-                        )}
-                        {workOrderEditMode && (
-                          <>
-                            <button
-                              className="ghost"
-                              type="button"
-                              onClick={() => setWorkOrderEditMode(false)}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={async () => {
-                                setBusy(true);
-                                try {
-                                  // Update assignees
-                                  await invokeTauri("update_work_order_assignees", {
-                                    input: {
-                                      work_order_id: selectedWorkOrder.id,
-                                      assignees_json: JSON.stringify(workOrderEditForm.assignees),
-                                    },
-                                  });
-                                  // Update status and mileage
-                                  await invokeTauri("update_work_order_status", {
-                                    input: {
-                                      work_order_id: selectedWorkOrder.id,
-                                      status: workOrderEditForm.status,
-                                      mileage: workOrderEditForm.mileage ? Number(workOrderEditForm.mileage) : null,
-                                      is_driver: session?.isDriver ?? false,
-                                    },
-                                    role: session?.role ?? null,
-                                    actor: session?.name ?? session?.username ?? null,
-                                  });
-                                  await loadWorkOrders();
-                                  await loadDeliveries();
-                                  setWorkOrderEditMode(false);
-                                  setWorkOrderDetailOpen(false);
-                                  setSelectedWorkOrder(null);
-                                } catch (e: any) {
-                                  alert(typeof e === "string" ? e : JSON.stringify(e));
-                                } finally {
-                                  setBusy(false);
-                                }
-                              }}
-                            >
-                              {busy ? "Saving..." : "Save Changes"}
-                            </button>
-                          </>
-                        )}
-                        {!workOrderEditMode && (
-                          <button
-                            className="ghost"
-                            type="button"
-                            onClick={() => setWorkOrderDetailOpen(false)}
-                          >
-                            Close
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === "Metrics" && (
-                  <div className="stack">
-                    <div className="card muted">
-                      <h3>Operational metrics</h3>
-                      <p className="muted">
-                        Snapshot of miles, clients served, and cords moved. Hook to real
-                        delivery/work logs to power these numbers.
-                      </p>
-                      {(() => {
-                        const miles = 0; // placeholder until mileage tracking is added
-                        const clientsServed = clients.length;
-                        const estimateAmount = (ev: DeliveryEventRow) => {
-                          const title = (ev.title || "").toLowerCase();
-                          if (title.includes("1/3") || title.includes("third")) return 0.33;
-                          if (title.includes("cord")) return 1;
-                          return 0.25;
-                        };
-                        const totalCords = deliveries.reduce(
-                          (sum, d) => sum + estimateAmount(d),
-                          0,
-                        );
-                        const categories = {
-                          "1/3 cord": deliveries.filter((d) => estimateAmount(d) === 0.33).length,
-                          "1 cord": deliveries.filter((d) => estimateAmount(d) === 1).length,
-                          Other: deliveries.filter((d) => ![0.33, 1].includes(estimateAmount(d)))
-                            .length,
-                        };
-                        const maxCat = Math.max(1, ...Object.values(categories));
-                        return (
-                          <>
-                            <div className="two-up">
-                              <div className="list-card">
-                                <div className="list-head">
-                                  <h3>Miles traveled</h3>
-                                  <span className="pill">needs tracking</span>
-                                </div>
-                                <p style={{ fontSize: 24, margin: 0 }}>{miles} mi</p>
-                              </div>
-                              <div className="list-card">
-                                <div className="list-head">
-                                  <h3>Clients served</h3>
-                                </div>
-                                <p style={{ fontSize: 24, margin: 0 }}>{clientsServed}</p>
-                              </div>
-                            </div>
-
-                            <div className="list-card">
-                              <div className="list-head">
-                                <h3>Wood moved</h3>
-                                <span className="muted">est. cords</span>
-                              </div>
-                              <p style={{ fontSize: 24, margin: "0 0 8px" }}>
-                                {totalCords.toFixed(2)} cords
-                              </p>
-                              <div className="stack" style={{ gap: 6 }}>
-                                {Object.entries(categories).map(([label, count]) => (
-                                  <div
-                                    key={label}
-                                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                                  >
-                                    <div style={{ minWidth: 90 }}>{label}</div>
-                                    <div
-                                      style={{
-                                        flex: 1,
-                                        height: 10,
-                                        borderRadius: 999,
-                                        background: "#f1e6d7",
-                                        position: "relative",
-                                      }}
-                                    >
-                                      <div
-                                        style={{
-                                          position: "absolute",
-                                          inset: 0,
-                                          width: `${(count / maxCat) * 100}%`,
-                                          background: "linear-gradient(90deg, #2d6b3d, #e67f1e)",
-                                          borderRadius: 999,
-                                        }}
-                                      />
-                                    </div>
-                                    <div style={{ width: 32, textAlign: "right" }}>{count}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-
-                    <div className="card">
-                      <h3>People & availability (placeholder)</h3>
-                      <p className="muted">
-                        Track volunteer/employee/lead/admin availability (Mon–Fri, morning/evening)
-                        and working vehicle status. Hook this to the upcoming Users module.
-                      </p>
-                      <div className="table">
-                        <div className="table-head">
-                          <span>Name</span>
-                          <span>Role</span>
-                          <span>Availability</span>
-                          <span>Vehicle</span>
-                        </div>
-                        <div className="table-row">
-                          <div className="muted">No users yet</div>
-                          <div />
-                          <div />
-                          <div />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === "Worker Directory" &&
-                  session &&
-                  (session.role === "admin" || session.role === "lead") && (
-                  <div className="stack">
-                    <div className="list-card">
-                        <div
-                          className="list-head"
-                          style={{
-                            flexDirection: "column",
-                            alignItems: "flex-start",
-                            gap: "0.5rem",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              width: "100%",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                            }}
-                          >
-                          <h3>Workers & Drivers ({users.length})</h3>
-                          <div style={{ display: "flex", gap: "0.5rem" }}>
-                            <button className="ghost" onClick={loadUsers} disabled={busy}>
-                              Refresh
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Inline Worker Form */}
-                        {canManage && (
-                            <div
-                              className="card muted"
-                              style={{ width: "100%", marginTop: "0.5rem", padding: "1rem" }}
-                            >
-                            <div className="add-header" style={{ marginBottom: "1rem" }}>
-                              <button
-                                type="button"
-                                className="icon-button"
-                                title={showWorkerForm ? "Cancel Adding Worker" : "Add Worker"}
-                                onClick={() => {
-                                  if (showWorkerForm) {
-                                    setShowWorkerForm(false);
-                                    setWorkerFormError(null);
-                                  } else {
-                                    setWorkerForm({
-                                      name: "",
-                                      email: "",
-                                      telephone: "",
-                                        username: "",
-                                        password: "",
-                                        physical_address_line1: "",
-                                        physical_address_line2: "",
-                                        physical_address_city: "",
-                                        physical_address_state: "",
-                                        physical_address_postal_code: "",
-                                        mailing_address_line1: "",
-                                        mailing_address_line2: "",
-                                        mailing_address_city: "",
-                                        mailing_address_state: "",
-                                        mailing_address_postal_code: "",
-                                      role: "volunteer",
-                                      is_driver: false,
-                                    });
-                                    setWorkerFormError(null);
-                                    setShowWorkerForm(true);
-                                  }
-                                }}
-                              >
-                                {showWorkerForm ? "×" : "+"}
-                              </button>
-                              <h3>{showWorkerForm ? "Add New Worker" : "Add Worker"}</h3>
-                            </div>
-
-                            {showWorkerForm && (
-                              <form
-                                className="form-grid"
-                                onSubmit={async (e) => {
-                                  e.preventDefault();
-                                  setWorkerFormError(null);
-                                  setBusy(true);
-                                  try {
-                                      await invokeTauri("create_user", {
-                                      input: {
-                                        name: workerForm.name,
-                                        email: workerForm.email || null,
-                                        telephone: workerForm.telephone || null,
-                                          physical_address_line1:
-                                            workerForm.physical_address_line1 || null,
-                                          physical_address_line2:
-                                            workerForm.physical_address_line2 || null,
-                                          physical_address_city:
-                                            workerForm.physical_address_city || null,
-                                          physical_address_state:
-                                            workerForm.physical_address_state || null,
-                                          physical_address_postal_code:
-                                            workerForm.physical_address_postal_code || null,
-                                          mailing_address_line1:
-                                            workerForm.mailing_address_line1 || null,
-                                          mailing_address_line2:
-                                            workerForm.mailing_address_line2 || null,
-                                          mailing_address_city:
-                                            workerForm.mailing_address_city || null,
-                                          mailing_address_state:
-                                            workerForm.mailing_address_state || null,
-                                          mailing_address_postal_code:
-                                            workerForm.mailing_address_postal_code || null,
-                                        role: workerForm.role,
-                                        is_driver: workerForm.is_driver,
-                                          username: workerForm.username,
-                                          password: workerForm.password,
-                                        },
-                                    });
-                                    await loadUsers();
-                                    setWorkerForm({
-                                      name: "",
-                                      email: "",
-                                      telephone: "",
-                                        username: "",
-                                        password: "",
-                                        physical_address_line1: "",
-                                        physical_address_line2: "",
-                                        physical_address_city: "",
-                                        physical_address_state: "",
-                                        physical_address_postal_code: "",
-                                        mailing_address_line1: "",
-                                        mailing_address_line2: "",
-                                        mailing_address_city: "",
-                                        mailing_address_state: "",
-                                        mailing_address_postal_code: "",
-                                      role: "volunteer",
-                                      is_driver: false,
-                                    });
-                                    setShowWorkerForm(false);
-                                  } catch (err: any) {
-                                    console.error(err);
-                                      setWorkerFormError(
-                                        typeof err === "string" ? err : "Failed to create user",
-                                      );
-                                  } finally {
-                                    setBusy(false);
-                                  }
-                                }}
-                              >
-                                  {workerFormError && (
-                                    <div
-                                      className="pill"
-                                      style={{
-                                        gridColumn: "1/-1",
-                                        background: "#fbe2e2",
-                                        color: "#b3261e",
-                                      }}
-                                    >
-                                      {workerFormError}
-                                    </div>
-                                  )}
-
-                                <label>
-                                  Full Name *
-                                  <input
-                                    required
-                                    value={workerForm.name}
-                                      onChange={(e) =>
-                                        setWorkerForm({ ...workerForm, name: e.target.value })
-                                      }
-                                    placeholder="e.g. Jane Doe"
-                                    disabled={busy}
-                                  />
-                                </label>
-                                  <label>
-                                    Username *
-                                    <input
-                                      required
-                                      value={workerForm.username}
-                                      onChange={(e) =>
-                                        setWorkerForm({ ...workerForm, username: e.target.value })
-                                      }
-                                      placeholder="e.g. jdoe"
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                  <label>
-                                    Password *
-                                    <input
-                                      required
-                                      type="password"
-                                      value={workerForm.password}
-                                      onChange={(e) =>
-                                        setWorkerForm({ ...workerForm, password: e.target.value })
-                                      }
-                                      placeholder="Set a password"
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                <label>
-                                  Role *
-                                  <select
-                                    value={workerForm.role}
-                                      onChange={(e) =>
-                                        setWorkerForm({ ...workerForm, role: e.target.value })
-                                      }
-                                    disabled={busy}
-                                  >
-                                    <option value="volunteer">Volunteer</option>
-                                    <option value="staff">Staff</option>
-                                    <option value="lead">Lead</option>
-                                    <option value="admin">Admin</option>
-                                  </select>
-                                </label>
-                                <label>
-                                  Email
-                                  <input
-                                    type="email"
-                                    value={workerForm.email}
-                                      onChange={(e) =>
-                                        setWorkerForm({ ...workerForm, email: e.target.value })
-                                      }
-                                    placeholder="jane@example.com"
-                                    disabled={busy}
-                                  />
-                                </label>
-                                <label>
-                                  Phone
-                                  <input
-                                    type="tel"
-                                    value={workerForm.telephone}
-                                      onChange={(e) =>
-                                        setWorkerForm({ ...workerForm, telephone: e.target.value })
-                                      }
-                                      onBlur={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          telephone: normalizePhone(e.target.value),
-                                        })
-                                      }
-                                    placeholder="(505) 555-0100"
-                                    disabled={busy}
-                                  />
-                                </label>
-                                  <label className="span-2">
-                                    Address Line 1
-                                    <input
-                                      value={workerForm.physical_address_line1}
-                                      onChange={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          physical_address_line1: e.target.value,
-                                        })
-                                      }
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                  <label className="span-2">
-                                    Address Line 2
-                                    <input
-                                      value={workerForm.physical_address_line2}
-                                      onChange={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          physical_address_line2: e.target.value,
-                                        })
-                                      }
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                  <label>
-                                    City
-                                    <input
-                                      value={workerForm.physical_address_city}
-                                      onChange={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          physical_address_city: e.target.value,
-                                        })
-                                      }
-                                      onBlur={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          physical_address_city: initCapCity(e.target.value),
-                                        })
-                                      }
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                  <label>
-                                    State
-                                    <input
-                                      value={workerForm.physical_address_state}
-                                      onChange={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          physical_address_state: e.target.value,
-                                        })
-                                      }
-                                      onBlur={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          physical_address_state: normalizeState(e.target.value),
-                                        })
-                                      }
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                  <label>
-                                    ZIP
-                                    <input
-                                      value={workerForm.physical_address_postal_code}
-                                      onChange={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          physical_address_postal_code: e.target.value,
-                                        })
-                                      }
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                  <label className="span-2">
-                                    Mailing Line 1
-                                    <input
-                                      value={workerForm.mailing_address_line1}
-                                      onChange={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          mailing_address_line1: e.target.value,
-                                        })
-                                      }
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                  <label className="span-2">
-                                    Mailing Line 2
-                                    <input
-                                      value={workerForm.mailing_address_line2}
-                                      onChange={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          mailing_address_line2: e.target.value,
-                                        })
-                                      }
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                  <label>
-                                    Mailing City
-                                    <input
-                                      value={workerForm.mailing_address_city}
-                                      onChange={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          mailing_address_city: e.target.value,
-                                        })
-                                      }
-                                      onBlur={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          mailing_address_city: initCapCity(e.target.value),
-                                        })
-                                      }
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                  <label>
-                                    Mailing State
-                                    <input
-                                      value={workerForm.mailing_address_state}
-                                      onChange={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          mailing_address_state: e.target.value,
-                                        })
-                                      }
-                                      onBlur={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          mailing_address_state: normalizeState(e.target.value),
-                                        })
-                                      }
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                  <label>
-                                    Mailing ZIP
-                                    <input
-                                      value={workerForm.mailing_address_postal_code}
-                                      onChange={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          mailing_address_postal_code: e.target.value,
-                                        })
-                                      }
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                <label className="checkbox span-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={workerForm.is_driver}
-                                      onChange={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          is_driver: e.target.checked,
-                                        })
-                                      }
-                                    disabled={busy}
-                                  />
-                                  Is Driver (Check if this person can drive for deliveries)
-                                </label>
-
-                                <div className="actions span-2">
-                                  <button className="ping" type="submit" disabled={busy}>
-                                    {busy ? "Creating..." : "Create Worker"}
-                                  </button>
-                                  <button
-                                    className="ghost"
-                                    type="button"
-                                    onClick={() => setShowWorkerForm(false)}
-                                    disabled={busy}
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </form>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <div className="table">
-                        <div className="table-head">
-                          <span>Name</span>
-                          <span>Phone</span>
-                          <span>Schedule</span>
-                          <span>Credentials</span>
-                        </div>
-                          {workerDirectoryUsers.map((u) => (
-                          <div
-                            className="table-row"
-                            key={u.id}
-                            onDoubleClick={() => {
-                              setSelectedWorker(u);
-                              setWorkerEdit({
-                                  email: u.email ?? "",
-                                  telephone: u.telephone ?? "",
-                                  physical_address_line1: u.physical_address_line1 ?? "",
-                                  physical_address_line2: u.physical_address_line2 ?? "",
-                                  physical_address_city: u.physical_address_city ?? "",
-                                  physical_address_state: u.physical_address_state ?? "",
-                                  physical_address_postal_code:
-                                    u.physical_address_postal_code ?? "",
-                                  mailing_address_line1: u.mailing_address_line1 ?? "",
-                                  mailing_address_line2: u.mailing_address_line2 ?? "",
-                                  mailing_address_city: u.mailing_address_city ?? "",
-                                  mailing_address_state: u.mailing_address_state ?? "",
-                                  mailing_address_postal_code: u.mailing_address_postal_code ?? "",
-                                availability_notes: u.availability_notes ?? "",
-                                vehicle: u.vehicle ?? "",
-                                driver_license_status: u.driver_license_status ?? "",
-                                driver_license_number: u.driver_license_number ?? "",
-                                driver_license_expires_on: u.driver_license_expires_on ?? "",
-                                is_driver: !!u.is_driver,
-                                hipaa_certified: u.hipaa_certified,
-                              });
-                              if (u.availability_schedule) {
-                                try {
-                                  const parsed = JSON.parse(u.availability_schedule);
-                                  setWorkerAvailSchedule(parsed);
-                                } catch {
-                                  setWorkerAvailSchedule({
-                                    monday: false,
-                                    tuesday: false,
-                                    wednesday: false,
-                                    thursday: false,
-                                    friday: false,
-                                    saturday: false,
-                                    sunday: false,
-                                  });
-                                }
-                              } else {
-                                setWorkerAvailSchedule({
-                                  monday: false,
-                                  tuesday: false,
-                                  wednesday: false,
-                                  thursday: false,
-                                  friday: false,
-                                  saturday: false,
-                                  sunday: false,
-                                });
-                              }
-                              setWorkerError(null);
-                            }}
-                            style={{ cursor: "pointer" }}
-                          >
-                            <div>
-                              <strong>{u.name}</strong>
-                              <div className="muted">{u.role}</div>
-                            </div>
-                            <div className="muted">{u.telephone ?? "—"}</div>
-                            <div className="muted">{u.availability_notes ?? "—"}</div>
-                            <div className="muted">
-                                DL: {u.driver_license_status ?? "—"} | Driver:{" "}
-                                {u.is_driver ? "Yes" : "No"} | Vehicle: {u.vehicle ?? "—"} | HIPAA:{" "}
-                                {u.hipaa_certified ? "Yes" : "Unknown"}
-                            </div>
-                          </div>
-                        ))}
-                          {!workerDirectoryUsers.length && (
-                            <div className="table-row">No workers yet.</div>
-                          )}
-                      </div>
-                    </div>
-
-                    {selectedWorker && (
-                      <div className="card">
-                        <div className="list-head">
-                          <h3>{selectedWorker.name}</h3>
-                          <button className="ghost" onClick={() => setSelectedWorker(null)}>
-                            Close
-                          </button>
-                        </div>
-                          {workerError && (
-                            <div
-                              className="pill"
-                              style={{ background: "#fbe2e2", color: "#b3261e" }}
-                            >
-                              {workerError}
-                            </div>
-                          )}
-                        <div className="stack">
-                            <div>
-                              <strong>Role:</strong> {selectedWorker.role}
-                            </div>
-                            <label>
-                              Email
-                              <input
-                                value={workerEdit?.email ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({ ...prev, email: e.target.value }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Phone
-                              <input
-                                value={workerEdit?.telephone ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({ ...prev, telephone: e.target.value }))
-                                }
-                                onBlur={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    telephone: normalizePhone(e.target.value),
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Address Line 1
-                              <input
-                                value={workerEdit?.physical_address_line1 ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    physical_address_line1: e.target.value,
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Address Line 2
-                              <input
-                                value={workerEdit?.physical_address_line2 ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    physical_address_line2: e.target.value,
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              City
-                              <input
-                                value={workerEdit?.physical_address_city ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    physical_address_city: e.target.value,
-                                  }))
-                                }
-                                onBlur={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    physical_address_city: initCapCity(e.target.value),
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              State
-                              <input
-                                value={workerEdit?.physical_address_state ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    physical_address_state: e.target.value,
-                                  }))
-                                }
-                                onBlur={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    physical_address_state: normalizeState(e.target.value),
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              ZIP
-                              <input
-                                value={workerEdit?.physical_address_postal_code ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    physical_address_postal_code: e.target.value,
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Mailing Line 1
-                              <input
-                                value={workerEdit?.mailing_address_line1 ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    mailing_address_line1: e.target.value,
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Mailing Line 2
-                              <input
-                                value={workerEdit?.mailing_address_line2 ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    mailing_address_line2: e.target.value,
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Mailing City
-                              <input
-                                value={workerEdit?.mailing_address_city ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    mailing_address_city: e.target.value,
-                                  }))
-                                }
-                                onBlur={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    mailing_address_city: initCapCity(e.target.value),
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Mailing State
-                              <input
-                                value={workerEdit?.mailing_address_state ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    mailing_address_state: e.target.value,
-                                  }))
-                                }
-                                onBlur={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    mailing_address_state: normalizeState(e.target.value),
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Mailing ZIP
-                              <input
-                                value={workerEdit?.mailing_address_postal_code ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    mailing_address_postal_code: e.target.value,
-                                  }))
-                                }
-                              />
-                            </label>
-                          <label>
-                            Availability Notes
-                            <input
-                              value={workerEdit?.availability_notes ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    availability_notes: e.target.value,
-                                  }))
-                                }
-                            />
-                          </label>
-                          <div>
-                            <strong>Weekly Availability Schedule:</strong>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: "1rem",
-                                  flexWrap: "wrap",
-                                  marginTop: "0.5rem",
-                                }}
-                              >
-                              {Object.keys(workerAvailSchedule).map((day) => (
-                                  <label
-                                    key={day}
-                                    className="checkbox"
-                                    style={{ display: "flex", alignItems: "center" }}
-                                  >
-                                  <input
-                                    type="checkbox"
-                                    checked={workerAvailSchedule[day]}
-                                    onChange={(e) =>
-                                      setWorkerAvailSchedule({
-                                        ...workerAvailSchedule,
-                                        [day]: e.target.checked,
-                                      })
-                                    }
-                                  />
-                                    <span
-                                      style={{ marginLeft: "0.25rem", textTransform: "capitalize" }}
-                                    >
-                                    {day}
-                                  </span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                          <label>
-                            Working vehicle
-                            <input
-                              value={workerEdit?.vehicle ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({ ...prev, vehicle: e.target.value }))
-                                }
-                            />
-                          </label>
-                          <label>
-                            Driver license status
-                            <input
-                              value={workerEdit?.driver_license_status ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    driver_license_status: e.target.value,
-                                  }))
-                                }
-                            />
-                          </label>
-                          <label>
-                            Driver license number
-                            <input
-                              value={workerEdit?.driver_license_number ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    driver_license_number: e.target.value,
-                                  }))
-                                }
-                            />
-                          </label>
-                          <label>
-                            Driver license expiration
-                            <input
-                              type="date"
-                              value={workerEdit?.driver_license_expires_on?.slice(0, 10) ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    driver_license_expires_on: e.target.value,
-                                  }))
-                                }
-                            />
-                          </label>
-                          <label className="checkbox">
-                            <input
-                              type="checkbox"
-                              checked={!!workerEdit?.is_driver}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    is_driver: e.target.checked,
-                                  }))
-                                }
-                            />
-                            Driver flag (requires DL status + expiration)
-                          </label>
-                          <label className="checkbox">
-                            <input
-                              type="checkbox"
-                              checked={!!workerEdit?.hipaa_certified}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    hipaa_certified: e.target.checked ? 1 : 0,
-                                  }))
-                                }
-                            />
-                            HIPAA certified
-                          </label>
-                          {(session?.role === "admin" || session?.role === "lead") && (
-                            <div style={{ display: "flex", gap: 8 }}>
-                                <label style={{ flex: 1 }}>
-                                  Reset Password
-                                  <input
-                                    type="password"
-                                    value={workerPasswordReset}
-                                    onChange={(e) => setWorkerPasswordReset(e.target.value)}
-                                    placeholder="New password"
-                                  />
-                                </label>
-                                <button
-                                  className="ghost"
-                                  type="button"
-                                  disabled={busy || !workerPasswordReset.trim()}
-                                  onClick={async () => {
-                                    setWorkerError(null);
-                                    if (!workerPasswordReset.trim()) return;
-                                    setBusy(true);
-                                    try {
-                                      await invokeTauri("reset_password", {
-                                        input: {
-                                          user_id: selectedWorker.id,
-                                          new_password: workerPasswordReset.trim(),
-                                        },
-                                        role: session?.role ?? null,
-                                        actor: session?.username ?? null,
-                                      });
-                                      setWorkerPasswordReset("");
-                                    } catch (err) {
-                                      setWorkerError(
-                                        typeof err === "string" ? err : "Failed to reset password.",
-                                      );
-                                    } finally {
-                                      setBusy(false);
-                                    }
-                                  }}
-                                >
-                                  Reset Password
-                                </button>
-                              <button
-                                className="ping"
-                                type="button"
-                                disabled={busy}
-                                onClick={async () => {
-                                  setWorkerError(null);
-                                  const wantsDriver = !!workerEdit?.is_driver;
-                                    const hasStatus = !!(
-                                      workerEdit?.driver_license_status ?? ""
-                                    ).trim();
-                                    const hasExpiry = !!(
-                                      workerEdit?.driver_license_expires_on ?? ""
-                                    ).trim();
-                                  if (wantsDriver && (!hasStatus || !hasExpiry)) {
-                                      setWorkerError(
-                                        "Driver flag requires license status and expiration.",
-                                      );
-                                    return;
-                                  }
-                                  setBusy(true);
-                                  try {
-                                      await invokeTauri("update_user_flags", {
-                                      input: {
-                                        id: selectedWorker.id,
-                                          email: workerEdit?.email ?? null,
-                                          telephone: workerEdit?.telephone ?? null,
-                                          physical_address_line1:
-                                            workerEdit?.physical_address_line1 ?? null,
-                                          physical_address_line2:
-                                            workerEdit?.physical_address_line2 ?? null,
-                                          physical_address_city:
-                                            workerEdit?.physical_address_city ?? null,
-                                          physical_address_state:
-                                            workerEdit?.physical_address_state ?? null,
-                                          physical_address_postal_code:
-                                            workerEdit?.physical_address_postal_code ?? null,
-                                          mailing_address_line1:
-                                            workerEdit?.mailing_address_line1 ?? null,
-                                          mailing_address_line2:
-                                            workerEdit?.mailing_address_line2 ?? null,
-                                          mailing_address_city:
-                                            workerEdit?.mailing_address_city ?? null,
-                                          mailing_address_state:
-                                            workerEdit?.mailing_address_state ?? null,
-                                          mailing_address_postal_code:
-                                            workerEdit?.mailing_address_postal_code ?? null,
-                                          availability_notes:
-                                            workerEdit?.availability_notes ?? null,
-                                          availability_schedule:
-                                            JSON.stringify(workerAvailSchedule),
-                                        vehicle: workerEdit?.vehicle ?? null,
-                                          driver_license_status:
-                                            workerEdit?.driver_license_status ?? null,
-                                          driver_license_number:
-                                            workerEdit?.driver_license_number ?? null,
-                                          driver_license_expires_on:
-                                            workerEdit?.driver_license_expires_on
-                                          ? `${workerEdit.driver_license_expires_on}T00:00:00`
-                                          : null,
-                                        hipaa_certified: !!workerEdit?.hipaa_certified,
-                                        is_driver: wantsDriver,
-                                      },
-                                      role: session?.role ?? null,
-                                    });
-                                    await loadUsers();
-                                    setSelectedWorker(null);
-                                      setWorkerPasswordReset("");
-                                  } finally {
-                                    setBusy(false);
-                                  }
-                                }}
-                              >
-                                Save worker
-                              </button>
-                                <button
-                                  className="ghost"
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedWorker(null);
-                                    setWorkerPasswordReset("");
-                                  }}
-                                >
-                                Cancel
-                              </button>
-                            </div>
-                          )}
-                          {!(session?.role === "admin" || session?.role === "lead") && (
-                            <div className="muted">Read-only (admin/lead can edit).</div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <ReportsTab
-                  activeTab={activeTab}
-                  session={session}
-                  auditLogs={auditLogs}
-                  auditLogFilter={auditLogFilter}
-                  setAuditLogFilter={setAuditLogFilter}
-                  setAuditLogs={setAuditLogs}
-                  loadAuditLogs={loadAuditLogs}
-                  busy={busy}
-                  setBusy={setBusy}
-                />
-              </div>
-            </section>
-          </main>
-        </>
-      ) : (
-      <div className="login-page-container">
-          {/* Header (100%) */}
-          <div className="login-header">
-             <div className="header-brand">
-                <img src={logo} className="header-logo" alt="NMERA Logo" />
-                <div className="header-text">
-                   <h1>Northern Mendocino</h1>
-                   <h1>Ecosystem Recovery Alliance</h1>
-                </div>
-             </div>
-          </div>
-
-          <div className="login-content">
-             {/* Left Column (60%) */}
-             <div className="login-left-panel">
-                <div className="intro-section">
-                    <img src={firewoodIcon} className="intro-logo" alt="Firewood Bank" />
-                    <div className="intro-text">
-                        <h2>Welcome</h2>
-                        <p className="tagline">"Keeping eachother warm"</p>
-                    </div>
-                </div>
-                
-                <div className="motd-section">
-                    <h3>Updates & Announcements</h3>
-                    <div className="motd-scroll-container">
-                       {motdItems.length === 0 ? (
-                         <p className="muted">No recent announcements.</p>
-                       ) : (
-                         <div className="motd-list">
-                      {motdItems.map((item) => (
-                             <div key={item.id} className="motd-item">
-                               <div className="motd-date">
-                            {new Date(item.created_at).toLocaleDateString(undefined, {
-                              weekday: "long",
-                              year: "numeric",
-                              month: "long",
-                              day: "numeric",
-                            })}
-                               </div>
-                               <div className="motd-msg">{item.message}</div>
-                             </div>
-                           ))}
-                         </div>
-                       )}
-                    </div>
-                </div>
-             </div>
-
-             {/* Right Column (40%) */}
-             <div className="login-right-panel">
-                <div className="login-form-container">
-                   <LoginCard onLogin={setSession} />
-                <div
-                  style={{ marginTop: 32, textAlign: "center", fontSize: "0.85rem", color: "#888" }}
-                >
-                     &copy; {new Date().getFullYear()} NM-ERA Firewood Bank
-                   </div>
-                </div>
-             </div>
-          </div>
-      </div>
-      )}
-      {session && (
-          <ChangeRequestModal
-            isOpen={showChangeRequestModal}
-            onClose={() => setShowChangeRequestModal(false)}
-            userId={session.username}
-          />
-      )}
-      {session && showPasswordModal && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <h3>Change Password</h3>
-            {passwordError && (
-              <div className="pill" style={{ background: "#fbe2e2", color: "#b3261e" }}>
-                {passwordError}
-              </div>
-            )}
-            <form
-              className="stack"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                setPasswordError(null);
-                if (!passwordForm.current || !passwordForm.next) {
-                  setPasswordError("Current and new password are required.");
-                  return;
-                }
-                if (passwordForm.next !== passwordForm.confirm) {
-                  setPasswordError("New password and confirmation do not match.");
-                  return;
-                }
-                setBusy(true);
-                try {
-                  await invokeTauri("change_password", {
-                    input: {
-                      username: session.username,
-                      current_password: passwordForm.current,
-                      new_password: passwordForm.next,
-                    },
-                  });
-                  setPasswordForm({ current: "", next: "", confirm: "" });
-                  setShowPasswordModal(false);
-                } catch (err) {
-                  setPasswordError(typeof err === "string" ? err : "Failed to change password.");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <label>
-                Current Password
-                <input
-                  type="password"
-                  value={passwordForm.current}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
-                />
-              </label>
-              <label>
-                New Password
-                <input
-                  type="password"
-                  value={passwordForm.next}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
-                />
-              </label>
-              <label>
-                Confirm New Password
-                <input
-                  type="password"
-                  value={passwordForm.confirm}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
-                />
-              </label>
-              <div className="actions">
-                <button className="ping" type="submit" disabled={busy}>
-                  {busy ? "Saving..." : "Update Password"}
-                </button>
-                <button
-                  className="ghost"
-                  type="button"
-                  onClick={() => {
-                    setShowPasswordModal(false);
-                    setPasswordForm({ current: "", next: "", confirm: "" });
-                    setPasswordError(null);
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default App;
+      

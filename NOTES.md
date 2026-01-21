@@ -38,24 +38,241 @@ Notes:
 - Auth uses `auth_users` with bcrypt hashes; seed logins include `admin/admin`, `lead/lead`, `staff/staff`, `volunteer/volunteer`, and `sketch/Sketching2!`
 - For SQLx compile-time checks, run `cargo run --bin bootstrap_db` and set `DATABASE_URL` (URL-encode spaces)
 
-Review & Improvement Suggestions (Program Structure + Workflow):
-- ✅ Add a thin API layer (e.g., `src/api/*`) to wrap `invoke()` — implemented in `src/api/tauri.ts`
-- ✅ Add form-level validation utilities (city/state/phone/zip) — implemented in `src/utils/validation.ts` and `src/utils/format.ts`
-- ✅ Introduce a real auth flow (password reset, change password) and store password hashes only — bcrypt hashes in auth_users, change_password command exists
-- ✅ Add lint/format config (ESLint/Prettier) — `.prettierrc` and `eslint.config.js` exist
-- ✅ Add centralized error handling — GlobalErrorBoundary component exists
-- Split `src/App.tsx` into feature modules (clients, inventory, work orders, invoices, worker directory) and centralize shared UI helpers. (App.tsx is 5000+ lines)
-- Replace `window.print()` with a Tauri-side print command for consistent native printing behavior.
-- Add printing capabilities for client lists (with numbers), worker lists (with phone numbers), individual work orders, and metrics - printable from both list and detail views.
-- Auto-generate login usernames when adding new workers: first initial + full last name (e.g., John Doe -> jdoe), with numeric suffix for duplicates (jdoe1, jdoe2, etc.).
-- Enhance worker profiles with schedule (Mon-Sun: AM/PM/Call to check/Call prior), certification flags (HIPAA, DL on file, waiver signed, working vehicle), and auto-set driver/HIPAA permissions based on certifications.
-- ✅ Add `dev` docs for DATABASE_URL encoding and `.env` usage — documented in README.md with Windows path encoding table and SQLx bootstrap instructions
-- Add tests: unit tests for Rust auth + work order status transitions; basic UI smoke tests for critical tabs.
-- ✅ Standardize role names across UI, Rust, docs, and seeds — roles are now `admin/lead/staff/volunteer`. The `lead` role is used for team leads with elevated permissions (can view PII if HIPAA certified).
-- Split `src-tauri/src/main.rs` into command modules (e.g., `commands/users.rs`, `commands/work_orders.rs`) and move shared SQL into `db`/`services` layers. (main.rs is 3000+ lines)
-- Add a `src/pages` (or `features`) directory and move tab content components out of `App.tsx` to reduce re-render scope and improve readability.
-- ✅ Add DB indexes for common filters — migration 0016 adds indexes on work_orders.status, scheduled_date, audit_logs.created_at, delivery_events.start_date, clients.name
-- Add basic pagination/virtualization for large lists (clients, work orders, audit logs).
+## 📊 **COMPREHENSIVE CODE ANALYSIS - 2026-01-20**
+
+### **Current Architecture Assessment**
+
+**✅ Strengths:**
+- Well-structured database schema with sync-ready design
+- Complete feature implementation through Stage 12
+- Proper TypeScript types in central `types.ts`
+- Working Tauri 2 + React + SQLite stack
+- Comprehensive audit logging and role-based access control
+- Auto-migrations and proper error handling
+
+**❌ Critical Issues:**
+
+#### **1. Frontend Monolith (App.tsx: 5,979 lines)**
+- **Clients tab**: 1,480 lines (25% of component)
+- **Work Orders tab**: 1,976 lines (33% of component)
+- **40+ useState hooks** with excessive prop drilling
+- **Zero component reusability** - everything inline
+- **Inline styles everywhere** - no design system
+- **Mixed concerns**: business logic + UI + state management
+
+#### **2. Backend Monolith (main.rs: 1,701 lines)**
+- All 30+ Tauri commands in single file
+- No separation of concerns between handlers
+- Difficult to maintain and test
+
+#### **3. Type Duplication**
+- Dashboard.tsx redefines all types instead of importing from `types.ts`
+- Potential for type drift and inconsistencies
+
+#### **4. Missing Modern React Patterns**
+- No custom hooks for data fetching
+- No context providers for shared state
+- No proper component composition
+
+---
+
+## 🚀 **IMPROVEMENT ROADMAP - HIGH PRIORITY**
+
+### **Phase 1: Frontend Refactoring (Immediate - Next Sprint)**
+
+#### **1.1 Extract Feature Modules**
+```
+src/
+├── features/           # NEW: Feature-based organization
+│   ├── clients/        # Extract from App.tsx:911-2390 (1,480 lines)
+│   │   ├── ClientsPage.tsx
+│   │   ├── components/
+│   │   │   ├── ClientList.tsx
+│   │   │   ├── ClientForm.tsx
+│   │   │   ├── MailingListSidebar.tsx
+│   │   │   ├── ClientDetailSidebar.tsx
+│   │   │   └── ClientTable.tsx
+│   │   ├── hooks/
+│   │   │   ├── useClientFilters.ts
+│   │   │   ├── useClientSorting.ts
+│   │   │   └── useClients.ts
+│   │   └── types.ts
+│   ├── work-orders/    # Extract from App.tsx:2763-4738 (1,976 lines)
+│   │   ├── WorkOrdersPage.tsx
+│   │   ├── components/
+│   │   └── hooks/
+│   ├── inventory/      # Extract from App.tsx:2391-2762
+│   ├── users/          # Extract from App.tsx:4853-5803
+│   └── shared/         # Common components/hooks
+│       ├── components/
+│       │   ├── DataTable.tsx
+│       │   ├── FormField.tsx
+│       │   ├── Sidebar.tsx
+│       │   └── Modal.tsx
+│       ├── hooks/
+│       │   ├── useLocalStorage.ts
+│       │   ├── useDebounce.ts
+│       │   └── useAsync.ts
+│       └── utils/
+```
+
+#### **1.2 State Management Overhaul**
+- Replace 40+ useState hooks with Zustand store or Context + useReducer
+- Create feature-specific contexts:
+  ```typescript
+  // src/contexts/AppContext.tsx
+  const AppProvider = ({ children }) => {
+    // Global state: session, busy, activeTab
+  }
+
+  // src/features/clients/context/ClientContext.tsx
+  const ClientProvider = ({ children }) => {
+    // Feature state: clients, filters, forms, sidebars
+  }
+  ```
+
+#### **1.3 Design System Implementation**
+```typescript
+// src/styles/theme.ts
+export const theme = {
+  colors: { primary: '#e67f1e', secondary: '#2196F3' },
+  spacing: { sm: '0.5rem', md: '1rem' },
+  typography: { fontSize: { sm: '0.8rem', base: '1rem' } }
+}
+
+// src/styles/components.ts
+export const buttonStyles = style({ ... })
+export const cardStyles = style({ ... })
+```
+
+### **Phase 2: Backend Refactoring**
+
+#### **2.1 Command Module Extraction**
+```
+src-tauri/src/
+├── commands/           # NEW: Extract from main.rs
+│   ├── mod.rs
+│   ├── clients.rs      # Client CRUD operations
+│   ├── inventory.rs    # Inventory management
+│   ├── work_orders.rs  # Work order operations
+│   ├── users.rs        # User management
+│   └── audit.rs        # Audit logging
+├── services/           # NEW: Business logic layer
+│   ├── mod.rs
+│   ├── client_service.rs
+│   ├── inventory_service.rs
+│   └── work_order_service.rs
+├── models/             # NEW: Data access layer
+│   ├── mod.rs
+│   ├── client.rs
+│   └── work_order.rs
+└── main.rs             # Slimmed down to ~200 lines
+```
+
+#### **2.2 Shared Database Utilities**
+```rust
+// src-tauri/src/db/mod.rs
+pub mod pool;
+pub mod queries;
+
+// src-tauri/src/db/queries/clients.rs
+pub async fn list_clients(pool: &Pool<Sqlite>, filters: ClientFilters) -> Result<Vec<ClientRow>> {
+    // Shared query logic
+}
+```
+
+### **Phase 3: Developer Experience & Quality**
+
+#### **3.1 Testing Infrastructure**
+```typescript
+// src/__tests__/features/clients/ClientList.test.tsx
+// src/__tests__/hooks/useClientFilters.test.ts
+
+// Rust unit tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+    // Test work order status transitions
+    // Test inventory reservation logic
+}
+```
+
+#### **3.2 Performance Optimizations**
+- Add React.memo for expensive components
+- Implement virtualization for large lists (react-window)
+- Add pagination for API endpoints
+- Memoize expensive computations
+
+#### **3.3 Code Quality**
+- Extract reusable form validation schemas (Zod/Yup)
+- Add comprehensive error boundaries
+- Implement proper loading states
+- Add accessibility (ARIA labels, keyboard navigation)
+
+---
+
+## 📋 **SPECIFIC IMPROVEMENT TASKS**
+
+### **Immediate Actions (This Week)**
+- [ ] Extract `ClientsPage` component (1,480 lines → separate files)
+- [ ] Create `src/features/clients/` directory structure
+- [ ] Extract `WorkOrdersPage` component (1,976 lines → separate files)
+- [ ] Fix Dashboard.tsx type imports (use centralized types)
+- [ ] Add basic component library (`Button`, `Card`, `Table`)
+
+### **Short Term (Next 2 Weeks)**
+- [ ] Implement Zustand for global state management
+- [ ] Create custom hooks (`useClients`, `useWorkOrders`)
+- [ ] Extract Rust command modules (start with `commands/clients.rs`)
+- [ ] Add comprehensive TypeScript interfaces for all component props
+
+### **Medium Term (Next Month)**
+- [ ] Add unit tests for critical business logic
+- [ ] Implement proper error handling with toast notifications
+- [ ] Add dark mode support
+- [ ] Performance audit and optimization
+
+### **Long Term (Future Releases)**
+- [ ] Add end-to-end tests with Playwright
+- [ ] Implement proper sync functionality (currently skeleton)
+- [ ] Add mobile-responsive design
+- [ ] Multi-language support (i18n)
+
+---
+
+## 🔍 **EFFICIENCY ANALYSIS**
+
+### **Current Performance Issues**
+1. **Massive re-renders**: Single App component re-renders everything
+2. **Memory leaks**: No cleanup in effects
+3. **N+1 queries**: No batching of API calls
+4. **Large bundle**: All code loaded at once
+
+### **Code Quality Metrics**
+- **Cyclomatic Complexity**: App.tsx has complexity >50
+- **Maintainability Index**: Low due to monolith structure
+- **Test Coverage**: 0% (no tests exist)
+- **Technical Debt**: High (5,979-line file, duplicated types)
+
+### **Development Workflow Issues**
+- **Long build times**: Large App.tsx slows compilation
+- **Difficult debugging**: Monolithic structure hard to trace
+- **Code review burden**: Massive files hard to review
+- **Onboarding difficulty**: New developers overwhelmed by size
+
+---
+
+## 🎯 **RECOMMENDED NEXT STEPS**
+
+1. **Start with Clients extraction** - Most critical user-facing feature
+2. **Implement basic design system** - Foundation for consistent UI
+3. **Add state management** - Prerequisite for component extraction
+4. **Extract Rust modules** - Improve backend maintainability
+5. **Add basic testing** - Prevent regressions during refactoring
+
+**Estimated Effort**: 2-3 weeks for Phase 1 core refactoring
+**Risk Level**: Medium (refactoring monoliths always carries risk)
+**Business Impact**: High (improves development velocity and code maintainability)
 
 Copyable prompts (Stage 0–5) for next agent:
 Stage 0 prompt
