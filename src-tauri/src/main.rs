@@ -1897,6 +1897,12 @@ struct WorkOrderAssignmentInput {
 }
 
 #[derive(Debug, Deserialize)]
+struct WorkOrderScheduleInput {
+    work_order_id: String,
+    scheduled_date: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct WorkOrderStatusInput {
     work_order_id: String,
     status: Option<String>,
@@ -2611,8 +2617,8 @@ async fn update_work_order_assignees(
 ) -> Result<(), String> {
     let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
     let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
-    if role_val != "admin" && role_val != "lead" {
-        return Err("Only admins or leads can assign drivers/helpers".to_string());
+    if role_val != "admin" && role_val != "lead" && role_val != "staff" {
+        return Err("Only staff or admins can assign drivers/helpers".to_string());
     }
     audit_db(
         &state.pool,
@@ -2675,6 +2681,122 @@ async fn update_work_order_assignees(
             )
             .await;
         }
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn update_work_order_schedule(
+    state: State<'_, AppState>,
+    input: WorkOrderScheduleInput,
+    role: Option<String>,
+    actor: Option<String>,
+) -> Result<(), String> {
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
+    if role_val != "admin" && role_val != "staff" && role_val != "lead" {
+        return Err("Only staff or admin may schedule work orders".to_string());
+    }
+    audit_db(
+        &state.pool,
+        "update_work_order_schedule",
+        &role_val,
+        &actor_val,
+    )
+    .await;
+
+    let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
+
+    let existing = sqlx::query!(
+        r#"SELECT scheduled_date, client_name FROM work_orders WHERE id = ? AND is_deleted = 0"#,
+        input.work_order_id
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let existing = match existing {
+        Some(e) => e,
+        None => return Err("Work order not found or has been deleted".to_string()),
+    };
+
+    sqlx::query(
+        r#"
+        UPDATE work_orders
+        SET scheduled_date = ?, updated_at = datetime('now')
+        WHERE id = ? AND is_deleted = 0
+        "#,
+    )
+    .bind(&input.scheduled_date)
+    .bind(&input.work_order_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if let Some(start_date) = &input.scheduled_date {
+        let existing_delivery = sqlx::query!(
+            r#"SELECT id FROM delivery_events WHERE work_order_id = ? AND is_deleted = 0 LIMIT 1"#,
+            input.work_order_id
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if let Some(row) = existing_delivery {
+            sqlx::query(
+                r#"
+                UPDATE delivery_events
+                SET start_date = ?, updated_at = datetime('now')
+                WHERE id = ?
+                "#,
+            )
+            .bind(start_date)
+            .bind(&row.id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+        } else {
+            let delivery_id = Uuid::new_v4().to_string();
+            sqlx::query(
+                r#"
+                INSERT INTO delivery_events (
+                    id, title, description, event_type, work_order_id,
+                    start_date, end_date, color_code, assigned_user_ids_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                "#,
+            )
+            .bind(&delivery_id)
+            .bind(format!("Delivery for {}", existing.client_name))
+            .bind::<Option<String>>(None)
+            .bind("delivery")
+            .bind(&input.work_order_id)
+            .bind(start_date)
+            .bind::<Option<String>>(None)
+            .bind("#e67f1e")
+            .bind("[]")
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+    }
+
+    if existing.scheduled_date != input.scheduled_date {
+        audit_change(
+            &state.pool,
+            "update_work_order_schedule",
+            &role_val,
+            &actor_val,
+            "work_orders",
+            &input.work_order_id,
+            "scheduled_date",
+            existing.scheduled_date,
+            input.scheduled_date,
+        )
+        .await;
     }
 
     tx.commit().await.map_err(|e| e.to_string())?;
@@ -3307,6 +3429,7 @@ fn main() -> Result<()> {
             create_work_order,
             list_work_orders,
             update_work_order_assignees,
+            update_work_order_schedule,
             update_work_order_status,
             create_delivery_event,
             list_delivery_events,

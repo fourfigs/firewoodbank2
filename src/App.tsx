@@ -259,6 +259,8 @@ function App() {
   >({});
   const [_driverEdits, _setDriverEdits] = useState<Record<string, { mileage: string }>>({});
   const [selectedWorker, setSelectedWorker] = useState<UserRow | null>(null);
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
+  const [workerDetailOpen, setWorkerDetailOpen] = useState(false);
   const [workerEdit, setWorkerEdit] = useState<Partial<UserRow> | null>(null);
   const [workerError, setWorkerError] = useState<string | null>(null);
   const [workerAvailSchedule, setWorkerAvailSchedule] = useState<Record<string, boolean>>({
@@ -285,7 +287,14 @@ function App() {
   const [motdItems, setMotdItems] = useState<MotdRow[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrderRow | null>(null);
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
   const [workOrderDetailOpen, setWorkOrderDetailOpen] = useState(false);
+  const [workOrderDetailEdit, setWorkOrderDetailEdit] = useState<{
+    scheduled_date: string;
+    assignees: string[];
+    helpers: string[];
+  } | null>(null);
+  const [workOrderDetailError, setWorkOrderDetailError] = useState<string | null>(null);
 
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [showChangeRequestModal, setShowChangeRequestModal] = useState(false);
@@ -391,6 +400,27 @@ function App() {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
       d.getMinutes(),
     )}`;
+  };
+
+  const toDateTimeLocalInput = (value?: string | null) => {
+    if (!value) return "";
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    if (trimmed.includes("T")) {
+      return trimmed.length >= 16 ? trimmed.slice(0, 16) : trimmed;
+    }
+    const withT = trimmed.replace(" ", "T");
+    if (withT.includes("T") && withT.length >= 16) {
+      return withT.slice(0, 16);
+    }
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? trimmed : formatDateTimeLocal(parsed);
+  };
+
+  const closeWorkOrderDetail = () => {
+    setWorkOrderDetailOpen(false);
+    setWorkOrderDetailError(null);
+    setWorkOrderDetailEdit(null);
   };
 
   const [workOrderForm, setWorkOrderForm] = useState({
@@ -4142,11 +4172,46 @@ function App() {
                               <div
                                 className="table-row"
                                 key={wo.id}
+                                onClick={() => setSelectedWorkOrderId(wo.id)}
                                 onDoubleClick={() => {
+                                  setSelectedWorkOrderId(wo.id);
                                   setSelectedWorkOrder(wo);
                                   setWorkOrderDetailOpen(true);
+                                  setWorkOrderDetailError(null);
+                                  const parsedAssignees = (() => {
+                                    try {
+                                      const arr = JSON.parse(wo.assignees_json ?? "[]");
+                                      return Array.isArray(arr) ? arr : [];
+                                    } catch {
+                                      return [];
+                                    }
+                                  })();
+                                  const driverNames = new Set(
+                                    users
+                                      .filter((u) => !!u.driver_license_status)
+                                      .map((u) => u.name),
+                                  );
+                                  const assignees = parsedAssignees.filter((name) =>
+                                    driverNames.has(name),
+                                  );
+                                  const helpers = parsedAssignees.filter(
+                                    (name) => !driverNames.has(name),
+                                  );
+                                  setWorkOrderDetailEdit({
+                                    scheduled_date: toDateTimeLocalInput(wo.scheduled_date),
+                                    assignees,
+                                    helpers,
+                                  });
                                 }}
-                                style={{ cursor: "pointer" }}
+                                style={{
+                                  cursor: "pointer",
+                                  backgroundColor:
+                                    selectedWorkOrderId === wo.id ? "#e0e7ff" : undefined,
+                                  borderLeft:
+                                    selectedWorkOrderId === wo.id
+                                      ? "4px solid #4f46e5"
+                                      : "4px solid transparent",
+                                }}
                                 title="Double-click to view details"
                               >
                                 {session?.role === "volunteer" ? (
@@ -4368,7 +4433,7 @@ function App() {
                       justifyContent: "center",
                       zIndex: 1000,
                     }}
-                    onClick={() => setWorkOrderDetailOpen(false)}
+                    onClick={closeWorkOrderDetail}
                   >
                     <div
                       className="card"
@@ -4386,7 +4451,7 @@ function App() {
                         <button
                           className="ghost"
                           type="button"
-                          onClick={() => setWorkOrderDetailOpen(false)}
+                          onClick={closeWorkOrderDetail}
                           style={{ padding: "0.25rem 0.5rem" }}
                         >
                           ×
@@ -4542,6 +4607,186 @@ function App() {
                         )}
                       </div>
 
+                      {(session?.role === "admin" ||
+                        session?.role === "staff" ||
+                        session?.role === "lead") &&
+                        workOrderDetailEdit && (
+                          <>
+                            <hr style={{ border: "none", borderTop: "1px solid #eee" }} />
+                            <div className="stack" style={{ gap: "0.75rem" }}>
+                              <strong>Scheduling & assignments</strong>
+                              <label>
+                                Scheduled date
+                                <input
+                                  type="datetime-local"
+                                  value={workOrderDetailEdit.scheduled_date}
+                                  onChange={(e) =>
+                                    setWorkOrderDetailEdit((prev) =>
+                                      prev
+                                        ? { ...prev, scheduled_date: e.target.value }
+                                        : prev,
+                                    )
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Assign driver(s)
+                                <select
+                                  multiple
+                                  value={workOrderDetailEdit.assignees}
+                                  onChange={(e) => {
+                                    const selected = Array.from(e.target.selectedOptions).map(
+                                      (o) => o.value,
+                                    );
+                                    setWorkOrderDetailEdit((prev) =>
+                                      prev ? { ...prev, assignees: selected } : prev,
+                                    );
+                                  }}
+                                >
+                                  {users
+                                    .filter((u) => !!u.driver_license_status)
+                                    .map((u) => (
+                                      <option key={u.id} value={u.name}>
+                                        {u.name} {u.vehicle ? `• ${u.vehicle}` : ""}{" "}
+                                        {u.availability_notes ? `• ${u.availability_notes}` : ""}
+                                      </option>
+                                    ))}
+                                </select>
+                              </label>
+                              <div style={{ display: "grid", gap: 8 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <span className="muted">Workers (up to 4)</span>
+                                  <button
+                                    type="button"
+                                    className="ghost"
+                                    disabled={workOrderDetailEdit.helpers.length >= 4}
+                                    onClick={() => {
+                                      if (workOrderDetailEdit.helpers.length >= 4) return;
+                                      setWorkOrderDetailEdit((prev) =>
+                                        prev
+                                          ? {
+                                              ...prev,
+                                              helpers: [...prev.helpers, ""],
+                                            }
+                                          : prev,
+                                      );
+                                    }}
+                                  >
+                                    + Add Worker
+                                  </button>
+                                </div>
+                                {workOrderDetailEdit.helpers.map((helper, idx) => (
+                                  <div key={`detail-helper-${idx}`} style={{ display: "flex", gap: 8 }}>
+                                    <input
+                                      type="text"
+                                      placeholder="Worker first and last name"
+                                      value={helper}
+                                      onChange={(e) => {
+                                        setWorkOrderDetailEdit((prev) => {
+                                          if (!prev) return prev;
+                                          const next = [...prev.helpers];
+                                          next[idx] = e.target.value;
+                                          return { ...prev, helpers: next };
+                                        });
+                                      }}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="ghost"
+                                      onClick={() => {
+                                        setWorkOrderDetailEdit((prev) => {
+                                          if (!prev) return prev;
+                                          const next = [...prev.helpers];
+                                          next.splice(idx, 1);
+                                          return { ...prev, helpers: next };
+                                        });
+                                      }}
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                              {workOrderDetailError && (
+                                <div style={{ color: "#b91c1c" }}>{workOrderDetailError}</div>
+                              )}
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "flex-end",
+                                }}
+                              >
+                                <button
+                                  className="ping"
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={async () => {
+                                    if (!workOrderDetailEdit) return;
+                                    setWorkOrderDetailError(null);
+                                    if (
+                                      workOrderDetailEdit.scheduled_date &&
+                                      workOrderDetailEdit.assignees.length === 0
+                                    ) {
+                                      setWorkOrderDetailError(
+                                        "Assign at least one driver before scheduling.",
+                                      );
+                                      return;
+                                    }
+                                    const helperNames = workOrderDetailEdit.helpers
+                                      .map((h) => h.trim())
+                                      .filter((h) => h.length > 0);
+                                    const combinedAssignees = [
+                                      ...workOrderDetailEdit.assignees,
+                                      ...helperNames,
+                                    ];
+                                    setBusy(true);
+                                    try {
+                                      await invokeTauri("update_work_order_assignees", {
+                                        input: {
+                                          work_order_id: selectedWorkOrder.id,
+                                          assignees_json: JSON.stringify(combinedAssignees),
+                                        },
+                                        role: session?.role ?? null,
+                                        actor: session?.username ?? null,
+                                      });
+                                      await invokeTauri("update_work_order_schedule", {
+                                        input: {
+                                          work_order_id: selectedWorkOrder.id,
+                                          scheduled_date:
+                                            workOrderDetailEdit.scheduled_date || null,
+                                        },
+                                        role: session?.role ?? null,
+                                        actor: session?.username ?? null,
+                                      });
+                                      await loadWorkOrders();
+                                      setSelectedWorkOrder((prev) =>
+                                        prev
+                                          ? {
+                                              ...prev,
+                                              assignees_json: JSON.stringify(combinedAssignees),
+                                              scheduled_date:
+                                                workOrderDetailEdit.scheduled_date || null,
+                                            }
+                                          : prev,
+                                      );
+                                    } catch (e: any) {
+                                      setWorkOrderDetailError(
+                                        typeof e === "string"
+                                          ? e
+                                          : "Failed to update work order.",
+                                      );
+                                    } finally {
+                                      setBusy(false);
+                                    }
+                                  }}
+                                >
+                                  Save assignments/schedule
+                                </button>
+                              </div>
+                            </div>
+                          </>
+                        )}
+
                       <div
                         style={{
                           marginTop: "1.5rem",
@@ -4553,7 +4798,7 @@ function App() {
                         <button
                           className="ghost"
                           type="button"
-                          onClick={() => setWorkOrderDetailOpen(false)}
+                          onClick={closeWorkOrderDetail}
                         >
                           Close
                         </button>
@@ -5113,8 +5358,11 @@ function App() {
                           <div
                             className="table-row"
                             key={u.id}
+                            onClick={() => setSelectedWorkerId(u.id)}
                             onDoubleClick={() => {
+                              setSelectedWorkerId(u.id);
                               setSelectedWorker(u);
+                              setWorkerDetailOpen(true);
                               setWorkerEdit({
                                   email: u.email ?? "",
                                   telephone: u.telephone ?? "",
@@ -5165,7 +5413,13 @@ function App() {
                               }
                               setWorkerError(null);
                             }}
-                            style={{ cursor: "pointer" }}
+                            style={{
+                              cursor: "pointer",
+                              backgroundColor:
+                                selectedWorkerId === u.id ? "#e0e7ff" : undefined,
+                              borderLeft:
+                                selectedWorkerId === u.id ? "4px solid #4f46e5" : "4px solid transparent",
+                            }}
                           >
                             <div>
                               <strong>{u.name}</strong>
@@ -5186,11 +5440,17 @@ function App() {
                       </div>
                     </div>
 
-                    {selectedWorker && (
+                    {workerDetailOpen && selectedWorker && (
                       <div className="card">
                         <div className="list-head">
                           <h3>{selectedWorker.name}</h3>
-                          <button className="ghost" onClick={() => setSelectedWorker(null)}>
+                          <button
+                            className="ghost"
+                            onClick={() => {
+                              setWorkerDetailOpen(false);
+                              setSelectedWorker(null);
+                            }}
+                          >
                             Close
                           </button>
                         </div>
