@@ -481,6 +481,68 @@ export default function Dashboard({
             </div>
           </div>
 
+          {/* Open Work Orders - Single line list, color coded */}
+          {openWorkOrders.length > 0 && (
+            <div className="card">
+              <h3>
+                Open Orders
+                <span
+                  className="badge"
+                  style={{ backgroundColor: "#e67f1e", color: "white", marginLeft: "0.5rem" }}
+                >
+                  {openWorkOrders.length}
+                </span>
+              </h3>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "0.5rem",
+                  marginTop: "0.75rem",
+                }}
+              >
+                {openWorkOrders.map((wo) => {
+                  const status = (wo.status || "").toLowerCase();
+                  // Color coding by status
+                  let bgColor = "#e0e0e0";
+                  let textColor = "#333";
+                  if (status === "received") {
+                    bgColor = "#e3f2fd"; textColor = "#1565c0"; // Blue
+                  } else if (status === "pending") {
+                    bgColor = "#fff3e0"; textColor = "#e65100"; // Orange
+                  } else if (status === "scheduled") {
+                    bgColor = "#e8f5e9"; textColor = "#2e7d32"; // Green
+                  } else if (status === "in_progress") {
+                    bgColor = "#fff9c4"; textColor = "#f9a825"; // Yellow
+                  }
+
+                  return (
+                    <div
+                      key={wo.id}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.25rem",
+                        padding: "0.25rem 0.5rem",
+                        borderRadius: "4px",
+                        fontSize: "0.8rem",
+                        background: bgColor,
+                        color: textColor,
+                        whiteSpace: "nowrap",
+                      }}
+                      title={`${wo.client_name} - ${wo.status}${wo.scheduled_date ? ` (${new Date(wo.scheduled_date).toLocaleDateString()})` : ""}`}
+                    >
+                      <span style={{ fontWeight: 500 }}>{wo.client_name}</span>
+                      <span style={{ opacity: 0.7, fontSize: "0.7rem" }}>
+                        {status}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Upcoming List */}
           <div className="card">
             <h3>Upcoming Events</h3>
@@ -602,67 +664,6 @@ export default function Dashboard({
             </>
           )}
 
-          {/* Open Work Orders - Single line list, color coded */}
-          {openWorkOrders.length > 0 && (
-            <div className="card">
-              <h3>
-                Open Orders
-                <span
-                  className="badge"
-                  style={{ backgroundColor: "#e67f1e", color: "white", marginLeft: "0.5rem" }}
-                >
-                  {openWorkOrders.length}
-                </span>
-              </h3>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "0.5rem",
-                  marginTop: "0.75rem",
-                }}
-              >
-                {openWorkOrders.map((wo) => {
-                  const status = (wo.status || "").toLowerCase();
-                  // Color coding by status
-                  let bgColor = "#e0e0e0";
-                  let textColor = "#333";
-                  if (status === "received") {
-                    bgColor = "#e3f2fd"; textColor = "#1565c0"; // Blue
-                  } else if (status === "pending") {
-                    bgColor = "#fff3e0"; textColor = "#e65100"; // Orange
-                  } else if (status === "scheduled") {
-                    bgColor = "#e8f5e9"; textColor = "#2e7d32"; // Green
-                  } else if (status === "in_progress") {
-                    bgColor = "#fff9c4"; textColor = "#f9a825"; // Yellow
-                  }
-
-                  return (
-                    <div
-                      key={wo.id}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "0.25rem",
-                        padding: "0.25rem 0.5rem",
-                        borderRadius: "4px",
-                        fontSize: "0.8rem",
-                        background: bgColor,
-                        color: textColor,
-                        whiteSpace: "nowrap",
-                      }}
-                      title={`${wo.client_name} - ${wo.status}${wo.scheduled_date ? ` (${new Date(wo.scheduled_date).toLocaleDateString()})` : ""}`}
-                    >
-                      <span style={{ fontWeight: 500 }}>{wo.client_name}</span>
-                      <span style={{ opacity: 0.7, fontSize: "0.7rem" }}>
-                        {status}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
