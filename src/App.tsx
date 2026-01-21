@@ -31,6 +31,7 @@ import {
 
 const tabs = [
   "Dashboard",
+  "Profile",
   "Clients",
   "Inventory",
   "Work Orders",
@@ -696,6 +697,10 @@ function App() {
   const canViewPII =
     session?.role === "admin" || (session?.role === "lead" && session.hipaaCertified);
   const canViewClientPII = canViewPII || isDriver;
+  const profileUser = useMemo(
+    () => (session ? users.find((u) => u.id === session.userId) ?? null : null),
+    [session, users],
+  );
   const filteredClients = useMemo(() => {
     let filtered = clients.filter((c) => {
       if (!clientSearch.trim()) return true;
@@ -763,9 +768,9 @@ function App() {
   }, [clients, clientSearch, clientSortField, clientSortDirection]);
   const visibleTabs = useMemo(() => {
     if (!session) return tabs.filter((t) => t !== "Worker Directory" && t !== "Reports");
-    if (session.role === "volunteer") return ["Dashboard", "Work Orders"];
+    if (session.role === "volunteer") return ["Dashboard", "Profile", "Work Orders"];
     if (session.role === "staff")
-      return ["Dashboard", "Clients", "Inventory", "Work Orders", "Metrics"];
+      return ["Dashboard", "Profile", "Clients", "Inventory", "Work Orders", "Metrics"];
     // admin / lead
     // admin / lead
     if (session.role === "admin" || session.role === "lead") return tabs;
@@ -982,16 +987,6 @@ function App() {
                 Sign out
               </button>
             )}
-            {session && (
-              <button className="ghost" onClick={() => setShowChangeRequestModal(true)}>
-                Request Change
-              </button>
-            )}
-            {session && (
-              <button className="ghost" onClick={() => setShowPasswordModal(true)}>
-                Change Password
-              </button>
-            )}
           </div>
         </header>
       )}
@@ -1036,6 +1031,113 @@ function App() {
                 )}
 
                 {activeTab === "Admin" && session && <AdminPanel session={session} />}
+
+                {activeTab === "Profile" && session && (
+                  <div className="stack">
+                    <div className="card">
+                      <div className="list-head">
+                        <h3>Your Profile</h3>
+                      </div>
+                      <div className="stack">
+                        <div>
+                          <strong>Name:</strong> {profileUser?.name ?? session.name}
+                        </div>
+                        <div>
+                          <strong>Username:</strong> {session.username}
+                        </div>
+                        <div>
+                          <strong>Role:</strong> {profileUser?.role ?? session.role}
+                        </div>
+                        <div>
+                          <strong>Email:</strong> {profileUser?.email ?? session.email ?? "—"}
+                        </div>
+                        <div>
+                          <strong>Phone:</strong> {profileUser?.telephone ?? session.telephone ?? "—"}
+                        </div>
+                        <div>
+                          <strong>Physical Address:</strong>{" "}
+                          {profileUser?.physical_address_line1
+                            ? `${profileUser.physical_address_line1}${profileUser.physical_address_line2 ? `, ${profileUser.physical_address_line2}` : ""}, ${profileUser.physical_address_city ?? ""}, ${profileUser.physical_address_state ?? ""} ${profileUser.physical_address_postal_code ?? ""}`
+                            : "—"}
+                        </div>
+                        <div>
+                          <strong>Mailing Address:</strong>{" "}
+                          {profileUser?.mailing_address_line1
+                            ? `${profileUser.mailing_address_line1}${profileUser.mailing_address_line2 ? `, ${profileUser.mailing_address_line2}` : ""}, ${profileUser.mailing_address_city ?? ""}, ${profileUser.mailing_address_state ?? ""} ${profileUser.mailing_address_postal_code ?? ""}`
+                            : "—"}
+                        </div>
+                        <div>
+                          <strong>Availability Notes:</strong>{" "}
+                          {profileUser?.availability_notes ?? "—"}
+                        </div>
+                        <div>
+                          <strong>Availability Schedule:</strong>{" "}
+                          {profileUser?.availability_schedule
+                            ? (() => {
+                                try {
+                                  const parsed = JSON.parse(profileUser.availability_schedule);
+                                  const days = Object.keys(parsed).filter((d) => parsed[d]);
+                                  return days.length
+                                    ? days.map((d) => d.charAt(0).toUpperCase() + d.slice(1)).join(", ")
+                                    : "None set";
+                                } catch {
+                                  return "None set";
+                                }
+                              })()
+                            : "None set"}
+                        </div>
+                        <div>
+                          <strong>Driver License Status:</strong>{" "}
+                          {profileUser?.driver_license_status ?? "—"}
+                        </div>
+                        <div>
+                          <strong>Driver License Number:</strong>{" "}
+                          {profileUser?.driver_license_number ?? "—"}
+                        </div>
+                        <div>
+                          <strong>Driver License Expiration:</strong>{" "}
+                          {profileUser?.driver_license_expires_on
+                            ? profileUser.driver_license_expires_on.slice(0, 10)
+                            : "—"}
+                        </div>
+                        <div>
+                          <strong>Vehicle:</strong> {profileUser?.vehicle ?? "—"}
+                        </div>
+                        <div>
+                          <strong>Driver:</strong> {profileUser?.is_driver ? "Yes" : "No"}
+                        </div>
+                        <div>
+                          <strong>HIPAA Certified:</strong>{" "}
+                          {profileUser?.hipaa_certified ? "Yes" : "No"}
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          borderTop: "1px solid #eee",
+                          marginTop: "1rem",
+                          paddingTop: "0.75rem",
+                          display: "flex",
+                          gap: "0.5rem",
+                        }}
+                      >
+                        <button
+                          className="ghost"
+                          type="button"
+                          onClick={() => setShowChangeRequestModal(true)}
+                        >
+                          Request Change
+                        </button>
+                        <button
+                          className="ghost"
+                          type="button"
+                          onClick={() => setShowPasswordModal(true)}
+                        >
+                          Change Password
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {activeTab === "Clients" && (
                   <div
@@ -2487,6 +2589,8 @@ function App() {
                                         selectedClientForDetail.physical_address_state || "",
                                       physical_address_postal_code:
                                         selectedClientForDetail.physical_address_postal_code || "",
+                                      mailing_same_as_physical:
+                                        !selectedClientForDetail.mailing_address_line1,
                                       mailing_address_line1:
                                         selectedClientForDetail.mailing_address_line1 || "",
                                       mailing_address_line2:
