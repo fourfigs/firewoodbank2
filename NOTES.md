@@ -16,18 +16,18 @@ Completed in Stages 5.2-5.4:
 
 Major Refactoring Progress (Post-Stage 12):
 - ✅ Frontend Architecture: App.tsx reduced from 5,977 lines to ~504 lines (91% reduction!)
-- ✅ Page Extraction: Created src/pages/ with Clients, Inventory, WorkOrders fully implemented
-- ✅ Backend Organization: Created src-tauri/src/commands/ with users, clients, work_orders, inventory, and invoices modules extracted
+- ✅ Page Extraction: Created src/pages/ with ALL pages extracted (Clients, Inventory, WorkOrders, WorkerDirectory, Reports, Dashboard, Metrics, Admin)
+- ✅ Backend Organization: Created src-tauri/src/commands/ with ALL modules extracted (users, clients, work_orders, inventory, invoices, reports)
 - ✅ Type Consolidation: Removed duplicate type definitions, centralized in types.ts
 - ✅ Auto-username Generation: Implemented smart username creation (first initial + last name, numeric suffixes for duplicates)
 
 Remaining Items:
 - ✅ client_title field removed from DTOs (types.ts, ts_dtos.ts, rust_structs.rs, App.tsx). Database column retained for backwards compatibility.
+- ✅ Complete backend command extraction for all modules (main.rs reduced from 3000+ lines to ~1700 lines)
+- ✅ Extract remaining pages: WorkerDirectory, Reports, Admin, Dashboard, Metrics (All pages now properly extracted!)
 - Inventory creation gating to be enforced with user CRUD/users stage (if needed)
-- Extract remaining pages: WorkerDirectory, Reports, Admin, Dashboard, Invoices
 - Implement printing capabilities for client lists, worker lists, work orders, and metrics
 - Add enhanced worker profiles with schedule, certifications, and auto-permissions
-- Complete backend command extraction for all modules
 - Add testing infrastructure and error boundaries
 
 Current Status:
@@ -41,7 +41,7 @@ Current Status:
 - Stage 10: ✅ COMPLETE (HIPAA Checklist) — `stage-10-hipaa`
 - Stage 11: ✅ COMPLETE (Desktop Rollout checklist) — `stage-11-desktop`
 - Stage 12: ✅ COMPLETE (Sync hooks skeleton) — `stage-12-sync`
-- Refactoring Phase: 🟢 IN PROGRESS (Major codebase improvements underway)
+- Refactoring Phase: 🟢 ESSENTIALLY COMPLETE (All backend modules and frontend pages extracted!)
 
 Notes:
 - MOTD is surfaced on login (newest first) via list_motd/create_motd

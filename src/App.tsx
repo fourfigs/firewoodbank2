@@ -2,10 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 
 import { invokeTauri } from "./api/tauri";
 import Nav from "./components/Nav";
-import Dashboard from "./components/Dashboard";
 import AdminPanel from "./components/AdminPanel";
 import ChangeRequestModal from "./components/ChangeRequestModal";
-import ReportsTab from "./components/ReportsTab";
+import { Reports, Dashboard, Metrics } from "./pages";
 import firewoodIcon from "./assets/logo.png";
 import "./index.css";
 import {
@@ -461,7 +460,6 @@ function App() {
                     users={users}
                     userDeliveryHours={userDeliveryHours}
                     workOrders={workOrders}
-                    onWorkerSelect={() => {}} // Placeholder
                   />
                 )}
 
@@ -543,15 +541,14 @@ function App() {
                   />
                 )}
 
-                {activeTab === "Metrics" && (
-                  <div className="stack">
-                    <div className="card muted">
-                      <div className="add-header">
-                        <h3>Metrics Dashboard</h3>
-                        <p>Coming soon - extracted to src/pages/Metrics.tsx</p>
-                      </div>
-                    </div>
-                  </div>
+                {activeTab === "Metrics" && session && (
+                  <Metrics
+                    session={session}
+                    deliveries={deliveries}
+                    inventory={inventory}
+                    users={users}
+                    workOrders={workOrders}
+                  />
                 )}
 
                 {activeTab === "Worker Directory" && session && (
@@ -571,7 +568,7 @@ function App() {
                   />
                 )}
 
-                {activeTab === "Reports" && session && <ReportsTab session={session} />}
+                {activeTab === "Reports" && session && <Reports session={session} />}
 
                 {activeTab === "Admin" && session && <AdminPanel session={session} />}
               </div>
