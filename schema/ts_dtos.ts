@@ -119,7 +119,7 @@ export interface Invoice {
   status: InvoiceStatus;
 }
 
-export type UserRole = "admin" | "lead" | "staff" | "volunteer";
+export type UserRole = "admin" | "lead" | "staff" | "employee" | "volunteer";
 
 export interface User {
   meta: SyncMeta;

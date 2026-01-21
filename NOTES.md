@@ -35,7 +35,7 @@ Notes:
 - Audit logs persist to audit_logs table with filtering by day/7days/month/year/all
 - Town derivation for volunteer view is NOT needed (old mistake) - standard contact form names should be used
 - Driver availability is now integrated with weekly schedule tracking
-- Auth uses `auth_users` with bcrypt hashes; seed logins include `admin/admin`, `lead/lead`, `staff/staff`, `volunteer/volunteer`, and `sketch/Sketching2!`
+- Auth uses `auth_users` with bcrypt hashes; seed logins include `admin/admin`, `staff/staff`, `employee/employee`, `volunteer/volunteer`, and `sketch/Sketching2!`
 - For SQLx compile-time checks, run `cargo run --bin bootstrap_db` and set `DATABASE_URL` (URL-encode spaces)
 
 Review & Improvement Suggestions (Program Structure + Workflow):
@@ -48,7 +48,7 @@ Review & Improvement Suggestions (Program Structure + Workflow):
 - Replace `window.print()` with a Tauri-side print command for consistent native printing behavior.
 - ✅ Add `dev` docs for DATABASE_URL encoding and `.env` usage — documented in README.md with Windows path encoding table and SQLx bootstrap instructions
 - Add tests: unit tests for Rust auth + work order status transitions; basic UI smoke tests for critical tabs.
-- ✅ Standardize role names across UI, Rust, docs, and seeds — roles are now `admin/lead/staff/volunteer`. The `lead` role is used for team leads with elevated permissions (can view PII if HIPAA certified).
+- ✅ Standardize role names across UI, Rust, docs, and seeds — roles are now `admin/lead/staff/employee/volunteer`. The `lead` role is used for team leads with elevated permissions (can view PII if HIPAA certified).
 - Split `src-tauri/src/main.rs` into command modules (e.g., `commands/users.rs`, `commands/work_orders.rs`) and move shared SQL into `db`/`services` layers. (main.rs is 3000+ lines)
 - Add a `src/pages` (or `features`) directory and move tab content components out of `App.tsx` to reduce re-render scope and improve readability.
 - ✅ Add DB indexes for common filters — migration 0016 adds indexes on work_orders.status, scheduled_date, audit_logs.created_at, delivery_events.start_date, clients.name

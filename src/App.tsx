@@ -168,7 +168,7 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
               display: "block",
             }}
           >
-            💡 Demo: admin/admin, lead/lead, staff/staff
+            💡 Demo: admin/admin, staff/staff, employee/employee, volunteer/volunteer
           </div>
           {loginError && (
             <div
@@ -599,6 +599,22 @@ function App() {
     setDeliveries(data);
   };
 
+  const createScheduleEvent = async (input: {
+    title: string;
+    description?: string | null;
+    event_type: string;
+    start_date: string;
+    end_date?: string | null;
+    color_code?: string | null;
+  }) => {
+    await invokeTauri("create_delivery_event", {
+      input,
+      role: session?.role ?? null,
+      actor: session?.username ?? null,
+    });
+    await loadDeliveries();
+  };
+
   const loadUsers = async () => {
     const data = await invokeTauri<UserRow[]>("list_users");
     const mapped = data.map((u) => ({
@@ -689,7 +705,12 @@ function App() {
     setBusy(true);
     try {
       const tasks: Promise<unknown>[] = [];
-      if (session?.role === "admin" || session?.role === "lead" || session?.role === "staff") {
+      if (
+        session?.role === "admin" ||
+        session?.role === "lead" ||
+        session?.role === "staff" ||
+        session?.role === "employee"
+      ) {
         await invokeTauri("ensure_user_exists", {
           input: {
             name: session.name,
@@ -722,12 +743,15 @@ function App() {
     }
   };
 
-  const canManage = session?.role === "admin" || session?.role === "lead";
+  const isAdmin = session?.role === "admin";
+  const isLead = session?.role === "lead";
+  const isStaffLike = session?.role === "staff" || session?.role === "employee";
+  const canManage = isAdmin || isLead;
   const isDriver = session?.isDriver ?? false;
-  const canCreateWorkOrders = session?.role === "admin" || session?.role === "staff";
+  const canCreateWorkOrders = isAdmin || isStaffLike;
   const workerDetailValues = workerEdit ?? selectedWorker;
   const canViewPII =
-    session?.role === "admin" || (session?.role === "lead" && session.hipaaCertified);
+    isAdmin || (isLead && session.hipaaCertified);
   const canViewClientPII = canViewPII || isDriver;
   const profileUser = useMemo(
     () => (session ? users.find((u) => u.id === session.userId) ?? null : null),
@@ -1080,7 +1104,7 @@ function App() {
   const visibleTabs = useMemo(() => {
     if (!session) return tabs.filter((t) => t !== "Worker Directory" && t !== "Reports");
     if (session.role === "volunteer") return ["Dashboard", "Profile", "Work Orders"];
-    if (session.role === "staff")
+    if (session.role === "staff" || session.role === "employee")
       return ["Dashboard", "Profile", "Clients", "Inventory", "Work Orders", "Metrics"];
     // admin / lead
     // admin / lead
@@ -1121,7 +1145,10 @@ function App() {
     const base = [...users];
     if (
       session &&
-      (session.role === "admin" || session.role === "staff" || session.role === "lead")
+      (session.role === "admin" ||
+        session.role === "staff" ||
+        session.role === "employee" ||
+        session.role === "lead")
     ) {
       const exists = base.some(
         (u) => u.name.trim().toLowerCase() === session.name.trim().toLowerCase(),
@@ -1328,8 +1355,14 @@ function App() {
                     users={users}
                     userDeliveryHours={userDeliveryHours}
                     workOrders={workOrders}
+                    onCreateScheduleEvent={createScheduleEvent}
                     onWorkerSelect={(user) => {
-                      if (session?.role === "admin" || session?.role === "staff" || session?.role === "lead") {
+                      if (
+                        session?.role === "admin" ||
+                        session?.role === "staff" ||
+                        session?.role === "employee" ||
+                        session?.role === "lead"
+                      ) {
                         openWorkerDetail(user);
                         setActiveTab("Worker Directory");
                       }
@@ -3996,7 +4029,7 @@ function App() {
                         <h3>Schedule work order</h3>
                       </div>
                       {!canCreateWorkOrders && (
-                        <p className="muted">Only staff or admins can add work orders.</p>
+                        <p className="muted">Only staff/employee or admins can add work orders.</p>
                       )}
                       {showWorkOrderForm ? (
                         <>
@@ -4261,7 +4294,7 @@ function App() {
                               }
 
                               if (!canCreateWorkOrders) {
-                                setWorkOrderError("Only staff or admin can create work orders.");
+                                setWorkOrderError("Only staff/employee or admin can create work orders.");
                                 return;
                               }
 
@@ -5016,7 +5049,7 @@ function App() {
                                       scheduled_date: e.target.value,
                                     })
                                   }
-                                disabled={session?.role === "staff"}
+                                disabled={isStaffLike}
                               />
                             </label>
                             <label>
@@ -5623,9 +5656,7 @@ function App() {
                           )}
                         </div>
 
-                        {(session?.role === "admin" ||
-                          session?.role === "staff" ||
-                          session?.role === "lead") && (
+                        {(isAdmin || isLead || isStaffLike) && (
                           <>
                             <hr style={{ border: "none", borderTop: "1px solid #eee" }} />
                             <div>
@@ -5695,10 +5726,7 @@ function App() {
                         )}
                       </div>
 
-                      {(session?.role === "admin" ||
-                        session?.role === "staff" ||
-                        session?.role === "lead") &&
-                        workOrderDetailEdit && (
+                      {(isAdmin || isLead || isStaffLike) && workOrderDetailEdit && (
                           <>
                             <hr style={{ border: "none", borderTop: "1px solid #eee" }} />
                             <div className="stack" style={{ gap: "0.75rem" }}>
@@ -6244,6 +6272,7 @@ function App() {
                                   >
                                     <option value="volunteer">Volunteer</option>
                                     <option value="staff">Staff</option>
+                                    <option value="employee">Employee</option>
                                     <option value="lead">Lead</option>
                                     <option value="admin">Admin</option>
                                   </select>

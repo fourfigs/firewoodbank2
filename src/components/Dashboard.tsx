@@ -66,6 +66,14 @@ interface DashboardProps {
   workOrders: WorkOrderRow[];
   onWorkerSelect?: (user: UserRow) => void;
   onOpenOrderSelect?: (workOrder: WorkOrderRow) => void;
+  onCreateScheduleEvent?: (input: {
+    title: string;
+    description?: string | null;
+    event_type: string;
+    start_date: string;
+    end_date?: string | null;
+    color_code?: string | null;
+  }) => Promise<void>;
 }
 
 // Helper to check if a date is today
@@ -78,8 +86,44 @@ const isToday = (d: Date) => {
   );
 };
 
-// Helper to parse "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm"
-const parseDate = (str: string) => new Date(str);
+const toDateKey = (d: Date) => d.toISOString().slice(0, 10);
+
+const DEFAULT_WEEKLY_EVENTS = [
+  {
+    weekday: 2,
+    event_type: "delivery",
+    title: "Delivery day",
+    color_code: "#e67f1e",
+  },
+  {
+    weekday: 4,
+    event_type: "cutting",
+    title: "Cutting day",
+    color_code: "#2e7d32",
+  },
+  {
+    weekday: 0,
+    event_type: "splitting",
+    title: "Splitting day",
+    color_code: "#1565c0",
+  },
+];
+
+const DEFAULT_EVENT_COLORS: Record<string, string> = {
+  delivery: "#e67f1e",
+  cutting: "#2e7d32",
+  splitting: "#1565c0",
+  hauling: "#6a1b9a",
+  other: "#607d8b",
+};
+
+const EVENT_ICONS: Record<string, string> = {
+  delivery: "🚚",
+  cutting: "🪓",
+  splitting: "🪵",
+  hauling: "🚛",
+  other: "📌",
+};
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -93,9 +137,19 @@ export default function Dashboard({
   workOrders,
   onWorkerSelect,
   onOpenOrderSelect,
+  onCreateScheduleEvent,
 }: DashboardProps) {
   const [calendarView, setCalendarView] = useState<"2weeks" | "month">("2weeks");
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate] = useState(new Date());
+  const [eventForm, setEventForm] = useState({
+    title: "",
+    description: "",
+    event_type: "cutting",
+    start_date: "",
+    end_date: "",
+    color_code: DEFAULT_EVENT_COLORS.cutting,
+  });
+  const [eventError, setEventError] = useState<string | null>(null);
 
   // --- Wood Summary Logic ---
   const woodSummary = useMemo(() => {
@@ -215,21 +269,46 @@ export default function Dashboard({
     return days;
   }, [calendarView, currentDate]);
 
-  const getEventsForDate = (date: Date) => {
+  const getEventsForDate = React.useCallback((date: Date) => {
     // Naive string match on YYYY-MM-DD
-    const dateStr = date.toISOString().slice(0, 10);
-    return deliveries.filter((d) => d.start_date.startsWith(dateStr));
-  };
+    const dateStr = toDateKey(date);
+    const events = deliveries.filter((d) => d.start_date.startsWith(dateStr));
+    const weekday = date.getDay();
+    const defaults = DEFAULT_WEEKLY_EVENTS.filter((ev) => ev.weekday === weekday).filter(
+      (ev) =>
+        !events.some((existing) => (existing.event_type || "").toLowerCase() === ev.event_type),
+    );
+    const defaultEvents = defaults.map((ev) => ({
+      id: `default-${dateStr}-${ev.event_type}`,
+      title: ev.title,
+      event_type: ev.event_type,
+      start_date: dateStr,
+      end_date: null,
+      work_order_id: null,
+      color_code: ev.color_code,
+      assigned_user_ids_json: "[]",
+    }));
+    return [...events, ...defaultEvents];
+  }, [deliveries]);
 
   // --- Upcoming Deliveries ---
   const upcomingDeliveries = useMemo(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
-    return deliveries
-      .filter((d) => new Date(d.start_date) >= now)
+    const horizon = new Date();
+    horizon.setDate(horizon.getDate() + 21);
+    const days: Date[] = [];
+    for (let i = 0; i <= 21; i += 1) {
+      const d = new Date(now);
+      d.setDate(now.getDate() + i);
+      days.push(d);
+    }
+    const combined = days.flatMap((d) => getEventsForDate(d));
+    return combined
+      .filter((d) => new Date(d.start_date) >= now && new Date(d.start_date) <= horizon)
       .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
       .slice(0, 5);
-  }, [deliveries]);
+  }, [getEventsForDate]);
 
   // --- Low Inventory ---
   const lowInventory = useMemo(() => {
@@ -254,6 +333,17 @@ export default function Dashboard({
   }, [users]);
 
   const isAdminOrLead = session.role === "admin" || session.role === "lead";
+  const canCreateEvents =
+    session.role === "admin" || session.role === "staff" || session.role === "employee";
+  const handleEventTypeChange = (value: string) => {
+    const color = DEFAULT_EVENT_COLORS[value] ?? DEFAULT_EVENT_COLORS.other;
+    setEventForm((prev) => ({
+      ...prev,
+      event_type: value,
+      color_code: color,
+      title: prev.title || `${value.charAt(0).toUpperCase()}${value.slice(1)} day`,
+    }));
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", paddingBottom: "2rem" }}>
@@ -381,6 +471,109 @@ export default function Dashboard({
               </div>
             </div>
 
+            {canCreateEvents && (
+              <div
+                style={{
+                  border: "1px solid #eee",
+                  borderRadius: "6px",
+                  padding: "0.75rem",
+                  marginBottom: "1rem",
+                  background: "#fafafa",
+                }}
+              >
+                <div className="list-head" style={{ marginBottom: "0.5rem" }}>
+                  <h4>Create schedule event</h4>
+                </div>
+                {eventError && <div style={{ color: "#b91c1c" }}>{eventError}</div>}
+                <form
+                  style={{ display: "grid", gap: "0.5rem", gridTemplateColumns: "1fr 1fr" }}
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setEventError(null);
+                    if (!eventForm.start_date) {
+                      setEventError("Pick a date/time for the event.");
+                      return;
+                    }
+                    const title =
+                      eventForm.title ||
+                      `${eventForm.event_type.charAt(0).toUpperCase()}${eventForm.event_type.slice(1)} day`;
+                    if (!onCreateScheduleEvent) {
+                      setEventError("Event creation is not available.");
+                      return;
+                    }
+                    try {
+                      await onCreateScheduleEvent({
+                        title,
+                        description: eventForm.description || null,
+                        event_type: eventForm.event_type,
+                        start_date: eventForm.start_date,
+                        end_date: eventForm.end_date || null,
+                        color_code: eventForm.color_code || null,
+                      });
+                      setEventForm({
+                        title: "",
+                        description: "",
+                        event_type: "cutting",
+                        start_date: "",
+                        end_date: "",
+                        color_code: DEFAULT_EVENT_COLORS.cutting,
+                      });
+                    } catch (err) {
+                      setEventError(
+                        err instanceof Error ? err.message : "Failed to create schedule event.",
+                      );
+                    }
+                  }}
+                >
+                  <label style={{ gridColumn: "1 / -1" }}>
+                    Title
+                    <input
+                      value={eventForm.title}
+                      onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
+                      placeholder="Cutting day"
+                    />
+                  </label>
+                  <label>
+                    Type
+                    <select
+                      value={eventForm.event_type}
+                      onChange={(e) => handleEventTypeChange(e.target.value)}
+                    >
+                      <option value="delivery">delivery</option>
+                      <option value="cutting">cutting</option>
+                      <option value="hauling">hauling</option>
+                      <option value="splitting">splitting</option>
+                      <option value="other">other</option>
+                    </select>
+                  </label>
+                  <label>
+                    Start
+                    <input
+                      type="datetime-local"
+                      value={eventForm.start_date}
+                      onChange={(e) => setEventForm({ ...eventForm, start_date: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    End
+                    <input
+                      type="datetime-local"
+                      value={eventForm.end_date}
+                      onChange={(e) => setEventForm({ ...eventForm, end_date: e.target.value })}
+                    />
+                  </label>
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: "0.5rem" }}>
+                    <button className="ping" type="submit">
+                      Add event
+                    </button>
+                    <span className="muted" style={{ fontSize: "0.8rem" }}>
+                      Staff/employee/admin only
+                    </span>
+                  </div>
+                </form>
+              </div>
+            )}
+
             {/* Calendar Grid */}
             <div
               style={{
@@ -457,7 +650,10 @@ export default function Dashboard({
                         </div>
                       )}
                       {/* Show other events individually */}
-                      {otherEvents.map((ev) => (
+                      {otherEvents.map((ev) => {
+                        const eventType = (ev.event_type || "other").toLowerCase();
+                        const icon = EVENT_ICONS[eventType] ?? EVENT_ICONS.other;
+                        return (
                         <div
                           key={ev.id}
                           style={{
@@ -473,9 +669,10 @@ export default function Dashboard({
                           }}
                           title={ev.title}
                         >
-                          {ev.title}
+                          {icon} {ev.title}
                         </div>
-                      ))}
+                      );
+                      })}
                     </div>
                   </div>
                 );
@@ -551,17 +748,23 @@ export default function Dashboard({
           <div className="card">
             <h3>Upcoming Events</h3>
             <ul className="list">
-              {upcomingDeliveries.map((d) => (
-                <li key={d.id} style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span>
-                    <strong>{d.title}</strong>
-                    <span className="muted" style={{ marginLeft: "0.5rem" }}>
-                      {d.event_type}
+              {upcomingDeliveries.map((d) => {
+                const eventType = (d.event_type || "other").toLowerCase();
+                const icon = EVENT_ICONS[eventType] ?? EVENT_ICONS.other;
+                return (
+                  <li key={d.id} style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span>
+                      <strong>
+                        {icon} {d.title}
+                      </strong>
+                      <span className="muted" style={{ marginLeft: "0.5rem" }}>
+                        {d.event_type}
+                      </span>
                     </span>
-                  </span>
-                  <span>{new Date(d.start_date).toLocaleDateString()}</span>
-                </li>
-              ))}
+                    <span>{new Date(d.start_date).toLocaleDateString()}</span>
+                  </li>
+                );
+              })}
               {upcomingDeliveries.length === 0 && (
                 <li className="muted">No upcoming events scheduled.</li>
               )}

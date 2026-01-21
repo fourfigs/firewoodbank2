@@ -82,8 +82,13 @@ fn role_rank(role: &str) -> i32 {
         "admin" => 3,
         "lead" => 2,
         "staff" => 1,
+        "employee" => 1,
         _ => 0,
     }
+}
+
+fn is_staff_like(role: &str) -> bool {
+    role == "staff" || role == "employee"
 }
 
 fn resolve_database_url() -> String {
@@ -242,13 +247,23 @@ async fn ensure_seed_login(
 
 async fn seed_default_logins(pool: &SqlitePool) -> anyhow::Result<()> {
     migrate_auth_passwords(pool).await.map_err(|e| anyhow::anyhow!(e))?;
+    sqlx::query(
+        r#"
+        UPDATE auth_users
+        SET is_deleted = 1, updated_at = datetime('now')
+        WHERE username = 'lead' AND is_deleted = 0
+        "#,
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
     ensure_seed_login(pool, "admin", "admin", "Admin", "admin", true)
         .await
         .map_err(|e| anyhow::anyhow!(e))?;
-    ensure_seed_login(pool, "lead", "lead", "Lead", "lead", true)
+    ensure_seed_login(pool, "staff", "staff", "Staff", "staff", false)
         .await
         .map_err(|e| anyhow::anyhow!(e))?;
-    ensure_seed_login(pool, "staff", "staff", "Staff", "staff", false)
+    ensure_seed_login(pool, "employee", "employee", "Employee", "employee", false)
         .await
         .map_err(|e| anyhow::anyhow!(e))?;
     ensure_seed_login(pool, "volunteer", "volunteer", "Volunteer", "volunteer", false)
@@ -1279,7 +1294,7 @@ async fn create_work_order(
     let status = input.status.unwrap_or_else(|| "draft".to_string());
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
     let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
-    if role_val != "admin" && role_val != "staff" {
+    if role_val != "admin" && !is_staff_like(&role_val) {
         return Err("Only staff or admin may create work orders".to_string());
     }
     audit_db(&state.pool, "create_work_order", &role_val, "unknown").await;
@@ -1435,6 +1450,74 @@ async fn list_work_orders(
     hipaa_certified: Option<bool>,
     is_driver: Option<bool>,
 ) -> Result<Vec<WorkOrderRow>, String> {
+    sqlx::query(
+        r#"
+        UPDATE work_orders
+        SET status = 'scheduled', updated_at = datetime('now')
+        WHERE is_deleted = 0
+          AND scheduled_date IS NOT NULL
+          AND lower(status) IN ('received', 'pending', 'rescheduled', 'draft')
+        "#,
+    )
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    #[derive(sqlx::FromRow)]
+    struct MissingDeliveryRow {
+        id: String,
+        client_name: String,
+        scheduled_date: String,
+        assignees_json: Option<String>,
+    }
+
+    let missing_deliveries = sqlx::query_as::<_, MissingDeliveryRow>(
+        r#"
+        SELECT
+            id,
+            client_name,
+            scheduled_date,
+            COALESCE(assignees_json, '[]') as assignees_json
+        FROM work_orders
+        WHERE is_deleted = 0
+          AND scheduled_date IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1
+              FROM delivery_events
+              WHERE work_order_id = work_orders.id
+                AND is_deleted = 0
+          )
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    for missing in missing_deliveries {
+        let delivery_id = Uuid::new_v4().to_string();
+        sqlx::query(
+            r#"
+            INSERT INTO delivery_events (
+                id, title, description, event_type, work_order_id,
+                start_date, end_date, color_code, assigned_user_ids_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&delivery_id)
+        .bind(format!("Delivery for {}", missing.client_name))
+        .bind::<Option<String>>(None)
+        .bind("delivery")
+        .bind(&missing.id)
+        .bind(&missing.scheduled_date)
+        .bind::<Option<String>>(None)
+        .bind("#e67f1e")
+        .bind(&missing.assignees_json)
+        .execute(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
     let mut rows = sqlx::query_as::<_, WorkOrderRow>(
         r#"
         SELECT
@@ -1509,7 +1592,7 @@ async fn list_work_orders(
                 wo
             })
             .collect();
-    } else if role_val == "staff" || role_val == "lead" {
+    } else if is_staff_like(&role_val) || role_val == "lead" {
         if role_val == "lead" && is_hipaa {
             // full access
         } else {
@@ -1631,9 +1714,16 @@ async fn adjust_inventory_for_transition_tx(
 async fn create_delivery_event(
     state: State<'_, AppState>,
     input: DeliveryEventInput,
+    role: Option<String>,
+    actor: Option<String>,
 ) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
-    audit_db(&state.pool, "create_delivery_event", "unknown", "unknown").await;
+    let role_val = role.unwrap_or_else(|| "unknown".to_string()).to_lowercase();
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
+    if role_val != "admin" && !is_staff_like(&role_val) {
+        return Err("Only staff or admins can create schedule events.".to_string());
+    }
+    audit_db(&state.pool, "create_delivery_event", &role_val, &actor_val).await;
     let query = r#"
         INSERT INTO delivery_events (
             id, title, description, event_type, work_order_id,
@@ -2680,7 +2770,7 @@ async fn update_work_order_assignees(
 ) -> Result<(), String> {
     let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
     let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
-    if role_val != "admin" && role_val != "lead" && role_val != "staff" {
+    if role_val != "admin" && role_val != "lead" && !is_staff_like(&role_val) {
         return Err("Only staff or admins can assign drivers/helpers".to_string());
     }
     audit_db(
@@ -2760,7 +2850,7 @@ async fn update_work_order_schedule(
 ) -> Result<(), String> {
     let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
     let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
-    if role_val != "admin" && role_val != "staff" && role_val != "lead" {
+    if role_val != "admin" && role_val != "lead" && !is_staff_like(&role_val) {
         return Err("Only staff or admin may schedule work orders".to_string());
     }
     audit_db(
@@ -3173,7 +3263,9 @@ async fn list_delivery_events(
             .collect();
     } else if !(role_val == "admin" || (role_val == "lead" && is_hipaa)) {
         rows.iter_mut().for_each(|ev| {
-            ev.title = "Hidden".to_string();
+            if ev.work_order_id.is_some() {
+                ev.title = "Hidden".to_string();
+            }
         });
     }
 
