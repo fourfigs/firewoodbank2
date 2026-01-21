@@ -88,6 +88,7 @@ pub struct WorkOrder {
     pub notes: Option<String>,
     pub scheduled_date: Option<Timestamp>,
     pub status: WorkOrderStatus,
+    pub work_hours: Option<f64>,
     pub delivery_size_label: Option<String>,
     pub delivery_size_cords: Option<f64>,
     pub pickup_delivery_type: Option<String>,

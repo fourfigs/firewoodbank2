@@ -4,7 +4,6 @@ import { invokeTauri } from "./api/tauri";
 import Nav from "./components/Nav";
 import Dashboard from "./components/Dashboard";
 import AdminPanel from "./components/AdminPanel";
-import ChangeRequestModal from "./components/ChangeRequestModal";
 import ReportsTab from "./components/ReportsTab";
 import logo from "./assets/logo.png";
 import firewoodIcon from "./assets/logo.png";
@@ -262,7 +261,7 @@ function App() {
   const [clientError, setClientError] = useState<string | null>(null);
   const [workOrderError, setWorkOrderError] = useState<string | null>(null);
   const [progressEdits, setProgressEdits] = useState<
-    Record<string, { status: string; mileage: string }>
+    Record<string, { status: string; mileage: string; hours: string }>
   >({});
   const [_driverEdits, _setDriverEdits] = useState<Record<string, { mileage: string }>>({});
   const [selectedWorker, setSelectedWorker] = useState<UserRow | null>(null);
@@ -306,10 +305,41 @@ function App() {
   const [workOrderDetailError, setWorkOrderDetailError] = useState<string | null>(null);
 
   const [inventoryError, setInventoryError] = useState<string | null>(null);
-  const [showChangeRequestModal, setShowChangeRequestModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ current: "", next: "", confirm: "" });
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [profileEditMode, setProfileEditMode] = useState(false);
+  const [profileEdit, setProfileEdit] = useState({
+    email: "",
+    telephone: "",
+    physical_address_line1: "",
+    physical_address_line2: "",
+    physical_address_city: "",
+    physical_address_state: "",
+    physical_address_postal_code: "",
+    mailing_same_as_physical: true,
+    mailing_address_line1: "",
+    mailing_address_line2: "",
+    mailing_address_city: "",
+    mailing_address_state: "",
+    mailing_address_postal_code: "",
+    availability_notes: "",
+    vehicle: "",
+    driver_license_status: "",
+    driver_license_number: "",
+    driver_license_expires_on: "",
+    is_driver: false,
+    hipaa_certified: false,
+  });
+  const [profileAvailSchedule, setProfileAvailSchedule] = useState<Record<string, boolean>>({
+    monday: false,
+    tuesday: false,
+    wednesday: false,
+    thursday: false,
+    friday: false,
+    saturday: false,
+    sunday: false,
+  });
 
   // Worker form state (for adding new workers in Worker Directory tab)
   const [showWorkerForm, setShowWorkerForm] = useState(false);
@@ -469,6 +499,7 @@ function App() {
     other_heat_source_electric: false,
     other_heat_source_other: "",
     mileage: "",
+    work_hours: "",
     mailingSameAsPhysical: true,
     assignees: [] as string[],
     helpers: [] as string[],
@@ -547,11 +578,12 @@ function App() {
       is_driver: session?.isDriver ?? false,
     });
     setWorkOrders(data);
-    const nextProgress: Record<string, { status: string; mileage: string }> = {};
+    const nextProgress: Record<string, { status: string; mileage: string; hours: string }> = {};
     data.forEach((wo) => {
       nextProgress[wo.id] = {
         status: wo.status ?? "scheduled",
         mileage: wo.mileage != null ? String(wo.mileage) : "",
+        hours: wo.work_hours != null ? String(wo.work_hours) : "",
       };
     });
     setProgressEdits(nextProgress);
@@ -701,6 +733,285 @@ function App() {
     () => (session ? users.find((u) => u.id === session.userId) ?? null : null),
     [session, users],
   );
+  const profileWorkEvents = useMemo(() => {
+    if (!session) return [];
+    const uname = (session.username ?? "").toLowerCase();
+    const displayName = (session.name ?? "").toLowerCase();
+    return deliveries.filter((d) => {
+      let assigned: string[] = [];
+      try {
+        const parsed = JSON.parse(d.assigned_user_ids_json ?? "[]");
+        if (Array.isArray(parsed)) {
+          assigned = parsed
+            .map((x) => (typeof x === "string" ? x.toLowerCase() : ""))
+            .filter(Boolean);
+        }
+      } catch {
+        assigned = [];
+      }
+      return assigned.includes(uname) || (displayName && assigned.includes(displayName));
+    });
+  }, [deliveries, session]);
+  const profileWorkByDate = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    profileWorkEvents.forEach((ev) => {
+      const date = new Date(ev.start_date);
+      if (Number.isNaN(date.getTime())) return;
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+        date.getDate(),
+      ).padStart(2, "0")}`;
+      const type = (ev.event_type ?? "delivery").toLowerCase();
+      if (!map.has(key)) map.set(key, new Set());
+      map.get(key)?.add(type);
+    });
+    return map;
+  }, [profileWorkEvents]);
+  const profileHourTotals = useMemo(() => {
+    if (!session) return { weekly: 0, monthly: 0, total: 0 };
+    const uname = (session.username ?? "").toLowerCase();
+    const displayName = (session.name ?? "").toLowerCase();
+    const nowDate = new Date();
+    const weekStart = new Date(nowDate);
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
+    const monthStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1);
+    const monthEnd = new Date(nowDate.getFullYear(), nowDate.getMonth() + 1, 1);
+
+    let weekly = 0;
+    let monthly = 0;
+    let total = 0;
+
+    workOrders.forEach((wo) => {
+      if ((wo.status ?? "").toLowerCase() !== "completed") return;
+      if (wo.work_hours == null) return;
+      let assignees: string[] = [];
+      try {
+        const parsed = JSON.parse(wo.assignees_json ?? "[]");
+        if (Array.isArray(parsed)) {
+          assignees = parsed
+            .map((x) => (typeof x === "string" ? x.toLowerCase() : ""))
+            .filter(Boolean);
+        }
+      } catch {
+        assignees = [];
+      }
+      const matched = assignees.includes(uname) || (displayName && assignees.includes(displayName));
+      if (!matched) return;
+      const hours = Number(wo.work_hours) || 0;
+      total += hours;
+      const dateValue = new Date(wo.scheduled_date ?? wo.created_at ?? "");
+      if (!Number.isNaN(dateValue.getTime())) {
+        if (dateValue >= weekStart && dateValue < weekEnd) weekly += hours;
+        if (dateValue >= monthStart && dateValue < monthEnd) monthly += hours;
+      }
+    });
+
+    return { weekly, monthly, total };
+  }, [session, workOrders]);
+  const profileCalendarDays = useMemo(() => {
+    const base = new Date();
+    const year = base.getFullYear();
+    const month = base.getMonth();
+    const first = new Date(year, month, 1);
+    const startDay = first.getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const days: Array<{ date: Date | null; key: string }> = [];
+    for (let i = 0; i < startDay; i += 1) {
+      days.push({ date: null, key: `blank-${i}` });
+    }
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = new Date(year, month, day);
+      days.push({ date, key: `day-${day}` });
+    }
+    return days;
+  }, []);
+
+  const startProfileEdit = () => {
+    const source = profileUser;
+    setProfileEdit({
+      email: source?.email ?? session?.email ?? "",
+      telephone: source?.telephone ?? session?.telephone ?? "",
+      physical_address_line1: source?.physical_address_line1 ?? "",
+      physical_address_line2: source?.physical_address_line2 ?? "",
+      physical_address_city: source?.physical_address_city ?? "",
+      physical_address_state: source?.physical_address_state ?? "",
+      physical_address_postal_code: source?.physical_address_postal_code ?? "",
+      mailing_same_as_physical: !source?.mailing_address_line1?.trim(),
+      mailing_address_line1: source?.mailing_address_line1 ?? "",
+      mailing_address_line2: source?.mailing_address_line2 ?? "",
+      mailing_address_city: source?.mailing_address_city ?? "",
+      mailing_address_state: source?.mailing_address_state ?? "",
+      mailing_address_postal_code: source?.mailing_address_postal_code ?? "",
+      availability_notes: source?.availability_notes ?? "",
+      vehicle: source?.vehicle ?? "",
+      driver_license_status: source?.driver_license_status ?? "",
+      driver_license_number: source?.driver_license_number ?? "",
+      driver_license_expires_on: source?.driver_license_expires_on?.slice(0, 10) ?? "",
+      is_driver: !!source?.is_driver,
+      hipaa_certified: !!source?.hipaa_certified,
+    });
+    if (source?.availability_schedule) {
+      try {
+        const parsed = JSON.parse(source.availability_schedule);
+        setProfileAvailSchedule({
+          monday: !!parsed.monday,
+          tuesday: !!parsed.tuesday,
+          wednesday: !!parsed.wednesday,
+          thursday: !!parsed.thursday,
+          friday: !!parsed.friday,
+          saturday: !!parsed.saturday,
+          sunday: !!parsed.sunday,
+        });
+      } catch {
+        setProfileAvailSchedule({
+          monday: false,
+          tuesday: false,
+          wednesday: false,
+          thursday: false,
+          friday: false,
+          saturday: false,
+          sunday: false,
+        });
+      }
+    } else {
+      setProfileAvailSchedule({
+        monday: false,
+        tuesday: false,
+        wednesday: false,
+        thursday: false,
+        friday: false,
+        saturday: false,
+        sunday: false,
+      });
+    }
+    setProfileEditMode(true);
+  };
+
+  const submitProfileChangeRequest = async () => {
+    if (!session) return;
+    const changes: string[] = [];
+    const pushChange = (label: string, before?: string | null, after?: string | null) => {
+      const prev = (before ?? "").trim();
+      const next = (after ?? "").trim();
+      if (prev !== next) changes.push(`${label}: "${prev || "—"}" → "${next || "—"}"`);
+    };
+    pushChange("Email", profileUser?.email, profileEdit.email);
+    pushChange("Phone", profileUser?.telephone, profileEdit.telephone);
+    pushChange(
+      "Physical Address Line 1",
+      profileUser?.physical_address_line1,
+      profileEdit.physical_address_line1,
+    );
+    pushChange(
+      "Physical Address Line 2",
+      profileUser?.physical_address_line2,
+      profileEdit.physical_address_line2,
+    );
+    pushChange(
+      "Physical City",
+      profileUser?.physical_address_city,
+      profileEdit.physical_address_city,
+    );
+    pushChange(
+      "Physical State",
+      profileUser?.physical_address_state,
+      profileEdit.physical_address_state,
+    );
+    pushChange(
+      "Physical ZIP",
+      profileUser?.physical_address_postal_code,
+      profileEdit.physical_address_postal_code,
+    );
+    const mailingSame = profileEdit.mailing_same_as_physical;
+    const mailingLine1 = mailingSame
+      ? profileEdit.physical_address_line1
+      : profileEdit.mailing_address_line1;
+    const mailingLine2 = mailingSame
+      ? profileEdit.physical_address_line2
+      : profileEdit.mailing_address_line2;
+    const mailingCity = mailingSame
+      ? profileEdit.physical_address_city
+      : profileEdit.mailing_address_city;
+    const mailingState = mailingSame
+      ? profileEdit.physical_address_state
+      : profileEdit.mailing_address_state;
+    const mailingPostal = mailingSame
+      ? profileEdit.physical_address_postal_code
+      : profileEdit.mailing_address_postal_code;
+    pushChange(
+      "Mailing Address Line 1",
+      profileUser?.mailing_address_line1,
+      mailingLine1,
+    );
+    pushChange(
+      "Mailing Address Line 2",
+      profileUser?.mailing_address_line2,
+      mailingLine2,
+    );
+    pushChange("Mailing City", profileUser?.mailing_address_city, mailingCity);
+    pushChange("Mailing State", profileUser?.mailing_address_state, mailingState);
+    pushChange("Mailing ZIP", profileUser?.mailing_address_postal_code, mailingPostal);
+    pushChange("Availability Notes", profileUser?.availability_notes, profileEdit.availability_notes);
+    const scheduleSummary = Object.keys(profileAvailSchedule)
+      .filter((d) => profileAvailSchedule[d])
+      .map((d) => d.charAt(0).toUpperCase() + d.slice(1))
+      .join(", ");
+    const previousSchedule = profileUser?.availability_schedule
+      ? (() => {
+          try {
+            const parsed = JSON.parse(profileUser.availability_schedule);
+            return Object.keys(parsed)
+              .filter((d) => parsed[d])
+              .map((d) => d.charAt(0).toUpperCase() + d.slice(1))
+              .join(", ");
+          } catch {
+            return "";
+          }
+        })()
+      : "";
+    pushChange("Availability Schedule", previousSchedule, scheduleSummary);
+    pushChange("Vehicle", profileUser?.vehicle, profileEdit.vehicle);
+    pushChange(
+      "Driver License Status",
+      profileUser?.driver_license_status,
+      profileEdit.driver_license_status,
+    );
+    pushChange(
+      "Driver License Number",
+      profileUser?.driver_license_number,
+      profileEdit.driver_license_number,
+    );
+    pushChange(
+      "Driver License Expiration",
+      profileUser?.driver_license_expires_on?.slice(0, 10),
+      profileEdit.driver_license_expires_on,
+    );
+    pushChange("Driver", profileUser?.is_driver ? "Yes" : "No", profileEdit.is_driver ? "Yes" : "No");
+    pushChange(
+      "HIPAA Certified",
+      profileUser?.hipaa_certified ? "Yes" : "No",
+      profileEdit.hipaa_certified ? "Yes" : "No",
+    );
+
+    const description = changes.length
+      ? changes.join("\n")
+      : "No changes detected. Requested review of profile.";
+    setBusy(true);
+    try {
+      await invokeTauri("create_change_request", {
+        input: {
+          title: "Profile update request",
+          description,
+          requested_by_user_id: session.username ?? session.userId ?? session.name,
+        },
+      });
+      setProfileEditMode(false);
+    } finally {
+      setBusy(false);
+    }
+  };
   const filteredClients = useMemo(() => {
     let filtered = clients.filter((c) => {
       if (!clientSearch.trim()) return true;
@@ -1038,79 +1349,421 @@ function App() {
                       <div className="list-head">
                         <h3>Your Profile</h3>
                       </div>
-                      <div className="stack">
-                        <div>
-                          <strong>Name:</strong> {profileUser?.name ?? session.name}
-                        </div>
-                        <div>
-                          <strong>Username:</strong> {session.username}
-                        </div>
-                        <div>
-                          <strong>Role:</strong> {profileUser?.role ?? session.role}
-                        </div>
-                        <div>
-                          <strong>Email:</strong> {profileUser?.email ?? session.email ?? "—"}
-                        </div>
-                        <div>
-                          <strong>Phone:</strong> {profileUser?.telephone ?? session.telephone ?? "—"}
-                        </div>
-                        <div>
-                          <strong>Physical Address:</strong>{" "}
-                          {profileUser?.physical_address_line1
-                            ? `${profileUser.physical_address_line1}${profileUser.physical_address_line2 ? `, ${profileUser.physical_address_line2}` : ""}, ${profileUser.physical_address_city ?? ""}, ${profileUser.physical_address_state ?? ""} ${profileUser.physical_address_postal_code ?? ""}`
-                            : "—"}
-                        </div>
-                        <div>
-                          <strong>Mailing Address:</strong>{" "}
-                          {profileUser?.mailing_address_line1
-                            ? `${profileUser.mailing_address_line1}${profileUser.mailing_address_line2 ? `, ${profileUser.mailing_address_line2}` : ""}, ${profileUser.mailing_address_city ?? ""}, ${profileUser.mailing_address_state ?? ""} ${profileUser.mailing_address_postal_code ?? ""}`
-                            : "—"}
-                        </div>
-                        <div>
-                          <strong>Availability Notes:</strong>{" "}
-                          {profileUser?.availability_notes ?? "—"}
-                        </div>
-                        <div>
-                          <strong>Availability Schedule:</strong>{" "}
-                          {profileUser?.availability_schedule
-                            ? (() => {
-                                try {
-                                  const parsed = JSON.parse(profileUser.availability_schedule);
-                                  const days = Object.keys(parsed).filter((d) => parsed[d]);
-                                  return days.length
-                                    ? days.map((d) => d.charAt(0).toUpperCase() + d.slice(1)).join(", ")
-                                    : "None set";
-                                } catch {
-                                  return "None set";
-                                }
-                              })()
-                            : "None set"}
-                        </div>
-                        <div>
-                          <strong>Driver License Status:</strong>{" "}
-                          {profileUser?.driver_license_status ?? "—"}
-                        </div>
-                        <div>
-                          <strong>Driver License Number:</strong>{" "}
-                          {profileUser?.driver_license_number ?? "—"}
-                        </div>
-                        <div>
-                          <strong>Driver License Expiration:</strong>{" "}
-                          {profileUser?.driver_license_expires_on
-                            ? profileUser.driver_license_expires_on.slice(0, 10)
-                            : "—"}
-                        </div>
-                        <div>
-                          <strong>Vehicle:</strong> {profileUser?.vehicle ?? "—"}
-                        </div>
-                        <div>
-                          <strong>Driver:</strong> {profileUser?.is_driver ? "Yes" : "No"}
-                        </div>
-                        <div>
-                          <strong>HIPAA Certified:</strong>{" "}
-                          {profileUser?.hipaa_certified ? "Yes" : "No"}
+                      <div
+                        style={{
+                          background: "#f8fafc",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: 6,
+                          padding: "0.75rem",
+                          marginBottom: "0.75rem",
+                        }}
+                      >
+                        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+                          <div>
+                            <strong>Weekly Hours:</strong>{" "}
+                            {profileHourTotals.weekly.toFixed(1)}
+                          </div>
+                          <div>
+                            <strong>Monthly Hours:</strong>{" "}
+                            {profileHourTotals.monthly.toFixed(1)}
+                          </div>
+                          <div>
+                            <strong>Total Hours:</strong>{" "}
+                            {profileHourTotals.total.toFixed(1)}
+                          </div>
                         </div>
                       </div>
+                      {profileEditMode ? (
+                        <div className="stack">
+                          <div>
+                            <strong>Name:</strong> {profileUser?.name ?? session.name}
+                          </div>
+                          <div>
+                            <strong>Username:</strong> {session.username}
+                          </div>
+                          <div>
+                            <strong>Role:</strong> {profileUser?.role ?? session.role}
+                          </div>
+                          <label>
+                            Email
+                            <input
+                              value={profileEdit.email}
+                              onChange={(e) =>
+                                setProfileEdit({ ...profileEdit, email: e.target.value })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Phone
+                            <input
+                              value={profileEdit.telephone}
+                              onChange={(e) =>
+                                setProfileEdit({ ...profileEdit, telephone: e.target.value })
+                              }
+                              onBlur={(e) =>
+                                setProfileEdit({
+                                  ...profileEdit,
+                                  telephone: normalizePhone(e.target.value),
+                                })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Address Line 1
+                            <input
+                              value={profileEdit.physical_address_line1}
+                              onChange={(e) =>
+                                setProfileEdit({
+                                  ...profileEdit,
+                                  physical_address_line1: e.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Address Line 2
+                            <input
+                              value={profileEdit.physical_address_line2}
+                              onChange={(e) =>
+                                setProfileEdit({
+                                  ...profileEdit,
+                                  physical_address_line2: e.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label>
+                            City
+                            <input
+                              value={profileEdit.physical_address_city}
+                              onChange={(e) =>
+                                setProfileEdit({
+                                  ...profileEdit,
+                                  physical_address_city: e.target.value,
+                                })
+                              }
+                              onBlur={(e) =>
+                                setProfileEdit({
+                                  ...profileEdit,
+                                  physical_address_city: initCapCity(e.target.value),
+                                })
+                              }
+                            />
+                          </label>
+                          <label>
+                            State
+                            <input
+                              value={profileEdit.physical_address_state}
+                              onChange={(e) =>
+                                setProfileEdit({
+                                  ...profileEdit,
+                                  physical_address_state: e.target.value,
+                                })
+                              }
+                              onBlur={(e) =>
+                                setProfileEdit({
+                                  ...profileEdit,
+                                  physical_address_state: normalizeState(e.target.value),
+                                })
+                              }
+                            />
+                          </label>
+                          <label>
+                            ZIP
+                            <input
+                              value={profileEdit.physical_address_postal_code}
+                              onChange={(e) =>
+                                setProfileEdit({
+                                  ...profileEdit,
+                                  physical_address_postal_code: e.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="checkbox">
+                            <input
+                              type="checkbox"
+                              checked={profileEdit.mailing_same_as_physical}
+                              onChange={(e) =>
+                                setProfileEdit({
+                                  ...profileEdit,
+                                  mailing_same_as_physical: e.target.checked,
+                                })
+                              }
+                            />
+                            Mailing same as physical
+                          </label>
+                          {!profileEdit.mailing_same_as_physical && (
+                            <>
+                              <label>
+                                Mailing Line 1
+                                <input
+                                  value={profileEdit.mailing_address_line1}
+                                  onChange={(e) =>
+                                    setProfileEdit({
+                                      ...profileEdit,
+                                      mailing_address_line1: e.target.value,
+                                    })
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Mailing Line 2
+                                <input
+                                  value={profileEdit.mailing_address_line2}
+                                  onChange={(e) =>
+                                    setProfileEdit({
+                                      ...profileEdit,
+                                      mailing_address_line2: e.target.value,
+                                    })
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Mailing City
+                                <input
+                                  value={profileEdit.mailing_address_city}
+                                  onChange={(e) =>
+                                    setProfileEdit({
+                                      ...profileEdit,
+                                      mailing_address_city: e.target.value,
+                                    })
+                                  }
+                                  onBlur={(e) =>
+                                    setProfileEdit({
+                                      ...profileEdit,
+                                      mailing_address_city: initCapCity(e.target.value),
+                                    })
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Mailing State
+                                <input
+                                  value={profileEdit.mailing_address_state}
+                                  onChange={(e) =>
+                                    setProfileEdit({
+                                      ...profileEdit,
+                                      mailing_address_state: e.target.value,
+                                    })
+                                  }
+                                  onBlur={(e) =>
+                                    setProfileEdit({
+                                      ...profileEdit,
+                                      mailing_address_state: normalizeState(e.target.value),
+                                    })
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Mailing ZIP
+                                <input
+                                  value={profileEdit.mailing_address_postal_code}
+                                  onChange={(e) =>
+                                    setProfileEdit({
+                                      ...profileEdit,
+                                      mailing_address_postal_code: e.target.value,
+                                    })
+                                  }
+                                />
+                              </label>
+                            </>
+                          )}
+                          <label>
+                            Availability Notes
+                            <input
+                              value={profileEdit.availability_notes}
+                              onChange={(e) =>
+                                setProfileEdit({
+                                  ...profileEdit,
+                                  availability_notes: e.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <div>
+                            <strong>Weekly Availability Schedule:</strong>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: "1rem",
+                                flexWrap: "wrap",
+                                marginTop: "0.5rem",
+                              }}
+                            >
+                              {Object.keys(profileAvailSchedule).map((day) => (
+                                <label
+                                  key={day}
+                                  className="checkbox"
+                                  style={{ display: "flex", alignItems: "center" }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={profileAvailSchedule[day]}
+                                    onChange={(e) =>
+                                      setProfileAvailSchedule({
+                                        ...profileAvailSchedule,
+                                        [day]: e.target.checked,
+                                      })
+                                    }
+                                  />
+                                  <span
+                                    style={{ marginLeft: "0.25rem", textTransform: "capitalize" }}
+                                  >
+                                    {day}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                          <label>
+                            Vehicle
+                            <input
+                              value={profileEdit.vehicle}
+                              onChange={(e) =>
+                                setProfileEdit({ ...profileEdit, vehicle: e.target.value })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Driver License Status
+                            <input
+                              value={profileEdit.driver_license_status}
+                              onChange={(e) =>
+                                setProfileEdit({
+                                  ...profileEdit,
+                                  driver_license_status: e.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Driver License Number
+                            <input
+                              value={profileEdit.driver_license_number}
+                              onChange={(e) =>
+                                setProfileEdit({
+                                  ...profileEdit,
+                                  driver_license_number: e.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Driver License Expiration
+                            <input
+                              type="date"
+                              value={profileEdit.driver_license_expires_on}
+                              onChange={(e) =>
+                                setProfileEdit({
+                                  ...profileEdit,
+                                  driver_license_expires_on: e.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="checkbox">
+                            <input
+                              type="checkbox"
+                              checked={profileEdit.is_driver}
+                              onChange={(e) =>
+                                setProfileEdit({
+                                  ...profileEdit,
+                                  is_driver: e.target.checked,
+                                })
+                              }
+                            />
+                            Driver
+                          </label>
+                          <label className="checkbox">
+                            <input
+                              type="checkbox"
+                              checked={profileEdit.hipaa_certified}
+                              onChange={(e) =>
+                                setProfileEdit({
+                                  ...profileEdit,
+                                  hipaa_certified: e.target.checked,
+                                })
+                              }
+                            />
+                            HIPAA certified
+                          </label>
+                        </div>
+                      ) : (
+                        <div className="stack">
+                          <div>
+                            <strong>Name:</strong> {profileUser?.name ?? session.name}
+                          </div>
+                          <div>
+                            <strong>Username:</strong> {session.username}
+                          </div>
+                          <div>
+                            <strong>Role:</strong> {profileUser?.role ?? session.role}
+                          </div>
+                          <div>
+                            <strong>Email:</strong> {profileUser?.email ?? session.email ?? "—"}
+                          </div>
+                          <div>
+                            <strong>Phone:</strong> {profileUser?.telephone ?? session.telephone ?? "—"}
+                          </div>
+                          <div>
+                            <strong>Physical Address:</strong>{" "}
+                            {profileUser?.physical_address_line1
+                              ? `${profileUser.physical_address_line1}${profileUser.physical_address_line2 ? `, ${profileUser.physical_address_line2}` : ""}, ${profileUser.physical_address_city ?? ""}, ${profileUser.physical_address_state ?? ""} ${profileUser.physical_address_postal_code ?? ""}`
+                              : "—"}
+                          </div>
+                          <div>
+                            <strong>Mailing Address:</strong>{" "}
+                            {profileUser?.mailing_address_line1
+                              ? `${profileUser.mailing_address_line1}${profileUser.mailing_address_line2 ? `, ${profileUser.mailing_address_line2}` : ""}, ${profileUser.mailing_address_city ?? ""}, ${profileUser.mailing_address_state ?? ""} ${profileUser.mailing_address_postal_code ?? ""}`
+                              : "—"}
+                          </div>
+                          <div>
+                            <strong>Availability Notes:</strong>{" "}
+                            {profileUser?.availability_notes ?? "—"}
+                          </div>
+                          <div>
+                            <strong>Availability Schedule:</strong>{" "}
+                            {profileUser?.availability_schedule
+                              ? (() => {
+                                  try {
+                                    const parsed = JSON.parse(profileUser.availability_schedule);
+                                    const days = Object.keys(parsed).filter((d) => parsed[d]);
+                                    return days.length
+                                      ? days.map((d) => d.charAt(0).toUpperCase() + d.slice(1)).join(", ")
+                                      : "None set";
+                                  } catch {
+                                    return "None set";
+                                  }
+                                })()
+                              : "None set"}
+                          </div>
+                          <div>
+                            <strong>Driver License Status:</strong>{" "}
+                            {profileUser?.driver_license_status ?? "—"}
+                          </div>
+                          <div>
+                            <strong>Driver License Number:</strong>{" "}
+                            {profileUser?.driver_license_number ?? "—"}
+                          </div>
+                          <div>
+                            <strong>Driver License Expiration:</strong>{" "}
+                            {profileUser?.driver_license_expires_on
+                              ? profileUser.driver_license_expires_on.slice(0, 10)
+                              : "—"}
+                          </div>
+                          <div>
+                            <strong>Vehicle:</strong> {profileUser?.vehicle ?? "—"}
+                          </div>
+                          <div>
+                            <strong>Driver:</strong> {profileUser?.is_driver ? "Yes" : "No"}
+                          </div>
+                          <div>
+                            <strong>HIPAA Certified:</strong>{" "}
+                            {profileUser?.hipaa_certified ? "Yes" : "No"}
+                          </div>
+                        </div>
+                      )}
                       <div
                         style={{
                           borderTop: "1px solid #eee",
@@ -1120,20 +1773,176 @@ function App() {
                           gap: "0.5rem",
                         }}
                       >
-                        <button
-                          className="ghost"
-                          type="button"
-                          onClick={() => setShowChangeRequestModal(true)}
-                        >
-                          Request Change
-                        </button>
-                        <button
-                          className="ghost"
-                          type="button"
-                          onClick={() => setShowPasswordModal(true)}
-                        >
-                          Change Password
-                        </button>
+                        {profileEditMode ? (
+                          <>
+                            <button
+                              className="ping"
+                              type="button"
+                              disabled={busy}
+                              onClick={submitProfileChangeRequest}
+                            >
+                              Submit Change Request
+                            </button>
+                            <button
+                              className="ghost"
+                              type="button"
+                              onClick={() => setProfileEditMode(false)}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button className="ghost" type="button" onClick={startProfileEdit}>
+                              Request Change
+                            </button>
+                            <button
+                              className="ghost"
+                              type="button"
+                              onClick={() => setShowPasswordModal(true)}
+                            >
+                              Change Password
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="card">
+                      <div className="list-head">
+                        <h3>Work Calendar</h3>
+                        <div className="muted" style={{ fontSize: "0.85rem" }}>
+                          {new Date().toLocaleString(undefined, { month: "long", year: "numeric" })}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: "1rem", marginBottom: "0.75rem" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                          <span
+                            style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: "50%",
+                              background: "#e67f1e",
+                              display: "inline-block",
+                            }}
+                          />
+                          <span className="muted">Delivering</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                          <span
+                            style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: "50%",
+                              background: "#2e7d32",
+                              display: "inline-block",
+                            }}
+                          />
+                          <span className="muted">Cutting</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                          <span
+                            style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: "50%",
+                              background: "#1565c0",
+                              display: "inline-block",
+                            }}
+                          />
+                          <span className="muted">Splitting</span>
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(7, 1fr)",
+                          gap: "4px",
+                          textAlign: "center",
+                        }}
+                      >
+                        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                          <div
+                            key={d}
+                            style={{
+                              fontWeight: "bold",
+                              fontSize: "0.85rem",
+                              color: "#666",
+                              paddingBottom: "0.5rem",
+                            }}
+                          >
+                            {d}
+                          </div>
+                        ))}
+                        {profileCalendarDays.map((day) => {
+                          if (!day.date) return <div key={day.key} style={{ background: "transparent" }} />;
+                          const dateKey = `${day.date.getFullYear()}-${String(
+                            day.date.getMonth() + 1,
+                          ).padStart(2, "0")}-${String(day.date.getDate()).padStart(2, "0")}`;
+                          const types = profileWorkByDate.get(dateKey);
+                          return (
+                            <div
+                              key={day.key}
+                              style={{
+                                border: "1px solid #eee",
+                                minHeight: "70px",
+                                background: "white",
+                                padding: "4px",
+                                borderRadius: "4px",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  textAlign: "right",
+                                  fontSize: "0.75rem",
+                                  color: "#888",
+                                  marginBottom: "4px",
+                                }}
+                              >
+                                {day.date.getDate()}
+                              </div>
+                              {types && types.size > 0 && (
+                                <div style={{ display: "flex", justifyContent: "center", gap: "4px" }}>
+                                  {types.has("delivery") && (
+                                    <span
+                                      title="Delivering"
+                                      style={{
+                                        width: 8,
+                                        height: 8,
+                                        borderRadius: "50%",
+                                        background: "#e67f1e",
+                                        display: "inline-block",
+                                      }}
+                                    />
+                                  )}
+                                  {types.has("cutting") && (
+                                    <span
+                                      title="Cutting"
+                                      style={{
+                                        width: 8,
+                                        height: 8,
+                                        borderRadius: "50%",
+                                        background: "#2e7d32",
+                                        display: "inline-block",
+                                      }}
+                                    />
+                                  )}
+                                  {types.has("splitting") && (
+                                    <span
+                                      title="Splitting"
+                                      style={{
+                                        width: 8,
+                                        height: 8,
+                                        borderRadius: "50%",
+                                        background: "#1565c0",
+                                        display: "inline-block",
+                                      }}
+                                    />
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -2350,6 +3159,7 @@ function App() {
                                     mileage: selectedClientForDetail.default_mileage != null
                                       ? String(selectedClientForDetail.default_mileage)
                                       : "",
+                                    work_hours: "",
                                     mailingSameAsPhysical: true,
                                     assignees: [],
                                     helpers: [],
@@ -3040,6 +3850,7 @@ function App() {
                                     [workOrder.id]: {
                                       status: e.target.value,
                                       mileage: progressEdits[workOrder.id]?.mileage ?? "",
+                                      hours: progressEdits[workOrder.id]?.hours ?? "",
                                     },
                                   });
                                 }}
@@ -3064,6 +3875,7 @@ function App() {
                                       status:
                                         progressEdits[workOrder.id]?.status ?? workOrder.status,
                                       mileage: e.target.value,
+                                      hours: progressEdits[workOrder.id]?.hours ?? "",
                                     },
                                   });
                                 }}
@@ -3078,6 +3890,7 @@ function App() {
                                   const edit = progressEdits[workOrder.id] ?? {
                                     status: "in_progress",
                                     mileage: "",
+                                    hours: "",
                                   };
                                   setBusy(true);
                                   try {
@@ -3126,6 +3939,7 @@ function App() {
                                 other_heat_source_electric: false,
                                 other_heat_source_other: "",
                                 mileage: "",
+                                work_hours: "",
                                 mailingSameAsPhysical: true,
                                 assignees: [],
                                 helpers: [],
@@ -3217,6 +4031,14 @@ function App() {
                                 setWorkOrderError("Mileage must be a number.");
                                 return;
                               }
+                              const hoursValue =
+                                workOrderForm.work_hours === "" ? null : Number(workOrderForm.work_hours);
+                              if (hoursValue !== null && Number.isNaN(hoursValue)) {
+                                setWorkOrderError("Work hours must be a number.");
+                                return;
+                              }
+                              const isLeadAdmin =
+                                session?.role === "lead" || session?.role === "admin";
                               const statusNeedsDriver = [
                                 "scheduled",
                                 "in_progress",
@@ -3280,6 +4102,14 @@ function App() {
                               }
                               if (workOrderForm.status === "completed" && mileageValue === null) {
                                 setWorkOrderError("Mileage is required to close an order.");
+                                return;
+                              }
+                              if (
+                                workOrderForm.status === "completed" &&
+                                isLeadAdmin &&
+                                hoursValue === null
+                              ) {
+                                setWorkOrderError("Work hours are required to close an order.");
                                 return;
                               }
                               // Optional: create a new client inline for this work order.
@@ -3541,6 +4371,7 @@ function App() {
                                       gate_combo:
                                         workOrderForm.gate_combo || targetClient.gate_combo,
                                       mileage: mileageValue,
+                                      work_hours: isLeadAdmin ? hoursValue : null,
                                       other_heat_source_gas: workOrderForm.other_heat_source_gas,
                                       other_heat_source_electric:
                                         workOrderForm.other_heat_source_electric,
@@ -3592,6 +4423,7 @@ function App() {
                                   other_heat_source_electric: false,
                                   other_heat_source_other: "",
                                   mileage: "",
+                                  work_hours: "",
                                   mailingSameAsPhysical: true,
                                   assignees: [],
                                   helpers: [],
@@ -4203,6 +5035,23 @@ function App() {
                                   }
                               />
                             </label>
+                            {(session?.role === "lead" || session?.role === "admin") && (
+                              <label>
+                                Work Hours (required if status = completed)
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.1"
+                                  value={workOrderForm.work_hours}
+                                  onChange={(e) =>
+                                    setWorkOrderForm({
+                                      ...workOrderForm,
+                                      work_hours: e.target.value,
+                                    })
+                                  }
+                                />
+                              </label>
+                            )}
                             <label>
                               Gate combo
                               <input
@@ -4512,12 +5361,34 @@ function App() {
                                             [wo.id]: {
                                               status: progressEdits[wo.id]?.status ?? wo.status,
                                               mileage: e.target.value,
+                                              hours: progressEdits[wo.id]?.hours ?? "",
                                             },
                                           })
                                         }
                                         placeholder="Mileage"
                                         style={{ width: 100 }}
                                       />
+                                      {(session?.role === "lead" || session?.role === "admin") &&
+                                        (progressEdits[wo.id]?.status ?? wo.status) === "completed" && (
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="0.1"
+                                            value={progressEdits[wo.id]?.hours ?? ""}
+                                            onChange={(e) =>
+                                              setProgressEdits({
+                                                ...progressEdits,
+                                                [wo.id]: {
+                                                  status: progressEdits[wo.id]?.status ?? wo.status,
+                                                  mileage: progressEdits[wo.id]?.mileage ?? "",
+                                                  hours: e.target.value,
+                                                },
+                                              })
+                                            }
+                                            placeholder="Hours"
+                                            style={{ width: 90 }}
+                                          />
+                                        )}
                                       {(session?.role === "lead" || session?.role === "admin") && (
                                         <select
                                           value={progressEdits[wo.id]?.status ?? wo.status}
@@ -4527,6 +5398,7 @@ function App() {
                                               [wo.id]: {
                                                 status: e.target.value,
                                                 mileage: progressEdits[wo.id]?.mileage ?? "",
+                                                hours: progressEdits[wo.id]?.hours ?? "",
                                               },
                                             })
                                           }
@@ -4546,6 +5418,7 @@ function App() {
                                           const edit = progressEdits[wo.id] ?? {
                                             status: wo.status,
                                             mileage: "",
+                                            hours: "",
                                           };
                                           if (
                                             (session?.role === "lead" ||
@@ -4555,6 +5428,17 @@ function App() {
                                           ) {
                                             setWorkOrderError(
                                               "Mileage is required to mark completed.",
+                                            );
+                                            return;
+                                          }
+                                          if (
+                                            (session?.role === "lead" ||
+                                              session?.role === "admin") &&
+                                            edit.status === "completed" &&
+                                            edit.hours === ""
+                                          ) {
+                                            setWorkOrderError(
+                                              "Work hours are required to mark completed.",
                                             );
                                             return;
                                           }
@@ -4570,6 +5454,8 @@ function App() {
                                                     : "in_progress",
                                                 mileage:
                                                   edit.mileage === "" ? null : Number(edit.mileage),
+                                                work_hours:
+                                                  edit.hours === "" ? null : Number(edit.hours),
                                                 is_driver: isDriver,
                                               },
                                               role: session?.role ?? null,
@@ -4709,6 +5595,11 @@ function App() {
                           {selectedWorkOrder.mileage != null && (
                             <div>
                               <strong>Mileage:</strong> {selectedWorkOrder.mileage} miles
+                            </div>
+                          )}
+                          {selectedWorkOrder.work_hours != null && (
+                            <div>
+                              <strong>Work Hours:</strong> {selectedWorkOrder.work_hours}
                             </div>
                           )}
                           {selectedWorkOrder.created_at && (
@@ -6342,13 +7233,6 @@ function App() {
              </div>
           </div>
       </div>
-      )}
-      {session && (
-          <ChangeRequestModal
-            isOpen={showChangeRequestModal}
-            onClose={() => setShowChangeRequestModal(false)}
-            userId={session.username}
-          />
       )}
       {session && showPasswordModal && (
         <div className="modal-overlay">

@@ -420,6 +420,7 @@ struct WorkOrderInput {
     directions: Option<String>,
     gate_combo: Option<String>,
     mileage: Option<f64>,
+    work_hours: Option<f64>,
     other_heat_source_gas: bool,
     other_heat_source_electric: bool,
     other_heat_source_other: Option<String>,
@@ -456,6 +457,7 @@ struct WorkOrderRow {
     physical_address_state: Option<String>,
     physical_address_postal_code: Option<String>,
     mileage: Option<f64>,
+    work_hours: Option<f64>,
     wood_size_label: Option<String>,
     wood_size_other: Option<String>,
     delivery_size_label: Option<String>,
@@ -1282,7 +1284,7 @@ async fn create_work_order(
             physical_address_state, physical_address_postal_code,
             mailing_address_line1, mailing_address_line2, mailing_address_city,
             mailing_address_state, mailing_address_postal_code,
-            telephone, email, directions, gate_combo, mileage,
+            telephone, email, directions, gate_combo, mileage, work_hours,
             other_heat_source_gas, other_heat_source_electric, other_heat_source_other,
             notes, scheduled_date, status,
             wood_size_label, wood_size_other,
@@ -1299,7 +1301,7 @@ async fn create_work_order(
             ?, ?,
             ?, ?, ?,
             ?, ?,
-            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?,
             ?, ?,
@@ -1337,6 +1339,7 @@ async fn create_work_order(
         .bind(&input.directions)
         .bind(&input.gate_combo)
         .bind(&input.mileage)
+        .bind(&input.work_hours)
         .bind(input.other_heat_source_gas)
         .bind(input.other_heat_source_electric)
         .bind(&input.other_heat_source_other)
@@ -1440,6 +1443,7 @@ async fn list_work_orders(
             physical_address_state,
             physical_address_postal_code,
             mileage,
+            work_hours,
             wood_size_label,
             wood_size_other,
             delivery_size_label,
@@ -1949,7 +1953,17 @@ struct WorkOrderStatusInput {
     work_order_id: String,
     status: Option<String>,
     mileage: Option<f64>,
+    work_hours: Option<f64>,
     is_driver: Option<bool>,
+}
+
+#[derive(Debug, FromRow)]
+struct WorkOrderStatusRow {
+    status: String,
+    mileage: Option<f64>,
+    work_hours: Option<f64>,
+    delivery_size_cords: Option<f64>,
+    pickup_quantity_cords: Option<f64>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -2866,10 +2880,14 @@ async fn update_work_order_status(
 
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
 
-    let existing = sqlx::query!(
-        r#"SELECT status, mileage, delivery_size_cords, pickup_quantity_cords FROM work_orders WHERE id = ? AND is_deleted = 0"#,
-        input.work_order_id
+    let existing = sqlx::query_as::<_, WorkOrderStatusRow>(
+        r#"
+        SELECT status, mileage, work_hours, delivery_size_cords, pickup_quantity_cords
+        FROM work_orders
+        WHERE id = ? AND is_deleted = 0
+        "#,
     )
+    .bind(&input.work_order_id)
     .fetch_optional(&mut *tx)
     .await
     .map_err(|e| e.to_string())?;
@@ -2896,6 +2914,16 @@ async fn update_work_order_status(
     if next_status == "completed" && input.mileage.is_none() {
         return Err("Mileage is required to mark completed".to_string());
     }
+    if input.work_hours.is_some() && role_val != "admin" && role_val != "lead" {
+        return Err("Only admins or leads can set work hours".to_string());
+    }
+    if next_status == "completed"
+        && current_status != "completed"
+        && (role_val == "admin" || role_val == "lead")
+        && input.work_hours.is_none()
+    {
+        return Err("Work hours are required to close an order".to_string());
+    }
 
     // Volunteers can only update if they are marked as drivers.
     if role_val == "volunteer" && !driver_capable {
@@ -2914,12 +2942,14 @@ async fn update_work_order_status(
         UPDATE work_orders
         SET status = ?,
             mileage = COALESCE(?, mileage),
+            work_hours = COALESCE(?, work_hours),
             updated_at = datetime('now')
         WHERE id = ? AND is_deleted = 0
         "#,
     )
     .bind(&next_status)
     .bind(&input.mileage)
+    .bind(&input.work_hours)
     .bind(&input.work_order_id)
     .execute(&mut *tx)
     .await
@@ -2957,6 +2987,21 @@ async fn update_work_order_status(
             "mileage",
             prev_mileage.map(|v| v.to_string()),
             input.mileage.map(|v| v.to_string()),
+        )
+        .await;
+    }
+    let prev_hours = existing.work_hours;
+    if prev_hours != input.work_hours {
+        audit_change(
+            &state.pool,
+            "update_work_order_status",
+            &role_val,
+            &actor_val,
+            "work_orders",
+            &input.work_order_id,
+            "work_hours",
+            prev_hours.map(|v| v.to_string()),
+            input.work_hours.map(|v| v.to_string()),
         )
         .await;
     }

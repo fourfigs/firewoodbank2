@@ -68,6 +68,7 @@ export type WorkOrderRow = {
   gate_combo?: string | null;
   notes?: string | null;
   mileage?: number | null;
+  work_hours?: number | null;
   town?: string | null;
   telephone?: string | null;
   physical_address_line1?: string | null;

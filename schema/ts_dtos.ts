@@ -74,6 +74,7 @@ export interface WorkOrder {
   notes?: string;
   scheduledDate?: Timestamp;
   status: WorkOrderStatus;
+  workHours?: number;
   deliverySizeLabel?: string;
   deliverySizeCords?: number;
   pickupDeliveryType?: string;
