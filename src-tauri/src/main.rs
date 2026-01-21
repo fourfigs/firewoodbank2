@@ -1095,9 +1095,16 @@ async fn check_client_conflict(
 async fn create_inventory_item(
     state: State<'_, AppState>,
     input: InventoryInput,
+    role: Option<String>,
+    actor: Option<String>,
 ) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
-    audit_db(&state.pool, "create_inventory_item", "unknown", "unknown").await;
+    let role_val = role.unwrap_or_else(|| "unknown".to_string()).to_lowercase();
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
+    if role_val != "admin" && role_val != "lead" {
+        return Err("Only leads or admins can add inventory.".to_string());
+    }
+    audit_db(&state.pool, "create_inventory_item", &role_val, &actor_val).await;
     let query = r#"
         INSERT INTO inventory_items (
             id, name, category, quantity_on_hand, unit,
@@ -2767,7 +2774,11 @@ async fn update_work_order_schedule(
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
 
     let existing = sqlx::query!(
-        r#"SELECT scheduled_date, client_name FROM work_orders WHERE id = ? AND is_deleted = 0"#,
+        r#"
+        SELECT scheduled_date, client_name, status
+        FROM work_orders
+        WHERE id = ? AND is_deleted = 0
+        "#,
         input.work_order_id
     )
     .fetch_optional(&mut *tx)
@@ -2791,6 +2802,33 @@ async fn update_work_order_schedule(
     .execute(&mut *tx)
     .await
     .map_err(|e| e.to_string())?;
+
+    let next_status = match input.scheduled_date.as_ref() {
+        Some(_) => {
+            let current = existing.status.to_lowercase();
+            if ["completed", "cancelled", "picked_up", "in_progress", "issue"].contains(&current.as_str()) {
+                None
+            } else {
+                Some("scheduled".to_string())
+            }
+        }
+        None => None,
+    };
+
+    if let Some(status) = &next_status {
+        sqlx::query(
+            r#"
+            UPDATE work_orders
+            SET status = ?, updated_at = datetime('now')
+            WHERE id = ? AND is_deleted = 0
+            "#,
+        )
+        .bind(status)
+        .bind(&input.work_order_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
 
     if let Some(start_date) = &input.scheduled_date {
         let existing_delivery = sqlx::query!(
@@ -2853,6 +2891,23 @@ async fn update_work_order_schedule(
             input.scheduled_date,
         )
         .await;
+    }
+
+    if let Some(status) = next_status {
+        if existing.status != status {
+            audit_change(
+                &state.pool,
+                "update_work_order_schedule",
+                &role_val,
+                &actor_val,
+                "work_orders",
+                &input.work_order_id,
+                "status",
+                Some(existing.status.clone()),
+                Some(status.clone()),
+            )
+            .await;
+        }
     }
 
     tx.commit().await.map_err(|e| e.to_string())?;

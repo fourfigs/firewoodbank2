@@ -3439,7 +3439,12 @@ function App() {
                           type="button"
                           className="icon-button"
                           title="Add inventory item"
+                          disabled={!canManage}
                           onClick={() => {
+                            if (!canManage) {
+                              setInventoryError("Only leads or admins can add inventory.");
+                              return;
+                            }
                             if (showInventoryForm) {
                               resetInventoryForm();
                             } else {
@@ -3461,6 +3466,10 @@ function App() {
                           onSubmit={async (e) => {
                             e.preventDefault();
                             setInventoryError(null);
+                            if (!canManage) {
+                              setInventoryError("Only leads or admins can add inventory.");
+                              return;
+                            }
                             const qty = Number(inventoryForm.quantity_on_hand);
                             if (!Number.isFinite(qty) || qty < 0) {
                               setInventoryError("Quantity must be a valid positive number.");
@@ -3504,7 +3513,11 @@ function App() {
                                   actor: session?.username ?? null,
                                 });
                               } else {
-                                await invokeTauri("create_inventory_item", { input: payload });
+                                await invokeTauri("create_inventory_item", {
+                                  input: payload,
+                                  role: session?.role ?? null,
+                                  actor: session?.username ?? null,
+                                });
                               }
                               await loadInventory();
                               resetInventoryForm();
@@ -5833,7 +5846,7 @@ function App() {
                                         role: session?.role ?? null,
                                         actor: session?.username ?? null,
                                       });
-                                      await loadWorkOrders();
+                                      await Promise.all([loadWorkOrders(), loadDeliveries()]);
                                       setSelectedWorkOrder((prev) =>
                                         prev
                                           ? {
@@ -5841,6 +5854,9 @@ function App() {
                                               assignees_json: JSON.stringify(combinedAssignees),
                                               scheduled_date:
                                                 workOrderDetailEdit.scheduled_date || null,
+                                              status: workOrderDetailEdit.scheduled_date
+                                                ? "scheduled"
+                                                : prev.status,
                                             }
                                           : prev,
                                       );
