@@ -268,6 +268,7 @@ function App() {
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
   const [workerDetailOpen, setWorkerDetailOpen] = useState(false);
   const [workerDetailEditMode, setWorkerDetailEditMode] = useState(false);
+  const [workerEditMailingSameAsPhysical, setWorkerEditMailingSameAsPhysical] = useState(true);
   const [workerEdit, setWorkerEdit] = useState<Partial<UserRow> | null>(null);
   const [workerError, setWorkerError] = useState<string | null>(null);
   const [workerAvailSchedule, setWorkerAvailSchedule] = useState<Record<string, boolean>>({
@@ -323,6 +324,7 @@ function App() {
     physical_address_city: string;
     physical_address_state: string;
     physical_address_postal_code: string;
+    mailing_same_as_physical: boolean;
     mailing_address_line1: string;
     mailing_address_line2: string;
     mailing_address_city: string;
@@ -341,6 +343,7 @@ function App() {
     physical_address_city: "",
     physical_address_state: "",
     physical_address_postal_code: "",
+    mailing_same_as_physical: true,
     mailing_address_line1: "",
     mailing_address_line2: "",
     mailing_address_city: "",
@@ -580,6 +583,7 @@ function App() {
     setSelectedWorker({ ...u, role: u.role as UserRow["role"] } as UserRow);
     setWorkerDetailOpen(true);
     setWorkerDetailEditMode(false);
+    setWorkerEditMailingSameAsPhysical(!u.mailing_address_line1?.trim());
     setWorkerEdit({
       email: u.email ?? "",
       telephone: u.telephone ?? "",
@@ -5061,6 +5065,7 @@ function App() {
                                         physical_address_city: "",
                                         physical_address_state: "",
                                         physical_address_postal_code: "",
+                                      mailing_same_as_physical: true,
                                         mailing_address_line1: "",
                                         mailing_address_line2: "",
                                         mailing_address_city: "",
@@ -5087,6 +5092,23 @@ function App() {
                                   setWorkerFormError(null);
                                   setBusy(true);
                                   try {
+                                      const mailingSameAsPhysical =
+                                        workerForm.mailing_same_as_physical;
+                                      const mailingLine1 = mailingSameAsPhysical
+                                        ? workerForm.physical_address_line1
+                                        : workerForm.mailing_address_line1;
+                                      const mailingLine2 = mailingSameAsPhysical
+                                        ? workerForm.physical_address_line2
+                                        : workerForm.mailing_address_line2;
+                                      const mailingCity = mailingSameAsPhysical
+                                        ? workerForm.physical_address_city
+                                        : workerForm.mailing_address_city;
+                                      const mailingState = mailingSameAsPhysical
+                                        ? workerForm.physical_address_state
+                                        : workerForm.mailing_address_state;
+                                      const mailingPostal = mailingSameAsPhysical
+                                        ? workerForm.physical_address_postal_code
+                                        : workerForm.mailing_address_postal_code;
                                       await invokeTauri("create_user", {
                                       input: {
                                         name: workerForm.name,
@@ -5103,15 +5125,15 @@ function App() {
                                           physical_address_postal_code:
                                             workerForm.physical_address_postal_code || null,
                                           mailing_address_line1:
-                                            workerForm.mailing_address_line1 || null,
+                                            mailingLine1 || null,
                                           mailing_address_line2:
-                                            workerForm.mailing_address_line2 || null,
+                                            mailingLine2 || null,
                                           mailing_address_city:
-                                            workerForm.mailing_address_city || null,
+                                            mailingCity || null,
                                           mailing_address_state:
-                                            workerForm.mailing_address_state || null,
+                                            mailingState || null,
                                           mailing_address_postal_code:
-                                            workerForm.mailing_address_postal_code || null,
+                                            mailingPostal || null,
                                         role: workerForm.role,
                                         is_driver: workerForm.is_driver,
                                           username: workerForm.username,
@@ -5130,6 +5152,7 @@ function App() {
                                         physical_address_city: "",
                                         physical_address_state: "",
                                         physical_address_postal_code: "",
+                                      mailing_same_as_physical: true,
                                         mailing_address_line1: "",
                                         mailing_address_line2: "",
                                         mailing_address_city: "",
@@ -5321,83 +5344,101 @@ function App() {
                                       disabled={busy}
                                     />
                                   </label>
-                                  <label className="span-2">
-                                    Mailing Line 1
+                                  <label className="checkbox span-2">
                                     <input
-                                      value={workerForm.mailing_address_line1}
+                                      type="checkbox"
+                                      checked={workerForm.mailing_same_as_physical}
                                       onChange={(e) =>
                                         setWorkerForm({
                                           ...workerForm,
-                                          mailing_address_line1: e.target.value,
+                                          mailing_same_as_physical: e.target.checked,
                                         })
                                       }
                                       disabled={busy}
                                     />
+                                    Mailing same as physical
                                   </label>
-                                  <label className="span-2">
-                                    Mailing Line 2
-                                    <input
-                                      value={workerForm.mailing_address_line2}
-                                      onChange={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          mailing_address_line2: e.target.value,
-                                        })
-                                      }
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                  <label>
-                                    Mailing City
-                                    <input
-                                      value={workerForm.mailing_address_city}
-                                      onChange={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          mailing_address_city: e.target.value,
-                                        })
-                                      }
-                                      onBlur={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          mailing_address_city: initCapCity(e.target.value),
-                                        })
-                                      }
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                  <label>
-                                    Mailing State
-                                    <input
-                                      value={workerForm.mailing_address_state}
-                                      onChange={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          mailing_address_state: e.target.value,
-                                        })
-                                      }
-                                      onBlur={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          mailing_address_state: normalizeState(e.target.value),
-                                        })
-                                      }
-                                      disabled={busy}
-                                    />
-                                  </label>
-                                  <label>
-                                    Mailing ZIP
-                                    <input
-                                      value={workerForm.mailing_address_postal_code}
-                                      onChange={(e) =>
-                                        setWorkerForm({
-                                          ...workerForm,
-                                          mailing_address_postal_code: e.target.value,
-                                        })
-                                      }
-                                      disabled={busy}
-                                    />
-                                  </label>
+                                  {!workerForm.mailing_same_as_physical && (
+                                    <>
+                                      <label className="span-2">
+                                        Mailing Line 1
+                                        <input
+                                          value={workerForm.mailing_address_line1}
+                                          onChange={(e) =>
+                                            setWorkerForm({
+                                              ...workerForm,
+                                              mailing_address_line1: e.target.value,
+                                            })
+                                          }
+                                          disabled={busy}
+                                        />
+                                      </label>
+                                      <label className="span-2">
+                                        Mailing Line 2
+                                        <input
+                                          value={workerForm.mailing_address_line2}
+                                          onChange={(e) =>
+                                            setWorkerForm({
+                                              ...workerForm,
+                                              mailing_address_line2: e.target.value,
+                                            })
+                                          }
+                                          disabled={busy}
+                                        />
+                                      </label>
+                                      <label>
+                                        Mailing City
+                                        <input
+                                          value={workerForm.mailing_address_city}
+                                          onChange={(e) =>
+                                            setWorkerForm({
+                                              ...workerForm,
+                                              mailing_address_city: e.target.value,
+                                            })
+                                          }
+                                          onBlur={(e) =>
+                                            setWorkerForm({
+                                              ...workerForm,
+                                              mailing_address_city: initCapCity(e.target.value),
+                                            })
+                                          }
+                                          disabled={busy}
+                                        />
+                                      </label>
+                                      <label>
+                                        Mailing State
+                                        <input
+                                          value={workerForm.mailing_address_state}
+                                          onChange={(e) =>
+                                            setWorkerForm({
+                                              ...workerForm,
+                                              mailing_address_state: e.target.value,
+                                            })
+                                          }
+                                          onBlur={(e) =>
+                                            setWorkerForm({
+                                              ...workerForm,
+                                              mailing_address_state: normalizeState(e.target.value),
+                                            })
+                                          }
+                                          disabled={busy}
+                                        />
+                                      </label>
+                                      <label>
+                                        Mailing ZIP
+                                        <input
+                                          value={workerForm.mailing_address_postal_code}
+                                          onChange={(e) =>
+                                            setWorkerForm({
+                                              ...workerForm,
+                                              mailing_address_postal_code: e.target.value,
+                                            })
+                                          }
+                                          disabled={busy}
+                                        />
+                                      </label>
+                                    </>
+                                  )}
                                 <label className="checkbox span-2">
                                   <input
                                     type="checkbox"
@@ -5609,78 +5650,90 @@ function App() {
                                   }
                                 />
                               </label>
-                              <label>
-                                Mailing Line 1
+                              <label className="checkbox">
                                 <input
-                                  value={workerEdit?.mailing_address_line1 ?? ""}
-                                  onChange={(e) =>
-                                    setWorkerEdit((prev) => ({
-                                      ...prev,
-                                      mailing_address_line1: e.target.value,
-                                    }))
-                                  }
+                                  type="checkbox"
+                                  checked={workerEditMailingSameAsPhysical}
+                                  onChange={(e) => setWorkerEditMailingSameAsPhysical(e.target.checked)}
                                 />
+                                Mailing same as physical
                               </label>
-                              <label>
-                                Mailing Line 2
-                                <input
-                                  value={workerEdit?.mailing_address_line2 ?? ""}
-                                  onChange={(e) =>
-                                    setWorkerEdit((prev) => ({
-                                      ...prev,
-                                      mailing_address_line2: e.target.value,
-                                    }))
-                                  }
-                                />
-                              </label>
-                              <label>
-                                Mailing City
-                                <input
-                                  value={workerEdit?.mailing_address_city ?? ""}
-                                  onChange={(e) =>
-                                    setWorkerEdit((prev) => ({
-                                      ...prev,
-                                      mailing_address_city: e.target.value,
-                                    }))
-                                  }
-                                  onBlur={(e) =>
-                                    setWorkerEdit((prev) => ({
-                                      ...prev,
-                                      mailing_address_city: initCapCity(e.target.value),
-                                    }))
-                                  }
-                                />
-                              </label>
-                              <label>
-                                Mailing State
-                                <input
-                                  value={workerEdit?.mailing_address_state ?? ""}
-                                  onChange={(e) =>
-                                    setWorkerEdit((prev) => ({
-                                      ...prev,
-                                      mailing_address_state: e.target.value,
-                                    }))
-                                  }
-                                  onBlur={(e) =>
-                                    setWorkerEdit((prev) => ({
-                                      ...prev,
-                                      mailing_address_state: normalizeState(e.target.value),
-                                    }))
-                                  }
-                                />
-                              </label>
-                              <label>
-                                Mailing ZIP
-                                <input
-                                  value={workerEdit?.mailing_address_postal_code ?? ""}
-                                  onChange={(e) =>
-                                    setWorkerEdit((prev) => ({
-                                      ...prev,
-                                      mailing_address_postal_code: e.target.value,
-                                    }))
-                                  }
-                                />
-                              </label>
+                              {!workerEditMailingSameAsPhysical && (
+                                <>
+                                  <label>
+                                    Mailing Line 1
+                                    <input
+                                      value={workerEdit?.mailing_address_line1 ?? ""}
+                                      onChange={(e) =>
+                                        setWorkerEdit((prev) => ({
+                                          ...prev,
+                                          mailing_address_line1: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    Mailing Line 2
+                                    <input
+                                      value={workerEdit?.mailing_address_line2 ?? ""}
+                                      onChange={(e) =>
+                                        setWorkerEdit((prev) => ({
+                                          ...prev,
+                                          mailing_address_line2: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    Mailing City
+                                    <input
+                                      value={workerEdit?.mailing_address_city ?? ""}
+                                      onChange={(e) =>
+                                        setWorkerEdit((prev) => ({
+                                          ...prev,
+                                          mailing_address_city: e.target.value,
+                                        }))
+                                      }
+                                      onBlur={(e) =>
+                                        setWorkerEdit((prev) => ({
+                                          ...prev,
+                                          mailing_address_city: initCapCity(e.target.value),
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    Mailing State
+                                    <input
+                                      value={workerEdit?.mailing_address_state ?? ""}
+                                      onChange={(e) =>
+                                        setWorkerEdit((prev) => ({
+                                          ...prev,
+                                          mailing_address_state: e.target.value,
+                                        }))
+                                      }
+                                      onBlur={(e) =>
+                                        setWorkerEdit((prev) => ({
+                                          ...prev,
+                                          mailing_address_state: normalizeState(e.target.value),
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    Mailing ZIP
+                                    <input
+                                      value={workerEdit?.mailing_address_postal_code ?? ""}
+                                      onChange={(e) =>
+                                        setWorkerEdit((prev) => ({
+                                          ...prev,
+                                          mailing_address_postal_code: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                </>
+                              )}
                               <label>
                                 Availability Notes
                                 <input
@@ -5861,6 +5914,22 @@ function App() {
                                       }
                                       setBusy(true);
                                       try {
+                                      const mailingSameAsPhysical = workerEditMailingSameAsPhysical;
+                                      const mailingLine1 = mailingSameAsPhysical
+                                        ? workerEdit?.physical_address_line1 ?? ""
+                                        : workerEdit?.mailing_address_line1 ?? "";
+                                      const mailingLine2 = mailingSameAsPhysical
+                                        ? workerEdit?.physical_address_line2 ?? ""
+                                        : workerEdit?.mailing_address_line2 ?? "";
+                                      const mailingCity = mailingSameAsPhysical
+                                        ? workerEdit?.physical_address_city ?? ""
+                                        : workerEdit?.mailing_address_city ?? "";
+                                      const mailingState = mailingSameAsPhysical
+                                        ? workerEdit?.physical_address_state ?? ""
+                                        : workerEdit?.mailing_address_state ?? "";
+                                      const mailingPostal = mailingSameAsPhysical
+                                        ? workerEdit?.physical_address_postal_code ?? ""
+                                        : workerEdit?.mailing_address_postal_code ?? "";
                                         await invokeTauri("update_user_flags", {
                                           input: {
                                             id: selectedWorker.id,
@@ -5877,15 +5946,15 @@ function App() {
                                             physical_address_postal_code:
                                               workerEdit?.physical_address_postal_code ?? null,
                                             mailing_address_line1:
-                                              workerEdit?.mailing_address_line1 ?? null,
+                                            mailingLine1 || null,
                                             mailing_address_line2:
-                                              workerEdit?.mailing_address_line2 ?? null,
+                                            mailingLine2 || null,
                                             mailing_address_city:
-                                              workerEdit?.mailing_address_city ?? null,
+                                            mailingCity || null,
                                             mailing_address_state:
-                                              workerEdit?.mailing_address_state ?? null,
+                                            mailingState || null,
                                             mailing_address_postal_code:
-                                              workerEdit?.mailing_address_postal_code ?? null,
+                                            mailingPostal || null,
                                             availability_notes:
                                               workerEdit?.availability_notes ?? null,
                                             availability_schedule:
