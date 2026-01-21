@@ -65,6 +65,7 @@ interface DashboardProps {
   userDeliveryHours: { hours: number; deliveries: number; woodCreditCords: number };
   workOrders: WorkOrderRow[];
   onWorkerSelect?: (user: UserRow) => void;
+  onOpenOrderSelect?: (workOrder: WorkOrderRow) => void;
 }
 
 // Helper to check if a date is today
@@ -91,6 +92,7 @@ export default function Dashboard({
   userDeliveryHours,
   workOrders,
   onWorkerSelect,
+  onOpenOrderSelect,
 }: DashboardProps) {
   const [calendarView, setCalendarView] = useState<"2weeks" | "month">("2weeks");
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -529,7 +531,9 @@ export default function Dashboard({
                         background: bgColor,
                         color: textColor,
                         whiteSpace: "nowrap",
+                        cursor: onOpenOrderSelect ? "pointer" : "default",
                       }}
+                      onDoubleClick={() => onOpenOrderSelect?.(wo)}
                       title={`${wo.client_name} - ${wo.status}${wo.scheduled_date ? ` (${new Date(wo.scheduled_date).toLocaleDateString()})` : ""}`}
                     >
                       <span style={{ fontWeight: 500 }}>{wo.client_name}</span>

@@ -236,9 +236,15 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
 function App() {
   const [activeTab, setActiveTab] = useState<string>("Dashboard");
   const [session, setSession] = useState<UserSession | null>(null);
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
     console.log("App mounted");
+  }, []);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(intervalId);
   }, []);
 
   const [clients, setClients] = useState<ClientRow[]>([]);
@@ -422,6 +428,31 @@ function App() {
     setWorkOrderDetailOpen(false);
     setWorkOrderDetailError(null);
     setWorkOrderDetailEdit(null);
+  };
+
+  const openWorkOrderDetail = (wo: WorkOrderRow) => {
+    setSelectedWorkOrderId(wo.id);
+    setSelectedWorkOrder(wo);
+    setWorkOrderDetailOpen(true);
+    setWorkOrderDetailError(null);
+    const parsedAssignees = (() => {
+      try {
+        const arr = JSON.parse(wo.assignees_json ?? "[]");
+        return Array.isArray(arr) ? arr : [];
+      } catch {
+        return [];
+      }
+    })();
+    const driverNames = new Set(
+      users.filter((u) => !!u.driver_license_status).map((u) => u.name),
+    );
+    const assignees = parsedAssignees.filter((name) => driverNames.has(name));
+    const helpers = parsedAssignees.filter((name) => !driverNames.has(name));
+    setWorkOrderDetailEdit({
+      scheduled_date: toDateTimeLocalInput(wo.scheduled_date),
+      assignees,
+      helpers,
+    });
   };
 
   const [workOrderForm, setWorkOrderForm] = useState({
@@ -927,6 +958,16 @@ function App() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
+            <div className="badge" style={{ alignSelf: "center" }}>
+              {now.toLocaleString(undefined, {
+                weekday: "short",
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </div>
             {session && (
               <div className="badge" style={{ alignSelf: "center" }}>
                 User: {session.username ?? session.name}
@@ -982,6 +1023,10 @@ function App() {
                         openWorkerDetail(user);
                         setActiveTab("Worker Directory");
                       }
+                    }}
+                    onOpenOrderSelect={(wo) => {
+                      openWorkOrderDetail(wo);
+                      setActiveTab("Work Orders");
                     }}
                   />
                 )}
@@ -4232,34 +4277,7 @@ function App() {
                                 key={wo.id}
                                 onClick={() => setSelectedWorkOrderId(wo.id)}
                                 onDoubleClick={() => {
-                                  setSelectedWorkOrderId(wo.id);
-                                  setSelectedWorkOrder(wo);
-                                  setWorkOrderDetailOpen(true);
-                                  setWorkOrderDetailError(null);
-                                  const parsedAssignees = (() => {
-                                    try {
-                                      const arr = JSON.parse(wo.assignees_json ?? "[]");
-                                      return Array.isArray(arr) ? arr : [];
-                                    } catch {
-                                      return [];
-                                    }
-                                  })();
-                                  const driverNames = new Set(
-                                    users
-                                      .filter((u) => !!u.driver_license_status)
-                                      .map((u) => u.name),
-                                  );
-                                  const assignees = parsedAssignees.filter((name) =>
-                                    driverNames.has(name),
-                                  );
-                                  const helpers = parsedAssignees.filter(
-                                    (name) => !driverNames.has(name),
-                                  );
-                                  setWorkOrderDetailEdit({
-                                    scheduled_date: toDateTimeLocalInput(wo.scheduled_date),
-                                    assignees,
-                                    helpers,
-                                  });
+                                  openWorkOrderDetail(wo);
                                 }}
                                 style={{
                                   cursor: "pointer",
