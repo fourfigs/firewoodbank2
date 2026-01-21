@@ -261,6 +261,7 @@ function App() {
   const [selectedWorker, setSelectedWorker] = useState<UserRow | null>(null);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
   const [workerDetailOpen, setWorkerDetailOpen] = useState(false);
+  const [workerDetailEditMode, setWorkerDetailEditMode] = useState(false);
   const [workerEdit, setWorkerEdit] = useState<Partial<UserRow> | null>(null);
   const [workerError, setWorkerError] = useState<string | null>(null);
   const [workerAvailSchedule, setWorkerAvailSchedule] = useState<Record<string, boolean>>({
@@ -547,6 +548,7 @@ function App() {
     setSelectedWorkerId(u.id);
     setSelectedWorker({ ...u, role: u.role as UserRow["role"] } as UserRow);
     setWorkerDetailOpen(true);
+    setWorkerDetailEditMode(false);
     setWorkerEdit({
       email: u.email ?? "",
       telephone: u.telephone ?? "",
@@ -655,6 +657,7 @@ function App() {
   const canManage = session?.role === "admin" || session?.role === "lead";
   const isDriver = session?.isDriver ?? false;
   const canCreateWorkOrders = session?.role === "admin" || session?.role === "staff";
+  const workerDetailValues = workerEdit ?? selectedWorker;
   const canViewPII =
     session?.role === "admin" || (session?.role === "lead" && session.hipaaCertified);
   const canViewClientPII = canViewPII || isDriver;
@@ -5472,6 +5475,7 @@ function App() {
                               onClick={() => {
                                 setWorkerDetailOpen(false);
                                 setSelectedWorker(null);
+                                setWorkerDetailEditMode(false);
                               }}
                               style={{ padding: "0.25rem 0.5rem" }}
                             >
@@ -5486,427 +5490,583 @@ function App() {
                               {workerError}
                             </div>
                           )}
-                        <div className="stack">
-                            <div>
-                              <strong>Role:</strong> {selectedWorker.role}
-                            </div>
-                            <label>
-                              Email
-                              <input
-                                value={workerEdit?.email ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({ ...prev, email: e.target.value }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Phone
-                              <input
-                                value={workerEdit?.telephone ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({ ...prev, telephone: e.target.value }))
-                                }
-                                onBlur={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    telephone: normalizePhone(e.target.value),
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Address Line 1
-                              <input
-                                value={workerEdit?.physical_address_line1 ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    physical_address_line1: e.target.value,
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Address Line 2
-                              <input
-                                value={workerEdit?.physical_address_line2 ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    physical_address_line2: e.target.value,
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              City
-                              <input
-                                value={workerEdit?.physical_address_city ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    physical_address_city: e.target.value,
-                                  }))
-                                }
-                                onBlur={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    physical_address_city: initCapCity(e.target.value),
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              State
-                              <input
-                                value={workerEdit?.physical_address_state ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    physical_address_state: e.target.value,
-                                  }))
-                                }
-                                onBlur={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    physical_address_state: normalizeState(e.target.value),
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              ZIP
-                              <input
-                                value={workerEdit?.physical_address_postal_code ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    physical_address_postal_code: e.target.value,
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Mailing Line 1
-                              <input
-                                value={workerEdit?.mailing_address_line1 ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    mailing_address_line1: e.target.value,
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Mailing Line 2
-                              <input
-                                value={workerEdit?.mailing_address_line2 ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    mailing_address_line2: e.target.value,
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Mailing City
-                              <input
-                                value={workerEdit?.mailing_address_city ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    mailing_address_city: e.target.value,
-                                  }))
-                                }
-                                onBlur={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    mailing_address_city: initCapCity(e.target.value),
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Mailing State
-                              <input
-                                value={workerEdit?.mailing_address_state ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    mailing_address_state: e.target.value,
-                                  }))
-                                }
-                                onBlur={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    mailing_address_state: normalizeState(e.target.value),
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              Mailing ZIP
-                              <input
-                                value={workerEdit?.mailing_address_postal_code ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    mailing_address_postal_code: e.target.value,
-                                  }))
-                                }
-                              />
-                            </label>
-                          <label>
-                            Availability Notes
-                            <input
-                              value={workerEdit?.availability_notes ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    availability_notes: e.target.value,
-                                  }))
-                                }
-                            />
-                          </label>
-                          <div>
-                            <strong>Weekly Availability Schedule:</strong>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: "1rem",
-                                  flexWrap: "wrap",
-                                  marginTop: "0.5rem",
-                                }}
-                              >
-                              {Object.keys(workerAvailSchedule).map((day) => (
-                                  <label
-                                    key={day}
-                                    className="checkbox"
-                                    style={{ display: "flex", alignItems: "center" }}
-                                  >
-                                  <input
-                                    type="checkbox"
-                                    checked={workerAvailSchedule[day]}
-                                    onChange={(e) =>
-                                      setWorkerAvailSchedule({
-                                        ...workerAvailSchedule,
-                                        [day]: e.target.checked,
-                                      })
-                                    }
-                                  />
-                                    <span
-                                      style={{ marginLeft: "0.25rem", textTransform: "capitalize" }}
+                          {workerDetailEditMode ? (
+                            <div className="stack">
+                              <div>
+                                <strong>Role:</strong> {selectedWorker.role}
+                              </div>
+                              <label>
+                                Email
+                                <input
+                                  value={workerEdit?.email ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({ ...prev, email: e.target.value }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Phone
+                                <input
+                                  value={workerEdit?.telephone ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({ ...prev, telephone: e.target.value }))
+                                  }
+                                  onBlur={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      telephone: normalizePhone(e.target.value),
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Address Line 1
+                                <input
+                                  value={workerEdit?.physical_address_line1 ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      physical_address_line1: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Address Line 2
+                                <input
+                                  value={workerEdit?.physical_address_line2 ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      physical_address_line2: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                City
+                                <input
+                                  value={workerEdit?.physical_address_city ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      physical_address_city: e.target.value,
+                                    }))
+                                  }
+                                  onBlur={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      physical_address_city: initCapCity(e.target.value),
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                State
+                                <input
+                                  value={workerEdit?.physical_address_state ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      physical_address_state: e.target.value,
+                                    }))
+                                  }
+                                  onBlur={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      physical_address_state: normalizeState(e.target.value),
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                ZIP
+                                <input
+                                  value={workerEdit?.physical_address_postal_code ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      physical_address_postal_code: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Mailing Line 1
+                                <input
+                                  value={workerEdit?.mailing_address_line1 ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      mailing_address_line1: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Mailing Line 2
+                                <input
+                                  value={workerEdit?.mailing_address_line2 ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      mailing_address_line2: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Mailing City
+                                <input
+                                  value={workerEdit?.mailing_address_city ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      mailing_address_city: e.target.value,
+                                    }))
+                                  }
+                                  onBlur={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      mailing_address_city: initCapCity(e.target.value),
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Mailing State
+                                <input
+                                  value={workerEdit?.mailing_address_state ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      mailing_address_state: e.target.value,
+                                    }))
+                                  }
+                                  onBlur={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      mailing_address_state: normalizeState(e.target.value),
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Mailing ZIP
+                                <input
+                                  value={workerEdit?.mailing_address_postal_code ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      mailing_address_postal_code: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Availability Notes
+                                <input
+                                  value={workerEdit?.availability_notes ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      availability_notes: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <div>
+                                <strong>Weekly Availability Schedule:</strong>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    gap: "1rem",
+                                    flexWrap: "wrap",
+                                    marginTop: "0.5rem",
+                                  }}
+                                >
+                                  {Object.keys(workerAvailSchedule).map((day) => (
+                                    <label
+                                      key={day}
+                                      className="checkbox"
+                                      style={{ display: "flex", alignItems: "center" }}
                                     >
-                                    {day}
-                                  </span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                          <label>
-                            Working vehicle
-                            <input
-                              value={workerEdit?.vehicle ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({ ...prev, vehicle: e.target.value }))
-                                }
-                            />
-                          </label>
-                          <label>
-                            Driver license status
-                            <input
-                              value={workerEdit?.driver_license_status ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    driver_license_status: e.target.value,
-                                  }))
-                                }
-                            />
-                          </label>
-                          <label>
-                            Driver license number
-                            <input
-                              value={workerEdit?.driver_license_number ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    driver_license_number: e.target.value,
-                                  }))
-                                }
-                            />
-                          </label>
-                          <label>
-                            Driver license expiration
-                            <input
-                              type="date"
-                              value={workerEdit?.driver_license_expires_on?.slice(0, 10) ?? ""}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    driver_license_expires_on: e.target.value,
-                                  }))
-                                }
-                            />
-                          </label>
-                          <label className="checkbox">
-                            <input
-                              type="checkbox"
-                              checked={!!workerEdit?.is_driver}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    is_driver: e.target.checked,
-                                  }))
-                                }
-                            />
-                            Driver flag (requires DL status + expiration)
-                          </label>
-                          <label className="checkbox">
-                            <input
-                              type="checkbox"
-                              checked={!!workerEdit?.hipaa_certified}
-                                onChange={(e) =>
-                                  setWorkerEdit((prev) => ({
-                                    ...prev,
-                                    hipaa_certified: e.target.checked ? 1 : 0,
-                                  }))
-                                }
-                            />
-                            HIPAA certified
-                          </label>
-                          {(session?.role === "admin" || session?.role === "lead") && (
-                            <div style={{ display: "flex", gap: 8 }}>
-                                <label style={{ flex: 1 }}>
-                                  Reset Password
-                                  <input
-                                    type="password"
-                                    value={workerPasswordReset}
-                                    onChange={(e) => setWorkerPasswordReset(e.target.value)}
-                                    placeholder="New password"
-                                  />
-                                </label>
-                                <button
-                                  className="ghost"
-                                  type="button"
-                                  disabled={busy || !workerPasswordReset.trim()}
-                                  onClick={async () => {
-                                    setWorkerError(null);
-                                    if (!workerPasswordReset.trim()) return;
-                                    setBusy(true);
-                                    try {
-                                      await invokeTauri("reset_password", {
-                                        input: {
-                                          user_id: selectedWorker.id,
-                                          new_password: workerPasswordReset.trim(),
-                                        },
-                                        role: session?.role ?? null,
-                                        actor: session?.username ?? null,
-                                      });
+                                      <input
+                                        type="checkbox"
+                                        checked={workerAvailSchedule[day]}
+                                        onChange={(e) =>
+                                          setWorkerAvailSchedule({
+                                            ...workerAvailSchedule,
+                                            [day]: e.target.checked,
+                                          })
+                                        }
+                                      />
+                                      <span
+                                        style={{ marginLeft: "0.25rem", textTransform: "capitalize" }}
+                                      >
+                                        {day}
+                                      </span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                              <label>
+                                Working vehicle
+                                <input
+                                  value={workerEdit?.vehicle ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({ ...prev, vehicle: e.target.value }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Driver license status
+                                <input
+                                  value={workerEdit?.driver_license_status ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      driver_license_status: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Driver license number
+                                <input
+                                  value={workerEdit?.driver_license_number ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      driver_license_number: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Driver license expiration
+                                <input
+                                  type="date"
+                                  value={workerEdit?.driver_license_expires_on?.slice(0, 10) ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      driver_license_expires_on: e.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label className="checkbox">
+                                <input
+                                  type="checkbox"
+                                  checked={!!workerEdit?.is_driver}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      is_driver: e.target.checked,
+                                    }))
+                                  }
+                                />
+                                Driver flag (requires DL status + expiration)
+                              </label>
+                              <label className="checkbox">
+                                <input
+                                  type="checkbox"
+                                  checked={!!workerEdit?.hipaa_certified}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({
+                                      ...prev,
+                                      hipaa_certified: e.target.checked ? 1 : 0,
+                                    }))
+                                  }
+                                />
+                                HIPAA certified
+                              </label>
+                              {canManage && (
+                                <div style={{ display: "flex", gap: 8 }}>
+                                  <label style={{ flex: 1 }}>
+                                    Reset Password
+                                    <input
+                                      type="password"
+                                      value={workerPasswordReset}
+                                      onChange={(e) => setWorkerPasswordReset(e.target.value)}
+                                      placeholder="New password"
+                                    />
+                                  </label>
+                                  <button
+                                    className="ghost"
+                                    type="button"
+                                    disabled={busy || !workerPasswordReset.trim()}
+                                    onClick={async () => {
+                                      setWorkerError(null);
+                                      if (!workerPasswordReset.trim()) return;
+                                      setBusy(true);
+                                      try {
+                                        await invokeTauri("reset_password", {
+                                          input: {
+                                            user_id: selectedWorker.id,
+                                            new_password: workerPasswordReset.trim(),
+                                          },
+                                          role: session?.role ?? null,
+                                          actor: session?.username ?? null,
+                                        });
+                                        setWorkerPasswordReset("");
+                                      } catch (err) {
+                                        setWorkerError(
+                                          typeof err === "string" ? err : "Failed to reset password.",
+                                        );
+                                      } finally {
+                                        setBusy(false);
+                                      }
+                                    }}
+                                  >
+                                    Reset Password
+                                  </button>
+                                  <button
+                                    className="ping"
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={async () => {
+                                      setWorkerError(null);
+                                      const wantsDriver = !!workerEdit?.is_driver;
+                                      const hasStatus = !!(
+                                        workerEdit?.driver_license_status ?? ""
+                                      ).trim();
+                                      const hasExpiry = !!(
+                                        workerEdit?.driver_license_expires_on ?? ""
+                                      ).trim();
+                                      if (wantsDriver && (!hasStatus || !hasExpiry)) {
+                                        setWorkerError(
+                                          "Driver flag requires license status and expiration.",
+                                        );
+                                        return;
+                                      }
+                                      setBusy(true);
+                                      try {
+                                        await invokeTauri("update_user_flags", {
+                                          input: {
+                                            id: selectedWorker.id,
+                                            email: workerEdit?.email ?? null,
+                                            telephone: workerEdit?.telephone ?? null,
+                                            physical_address_line1:
+                                              workerEdit?.physical_address_line1 ?? null,
+                                            physical_address_line2:
+                                              workerEdit?.physical_address_line2 ?? null,
+                                            physical_address_city:
+                                              workerEdit?.physical_address_city ?? null,
+                                            physical_address_state:
+                                              workerEdit?.physical_address_state ?? null,
+                                            physical_address_postal_code:
+                                              workerEdit?.physical_address_postal_code ?? null,
+                                            mailing_address_line1:
+                                              workerEdit?.mailing_address_line1 ?? null,
+                                            mailing_address_line2:
+                                              workerEdit?.mailing_address_line2 ?? null,
+                                            mailing_address_city:
+                                              workerEdit?.mailing_address_city ?? null,
+                                            mailing_address_state:
+                                              workerEdit?.mailing_address_state ?? null,
+                                            mailing_address_postal_code:
+                                              workerEdit?.mailing_address_postal_code ?? null,
+                                            availability_notes:
+                                              workerEdit?.availability_notes ?? null,
+                                            availability_schedule:
+                                              JSON.stringify(workerAvailSchedule),
+                                            vehicle: workerEdit?.vehicle ?? null,
+                                            driver_license_status:
+                                              workerEdit?.driver_license_status ?? null,
+                                            driver_license_number:
+                                              workerEdit?.driver_license_number ?? null,
+                                            driver_license_expires_on:
+                                              workerEdit?.driver_license_expires_on
+                                                ? `${workerEdit.driver_license_expires_on}T00:00:00`
+                                                : null,
+                                            hipaa_certified: !!workerEdit?.hipaa_certified,
+                                            is_driver: wantsDriver,
+                                          },
+                                          role: session?.role ?? null,
+                                        });
+                                        await loadUsers();
+                                        setSelectedWorker((prev) =>
+                                          prev
+                                            ? ({
+                                                ...prev,
+                                                ...workerEdit,
+                                                is_driver: wantsDriver,
+                                                hipaa_certified: workerEdit?.hipaa_certified ? 1 : 0,
+                                              } as UserRow)
+                                            : prev,
+                                        );
+                                        setWorkerDetailEditMode(false);
+                                        setWorkerPasswordReset("");
+                                      } finally {
+                                        setBusy(false);
+                                      }
+                                    }}
+                                  >
+                                    Save worker
+                                  </button>
+                                  <button
+                                    className="ghost"
+                                    type="button"
+                                    onClick={() => {
+                                      if (selectedWorker) {
+                                        openWorkerDetail(selectedWorker);
+                                      }
+                                      setWorkerDetailEditMode(false);
                                       setWorkerPasswordReset("");
-                                    } catch (err) {
-                                      setWorkerError(
-                                        typeof err === "string" ? err : "Failed to reset password.",
-                                      );
-                                    } finally {
-                                      setBusy(false);
-                                    }
+                                    }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              )}
+                              {!canManage && (
+                                <div className="muted">Read-only (admin/lead can edit).</div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="stack">
+                              <div>
+                                <strong>Role:</strong> {selectedWorker.role}
+                              </div>
+                              <div>
+                                <strong>Email:</strong> {workerDetailValues?.email ?? "—"}
+                              </div>
+                              <div>
+                                <strong>Phone:</strong> {workerDetailValues?.telephone ?? "—"}
+                              </div>
+                              <div>
+                                <strong>Address Line 1:</strong>{" "}
+                                {workerDetailValues?.physical_address_line1 ?? "—"}
+                              </div>
+                              <div>
+                                <strong>Address Line 2:</strong>{" "}
+                                {workerDetailValues?.physical_address_line2 ?? "—"}
+                              </div>
+                              <div>
+                                <strong>City:</strong> {workerDetailValues?.physical_address_city ?? "—"}
+                              </div>
+                              <div>
+                                <strong>State:</strong> {workerDetailValues?.physical_address_state ?? "—"}
+                              </div>
+                              <div>
+                                <strong>ZIP:</strong>{" "}
+                                {workerDetailValues?.physical_address_postal_code ?? "—"}
+                              </div>
+                              <div>
+                                <strong>Mailing Line 1:</strong>{" "}
+                                {workerDetailValues?.mailing_address_line1 ?? "—"}
+                              </div>
+                              <div>
+                                <strong>Mailing Line 2:</strong>{" "}
+                                {workerDetailValues?.mailing_address_line2 ?? "—"}
+                              </div>
+                              <div>
+                                <strong>Mailing City:</strong>{" "}
+                                {workerDetailValues?.mailing_address_city ?? "—"}
+                              </div>
+                              <div>
+                                <strong>Mailing State:</strong>{" "}
+                                {workerDetailValues?.mailing_address_state ?? "—"}
+                              </div>
+                              <div>
+                                <strong>Mailing ZIP:</strong>{" "}
+                                {workerDetailValues?.mailing_address_postal_code ?? "—"}
+                              </div>
+                              <div>
+                                <strong>Availability Notes:</strong>{" "}
+                                {workerDetailValues?.availability_notes ?? "—"}
+                              </div>
+                              <div>
+                                <strong>Availability Schedule:</strong>{" "}
+                                {Object.keys(workerAvailSchedule)
+                                  .filter((day) => workerAvailSchedule[day])
+                                  .map((day) => day.charAt(0).toUpperCase() + day.slice(1))
+                                  .join(", ") || "None set"}
+                              </div>
+                              <div>
+                                <strong>Working vehicle:</strong> {workerDetailValues?.vehicle ?? "—"}
+                              </div>
+                              <div>
+                                <strong>Driver license status:</strong>{" "}
+                                {workerDetailValues?.driver_license_status ?? "—"}
+                              </div>
+                              <div>
+                                <strong>Driver license number:</strong>{" "}
+                                {workerDetailValues?.driver_license_number ?? "—"}
+                              </div>
+                              <div>
+                                <strong>Driver license expiration:</strong>{" "}
+                                {workerDetailValues?.driver_license_expires_on
+                                  ? workerDetailValues.driver_license_expires_on.slice(0, 10)
+                                  : "—"}
+                              </div>
+                              <div>
+                                <strong>Driver:</strong>{" "}
+                                {workerDetailValues?.is_driver ? "Yes" : "No"}
+                              </div>
+                              <div>
+                                <strong>HIPAA certified:</strong>{" "}
+                                {workerDetailValues?.hipaa_certified ? "Yes" : "No"}
+                              </div>
+                              {canManage ? (
+                                <div
+                                  style={{
+                                    borderTop: "1px solid #eee",
+                                    marginTop: "1rem",
+                                    paddingTop: "0.75rem",
                                   }}
                                 >
-                                  Reset Password
-                                </button>
-                              <button
-                                className="ping"
-                                type="button"
-                                disabled={busy}
-                                onClick={async () => {
-                                  setWorkerError(null);
-                                  const wantsDriver = !!workerEdit?.is_driver;
-                                    const hasStatus = !!(
-                                      workerEdit?.driver_license_status ?? ""
-                                    ).trim();
-                                    const hasExpiry = !!(
-                                      workerEdit?.driver_license_expires_on ?? ""
-                                    ).trim();
-                                  if (wantsDriver && (!hasStatus || !hasExpiry)) {
-                                      setWorkerError(
-                                        "Driver flag requires license status and expiration.",
-                                      );
-                                    return;
-                                  }
-                                  setBusy(true);
-                                  try {
-                                      await invokeTauri("update_user_flags", {
-                                      input: {
-                                        id: selectedWorker.id,
-                                          email: workerEdit?.email ?? null,
-                                          telephone: workerEdit?.telephone ?? null,
-                                          physical_address_line1:
-                                            workerEdit?.physical_address_line1 ?? null,
-                                          physical_address_line2:
-                                            workerEdit?.physical_address_line2 ?? null,
-                                          physical_address_city:
-                                            workerEdit?.physical_address_city ?? null,
-                                          physical_address_state:
-                                            workerEdit?.physical_address_state ?? null,
-                                          physical_address_postal_code:
-                                            workerEdit?.physical_address_postal_code ?? null,
-                                          mailing_address_line1:
-                                            workerEdit?.mailing_address_line1 ?? null,
-                                          mailing_address_line2:
-                                            workerEdit?.mailing_address_line2 ?? null,
-                                          mailing_address_city:
-                                            workerEdit?.mailing_address_city ?? null,
-                                          mailing_address_state:
-                                            workerEdit?.mailing_address_state ?? null,
-                                          mailing_address_postal_code:
-                                            workerEdit?.mailing_address_postal_code ?? null,
-                                          availability_notes:
-                                            workerEdit?.availability_notes ?? null,
-                                          availability_schedule:
-                                            JSON.stringify(workerAvailSchedule),
-                                        vehicle: workerEdit?.vehicle ?? null,
-                                          driver_license_status:
-                                            workerEdit?.driver_license_status ?? null,
-                                          driver_license_number:
-                                            workerEdit?.driver_license_number ?? null,
-                                          driver_license_expires_on:
-                                            workerEdit?.driver_license_expires_on
-                                          ? `${workerEdit.driver_license_expires_on}T00:00:00`
-                                          : null,
-                                        hipaa_certified: !!workerEdit?.hipaa_certified,
-                                        is_driver: wantsDriver,
-                                      },
-                                      role: session?.role ?? null,
-                                    });
-                                    await loadUsers();
-                                    setSelectedWorker(null);
-                                      setWorkerPasswordReset("");
-                                  } finally {
-                                    setBusy(false);
-                                  }
-                                }}
-                              >
-                                Save worker
-                              </button>
-                                <button
-                                  className="ghost"
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedWorker(null);
-                                    setWorkerPasswordReset("");
-                                  }}
-                                >
-                                Cancel
-                              </button>
+                                  <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                                    <button
+                                      className="ghost"
+                                      type="button"
+                                      onClick={() => setWorkerDetailEditMode(true)}
+                                      style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem" }}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      className="ghost"
+                                      type="button"
+                                      onClick={async () => {
+                                        if (
+                                          !window.confirm(
+                                            `Delete worker ${selectedWorker.name}? This marks them deleted.`,
+                                          )
+                                        )
+                                          return;
+                                        setBusy(true);
+                                        try {
+                                          await invokeTauri("delete_user", {
+                                            id: selectedWorker.id,
+                                            role: session?.role ?? null,
+                                            actor: session?.username ?? null,
+                                          });
+                                          await loadUsers();
+                                          setWorkerDetailOpen(false);
+                                          setSelectedWorker(null);
+                                          setWorkerDetailEditMode(false);
+                                        } finally {
+                                          setBusy(false);
+                                        }
+                                      }}
+                                      style={{
+                                        padding: "0.25rem 0.5rem",
+                                        fontSize: "0.85rem",
+                                        color: "#b3261e",
+                                      }}
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="muted">Read-only (admin/lead can edit).</div>
+                              )}
                             </div>
                           )}
-                          {!(session?.role === "admin" || session?.role === "lead") && (
-                            <div className="muted">Read-only (admin/lead can edit).</div>
-                          )}
-                        </div>
                         </div>
                       )}
                     </div>

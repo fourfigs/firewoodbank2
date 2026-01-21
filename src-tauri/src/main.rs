@@ -1018,6 +1018,48 @@ async fn delete_client(state: State<'_, AppState>, id: String) -> Result<(), Str
 }
 
 #[tauri::command]
+async fn delete_user(
+    state: State<'_, AppState>,
+    id: String,
+    role: Option<String>,
+    actor: Option<String>,
+) -> Result<(), String> {
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
+    if role_val != "admin" && role_val != "lead" {
+        return Err("Only admins or leads can delete users".to_string());
+    }
+    audit_db(&state.pool, "delete_user", &role_val, &actor_val).await;
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET is_deleted = 1,
+            updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+    )
+    .bind(&id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        r#"
+        UPDATE auth_users
+        SET is_deleted = 1,
+            updated_at = datetime('now')
+        WHERE user_id = ?
+        "#,
+    )
+    .bind(&id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn check_client_conflict(
     state: State<'_, AppState>,
     name: String,
@@ -3422,6 +3464,7 @@ fn main() -> Result<()> {
             check_client_conflict,
             update_client,
             delete_client,
+            delete_user,
             create_inventory_item,
             list_inventory_items,
             update_inventory_item,
