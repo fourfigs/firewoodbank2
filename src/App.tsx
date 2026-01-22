@@ -2637,11 +2637,22 @@ function App() {
                             {clientError && (
                               <div
                                 className="pill"
-                                style={{ background: "#fbe2e2", color: "#b3261e" }}
+                                style={{ background: "#fbe2e2", color: "#b3261e", marginBottom: "1rem" }}
                               >
                                 {clientError}
                               </div>
                             )}
+                            {/* Form Progress Indicator */}
+                            <div style={{ marginBottom: "1rem", padding: "0.75rem", background: "#f5f5f5", borderRadius: "6px" }}>
+                              <div style={{ fontSize: "0.85rem", color: "#666", marginBottom: "0.5rem" }}>Form Sections</div>
+                              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                                <span className="badge" style={{ background: "#1f5131", color: "white" }}>1. Basic Info</span>
+                                <span className="badge" style={{ background: "#1f5131", color: "white" }}>2. Physical Address</span>
+                                <span className="badge" style={{ background: clientForm.mailing_same_as_physical ? "#ccc" : "#1f5131", color: clientForm.mailing_same_as_physical ? "#666" : "white" }}>3. Mailing Address</span>
+                                <span className="badge" style={{ background: "#1f5131", color: "white" }}>4. Approval & Agency</span>
+                                <span className="badge" style={{ background: "#ccc", color: "#666" }}>5. Additional Info (Optional)</span>
+                              </div>
+                            </div>
                             <form
                               className="form-grid"
                               onSubmit={async (e) => {
