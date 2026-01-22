@@ -2360,10 +2360,23 @@ function App() {
                         ))}
                         {profileCalendarDays.map((day) => {
                           if (!day.date) return <div key={day.key} style={{ background: "transparent" }} />;
-                          const dateKey = `${day.date.getFullYear()}-${String(
-                            day.date.getMonth() + 1,
-                          ).padStart(2, "0")}-${String(day.date.getDate()).padStart(2, "0")}`;
-                          const types = profileWorkByDate.get(dateKey);
+                          const weekday = day.date.getDay();
+                          // Tuesday = 2 (deliveries), Thursday = 4 (cutting), Sunday = 0 (splitting)
+                          let stripeColor: string | null = null;
+                          let stripeLabel: string = "";
+                          if (weekday === 2) {
+                            // Tuesday - deliveries
+                            stripeColor = "#e67f1e";
+                            stripeLabel = "Deliveries";
+                          } else if (weekday === 4) {
+                            // Thursday - cutting
+                            stripeColor = "#2e7d32";
+                            stripeLabel = "Cutting";
+                          } else if (weekday === 0) {
+                            // Sunday - splitting
+                            stripeColor = "#1565c0";
+                            stripeLabel = "Splitting";
+                          }
                           return (
                             <div
                               key={day.key}
@@ -2373,8 +2386,24 @@ function App() {
                                 background: "white",
                                 padding: "4px",
                                 borderRadius: "4px",
+                                position: "relative",
                               }}
                             >
+                              {stripeColor && (
+                                <div
+                                  title={stripeLabel}
+                                  style={{
+                                    position: "absolute",
+                                    left: 0,
+                                    top: 0,
+                                    bottom: 0,
+                                    width: "4px",
+                                    background: stripeColor,
+                                    borderTopLeftRadius: "4px",
+                                    borderBottomLeftRadius: "4px",
+                                  }}
+                                />
+                              )}
                               <div
                                 style={{
                                   textAlign: "right",
@@ -2385,46 +2414,6 @@ function App() {
                               >
                                 {day.date.getDate()}
                               </div>
-                              {types && types.size > 0 && (
-                                <div style={{ display: "flex", justifyContent: "center", gap: "4px" }}>
-                                  {types.has("delivery") && (
-                                    <span
-                                      title="Delivering"
-                                      style={{
-                                        width: 8,
-                                        height: 8,
-                                        borderRadius: "50%",
-                                        background: "#e67f1e",
-                                        display: "inline-block",
-                                      }}
-                                    />
-                                  )}
-                                  {types.has("cutting") && (
-                                    <span
-                                      title="Cutting"
-                                      style={{
-                                        width: 8,
-                                        height: 8,
-                                        borderRadius: "50%",
-                                        background: "#2e7d32",
-                                        display: "inline-block",
-                                      }}
-                                    />
-                                  )}
-                                  {types.has("splitting") && (
-                                    <span
-                                      title="Splitting"
-                                      style={{
-                                        width: 8,
-                                        height: 8,
-                                        borderRadius: "50%",
-                                        background: "#1565c0",
-                                        display: "inline-block",
-                                      }}
-                                    />
-                                  )}
-                                </div>
-                              )}
                             </div>
                           );
                         })}

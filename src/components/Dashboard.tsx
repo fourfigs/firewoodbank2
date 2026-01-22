@@ -219,6 +219,17 @@ export default function Dashboard({
     });
   }, [workOrders]);
 
+  // --- Work Order Status Map (for filtering completed deliveries) ---
+  const workOrderStatusMap = useMemo(() => {
+    const map = new Map<string, string>();
+    workOrders.forEach((wo) => {
+      if (wo.id) {
+        map.set(wo.id, (wo.status || "").toLowerCase());
+      }
+    });
+    return map;
+  }, [workOrders]);
+
   // --- Wood Shortage Calculation ---
   const woodShortage = useMemo(() => {
     const available = woodSummary.split;
@@ -568,7 +579,17 @@ export default function Dashboard({
                 if (!day.date) return <div key={idx} style={{ background: "transparent" }} />;
 
                 const events = getEventsForDate(day.date);
-                const deliveryEvents = events.filter((e) => (e.event_type || "").toLowerCase() === "delivery");
+                // Filter delivery events to only show completed deliveries
+                const deliveryEvents = events.filter((e) => {
+                  if ((e.event_type || "").toLowerCase() !== "delivery") return false;
+                  // If it has a work_order_id, check if the work order is completed
+                  if (e.work_order_id) {
+                    const status = workOrderStatusMap.get(e.work_order_id);
+                    return status === "completed";
+                  }
+                  // If no work_order_id, don't show it (only show actual completed deliveries)
+                  return false;
+                });
                 const otherEvents = events.filter((e) => (e.event_type || "").toLowerCase() !== "delivery");
                 const isTodayFlag = isToday(day.date);
 
