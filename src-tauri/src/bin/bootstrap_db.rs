@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Bootstrapping database at: {}", url);
 
     // Create connection options with create_if_missing
-    let opts = SqliteConnectOptions::from_str(&url)?
+    let opts = SqliteConnectOptions::from_str(url)?
         .create_if_missing(true);
 
     let pool = SqlitePoolOptions::new()

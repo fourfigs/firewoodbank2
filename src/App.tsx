@@ -87,6 +87,8 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
 
   // Forgot Password State
   const [isForgot, setIsForgot] = useState(false);
@@ -108,6 +110,7 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
     e.preventDefault();
     setSubmitting(true);
     setLoginError(null);
+    setCapsLockOn(false);
     try {
       const response = await invokeTauri<LoginResponse>("login_user", {
         input: { username, password },
@@ -137,12 +140,29 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
   const handleForgotSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    setTimeout(() => {
-      if (isMounted.current) {
-        setResetMessage(`If an account exists for "${forgotEmail}", a reset code has been sent.`);
-        setSubmitting(false);
-      }
-    }, 1000);
+    invokeTauri("request_password_reset", {
+      input: {
+        identifier: forgotEmail.trim(),
+      },
+    })
+      .catch(() => {
+        if (isMounted.current) {
+          setResetMessage("We could not submit your reset request. Please contact an admin.");
+        }
+      })
+      .finally(() => {
+        if (isMounted.current) {
+          setResetMessage((prev) =>
+            prev ?? `If an account exists for "${forgotEmail}", a reset code has been sent.`,
+          );
+          setSubmitting(false);
+        }
+      });
+  };
+
+  const handleCapsLockCheck = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const modifierState = e.getModifierState?.("CapsLock") ?? false;
+    setCapsLockOn(modifierState);
   };
 
   return (
@@ -172,8 +192,12 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
               <label>Username or Email</label>
               <input
                 required
+                autoComplete="username"
                 value={forgotEmail}
-                onChange={(e) => setForgotEmail(e.target.value)}
+                onChange={(e) => {
+                  setForgotEmail(e.target.value);
+                  setResetMessage(null);
+                }}
                 placeholder="user@example.com"
               />
             </div>
@@ -187,6 +211,8 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
                 onClick={() => {
                   setIsForgot(false);
                   setResetMessage(null);
+                  setLoginError(null);
+                  setSubmitting(false);
                 }}
               >
                 Back to Login
@@ -219,6 +245,7 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
                 background: "#fbe2e2",
                 color: "#b3261e",
               }}
+              aria-live="polite"
             >
               {loginError}
             </div>
@@ -231,9 +258,14 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
                 name="username"
                 type="text"
                 required
+                autoComplete="username"
+                autoFocus
                 placeholder="Enter your username"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  if (loginError) setLoginError(null);
+                }}
               />
             </div>
             <div className="login-field">
@@ -241,12 +273,22 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
               <input
                 id="password"
                 name="password"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 required
+                autoComplete="current-password"
                 placeholder="Enter your password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (loginError) setLoginError(null);
+                }}
+                onKeyUp={handleCapsLockCheck}
               />
+              {capsLockOn && (
+                <div className="muted" style={{ marginTop: 6, color: "#b3261e" }}>
+                  Caps Lock is on.
+                </div>
+              )}
             </div>
 
             <button className="login-btn" type="submit" disabled={submitting}>
@@ -254,8 +296,23 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
             </button>
             
             <div className="login-options" style={{ justifyContent: "center", marginTop: 16 }}>
-                 <button className="login-link" type="button" onClick={() => setIsForgot(true)}>
-                    Lost Password?
+                 <button
+                   className="login-link"
+                   type="button"
+                   onClick={() => {
+                     setIsForgot(true);
+                     setLoginError(null);
+                     setSubmitting(false);
+                   }}
+                 >
+                   Lost Password?
+                 </button>
+                 <button
+                   className="login-link"
+                   type="button"
+                   onClick={() => setShowPassword((prev) => !prev)}
+                 >
+                   {showPassword ? "Hide password" : "Show password"}
                  </button>
             </div>
           </form>
@@ -280,10 +337,6 @@ function App() {
   const [activeTab, setActiveTab] = useState<string>("Dashboard");
   const [session, setSession] = useState<UserSession | null>(null);
   const [now, setNow] = useState(() => new Date());
-
-  useEffect(() => {
-    console.log("App mounted");
-  }, []);
 
   useEffect(() => {
     const intervalId = setInterval(() => setNow(new Date()), 1000);
@@ -482,6 +535,9 @@ function App() {
     first_name: "",
     last_name: "",
     date_of_onboarding: "", // Will be generated after creation
+    approval_expires_on: "",
+    last_reapproval_date: "",
+    requires_reapproval: false,
     physical_address_line1: "",
     physical_address_line2: "",
     physical_address_city: "",
@@ -565,8 +621,8 @@ function App() {
         work_order_id: workOrderId,
       });
       setWorkOrderStatusHistory(data);
-    } catch (error) {
-      console.error("Error loading work order status history:", error);
+    } catch {
+      console.error("Error loading work order status history.");
       setWorkOrderStatusHistory([]);
     }
   };
@@ -708,8 +764,8 @@ function App() {
         client_id: clientId,
       });
       setClientApprovalHistory(data);
-    } catch (error) {
-      console.error("Error loading approval history:", error);
+    } catch {
+      console.error("Error loading approval history.");
       setClientApprovalHistory([]);
     }
   };
@@ -720,8 +776,8 @@ function App() {
         client_id: clientId,
       });
       setClientCommunications(data);
-    } catch (error) {
-      console.error("Error loading communications:", error);
+    } catch {
+      console.error("Error loading communications.");
       setClientCommunications([]);
     }
   };
@@ -732,8 +788,8 @@ function App() {
         client_id: clientId,
       });
       setClientFeedback(data);
-    } catch (error) {
-      console.error("Error loading feedback:", error);
+    } catch {
+      console.error("Error loading feedback.");
       setClientFeedback([]);
     }
   };
@@ -869,8 +925,8 @@ function App() {
       // Backend returns newest first, but ensure ordering just in case.
       items.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
       setMotdItems(items);
-    } catch (e) {
-      console.error(e);
+    } catch {
+      console.error("Error loading message of the day.");
     }
   };
 
@@ -2645,6 +2701,13 @@ function App() {
                                       clientForm.how_did_they_hear_about_us || null,
                                     referring_agency: clientForm.referring_agency || null,
                                     approval_status: defaultStatus || "pending",
+                                    approval_expires_on: clientForm.approval_expires_on
+                                      ? `${clientForm.approval_expires_on}T00:00:00`
+                                      : null,
+                                    last_reapproval_date: clientForm.last_reapproval_date
+                                      ? `${clientForm.last_reapproval_date}T00:00:00`
+                                      : null,
+                                    requires_reapproval: clientForm.requires_reapproval || false,
                                     denial_reason: clientForm.denial_reason || null,
                                     wood_size_label: clientForm.wood_size_label || null,
                                     wood_size_other: clientForm.wood_size_other || null,
@@ -2670,7 +2733,6 @@ function App() {
                                   setShowClientForm(false);
                                   setEditingClientId(null);
                                 } catch (error) {
-                                  console.error("Error saving client:", error);
                                   const errorMessage =
                                     error instanceof Error
                                     ? error.message
@@ -3073,9 +3135,50 @@ function App() {
                                 </select>
                               </label>
                               <label>
+                                Approval Expires On
+                                <input
+                                  type="date"
+                                  tabIndex={24}
+                                  value={clientForm.approval_expires_on}
+                                  onChange={(e) =>
+                                    setClientForm({
+                                      ...clientForm,
+                                      approval_expires_on: e.target.value,
+                                    })
+                                  }
+                                />
+                              </label>
+                              <label className="checkbox span-2">
+                                <input
+                                  type="checkbox"
+                                  checked={clientForm.requires_reapproval}
+                                  onChange={(e) =>
+                                    setClientForm({
+                                      ...clientForm,
+                                      requires_reapproval: e.target.checked,
+                                    })
+                                  }
+                                />
+                                Requires Re-Approval
+                              </label>
+                              <label>
+                                Last Re-Approval Date
+                                <input
+                                  type="date"
+                                  tabIndex={25}
+                                  value={clientForm.last_reapproval_date}
+                                  onChange={(e) =>
+                                    setClientForm({
+                                      ...clientForm,
+                                      last_reapproval_date: e.target.value,
+                                    })
+                                  }
+                                />
+                              </label>
+                              <label>
                                 Reason Qualified Or Not
                                 <textarea
-                                  tabIndex={24}
+                                  tabIndex={26}
                                   value={clientForm.denial_reason || ""}
                                   onChange={(e) =>
                                     setClientForm({ ...clientForm, denial_reason: e.target.value })
@@ -3219,6 +3322,24 @@ function App() {
                                         <option value="summer_only">Summer Only</option>
                                       </select>
                                     </label>
+                                  <label>
+                                    Preferred Driver
+                                    <select
+                                      value={clientForm.preferred_driver_id}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, preferred_driver_id: e.target.value })
+                                      }
+                                    >
+                                      <option value="">Any</option>
+                                      {users
+                                        .filter((u) => !!u.is_driver)
+                                        .map((u) => (
+                                          <option key={u.id} value={u.id}>
+                                            {u.name}
+                                          </option>
+                                        ))}
+                                    </select>
+                                  </label>
                                     <label className="span-2">
                                       Delivery Restrictions
                                       <textarea
@@ -3327,7 +3448,7 @@ function App() {
                             }}
                           >
                             <input
-                              placeholder="Search name, #, city"
+                              placeholder="Search name, phone, email, address"
                               value={showAdvancedSearch ? advancedSearchFilters.search_term : clientSearch}
                               onChange={(e) => {
                                 if (showAdvancedSearch) {
@@ -3416,6 +3537,131 @@ function App() {
                             </button>
                           </div>
                         </div>
+                        {showAdvancedSearch && (
+                          <div
+                            className="card muted"
+                            style={{ marginBottom: "0.75rem", padding: "0.75rem 1rem" }}
+                          >
+                            <div className="form-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+                              <label>
+                                Approval Status
+                                <select
+                                  value={advancedSearchFilters.approval_status}
+                                  onChange={(e) =>
+                                    setAdvancedSearchFilters({
+                                      ...advancedSearchFilters,
+                                      approval_status: e.target.value,
+                                    })
+                                  }
+                                >
+                                  <option value="">Any</option>
+                                  <option value="approved">Approved</option>
+                                  <option value="exception">Exception</option>
+                                  <option value="pending">Pending</option>
+                                  <option value="volunteer">Volunteer</option>
+                                  <option value="denied">Denied</option>
+                                </select>
+                              </label>
+                              <label>
+                                Referring Agency
+                                <input
+                                  value={advancedSearchFilters.referring_agency}
+                                  onChange={(e) =>
+                                    setAdvancedSearchFilters({
+                                      ...advancedSearchFilters,
+                                      referring_agency: e.target.value,
+                                    })
+                                  }
+                                  placeholder="Agency name"
+                                />
+                              </label>
+                              <label>
+                                Date From
+                                <input
+                                  type="date"
+                                  value={advancedSearchFilters.date_from}
+                                  onChange={(e) =>
+                                    setAdvancedSearchFilters({
+                                      ...advancedSearchFilters,
+                                      date_from: e.target.value,
+                                    })
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Date To
+                                <input
+                                  type="date"
+                                  value={advancedSearchFilters.date_to}
+                                  onChange={(e) =>
+                                    setAdvancedSearchFilters({
+                                      ...advancedSearchFilters,
+                                      date_to: e.target.value,
+                                    })
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Has Email
+                                <select
+                                  value={
+                                    advancedSearchFilters.has_email === undefined
+                                      ? "any"
+                                      : advancedSearchFilters.has_email
+                                        ? "yes"
+                                        : "no"
+                                  }
+                                  onChange={(e) =>
+                                    setAdvancedSearchFilters({
+                                      ...advancedSearchFilters,
+                                      has_email:
+                                        e.target.value === "any"
+                                          ? undefined
+                                          : e.target.value === "yes",
+                                    })
+                                  }
+                                >
+                                  <option value="any">Any</option>
+                                  <option value="yes">Yes</option>
+                                  <option value="no">No</option>
+                                </select>
+                              </label>
+                              <label>
+                                Has Phone
+                                <select
+                                  value={
+                                    advancedSearchFilters.has_phone === undefined
+                                      ? "any"
+                                      : advancedSearchFilters.has_phone
+                                        ? "yes"
+                                        : "no"
+                                  }
+                                  onChange={(e) =>
+                                    setAdvancedSearchFilters({
+                                      ...advancedSearchFilters,
+                                      has_phone:
+                                        e.target.value === "any"
+                                          ? undefined
+                                          : e.target.value === "yes",
+                                    })
+                                  }
+                                >
+                                  <option value="any">Any</option>
+                                  <option value="yes">Yes</option>
+                                  <option value="no">No</option>
+                                </select>
+                              </label>
+                            </div>
+                            <div style={{ marginTop: "0.5rem", display: "flex", gap: 8 }}>
+                              <button className="ghost" type="button" onClick={loadClients} disabled={busy}>
+                                Apply Filters
+                              </button>
+                              <span className="muted" style={{ alignSelf: "center" }}>
+                                Advanced search runs on the server.
+                              </span>
+                            </div>
+                          </div>
+                        )}
                         <div className="table">
                           <div className="table-head client-grid">
                             <span
@@ -3559,10 +3805,10 @@ function App() {
                                   {canViewClientPII ? (c.telephone ?? "—") : "Hidden"}
                                 </div>
                                 <div className="client-cell hide-on-mobile">
-                                  {c.physical_address_city}
+                                  {canViewClientPII ? c.physical_address_city : "Hidden"}
                                 </div>
                                 <div className="client-cell hide-on-mobile">
-                                  {c.physical_address_state}
+                                  {canViewClientPII ? c.physical_address_state : "Hidden"}
                                 </div>
                               </div>
                             );
@@ -3798,11 +4044,50 @@ function App() {
                                     {selectedClientForDetail.seasonal_delivery_pattern && ` | ${selectedClientForDetail.seasonal_delivery_pattern.replace(/_/g, " ")}`}
                                   </div>
                                 )}
+                                {selectedClientForDetail.preferred_driver_id && (
+                                  <div style={{ marginBottom: "0.5rem" }}>
+                                    <strong>Preferred Driver:</strong>{" "}
+                                    {users.find((u) => u.id === selectedClientForDetail.preferred_driver_id)?.name ||
+                                      "Unknown"}
+                                  </div>
+                                )}
                                 {selectedClientForDetail.delivery_restrictions && (
                                   <div style={{ marginBottom: "0.5rem", fontSize: "0.85rem", color: "#666" }}>
                                     <strong>Restrictions:</strong> {selectedClientForDetail.delivery_restrictions}
                                   </div>
                                 )}
+                              </div>
+                            )}
+
+                            {/* Approval History */}
+                            {(selectedClientForDetail.approval_date ||
+                              selectedClientForDetail.approved_by_user_id ||
+                              selectedClientForDetail.approval_expires_on ||
+                              selectedClientForDetail.requires_reapproval) && (
+                              <div style={{ marginTop: "1rem", borderTop: "1px solid #eee", paddingTop: "0.75rem" }}>
+                                <h4 style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>Approval Details</h4>
+                                {selectedClientForDetail.approval_date && (
+                                  <div className="muted" style={{ marginBottom: "0.35rem" }}>
+                                    Approved On: {new Date(selectedClientForDetail.approval_date).toLocaleDateString()}
+                                  </div>
+                                )}
+                                {selectedClientForDetail.approved_by_user_id && (
+                                  <div className="muted" style={{ marginBottom: "0.35rem" }}>
+                                    Approved By: {selectedClientForDetail.approved_by_user_id}
+                                  </div>
+                                )}
+                                {selectedClientForDetail.approval_expires_on && (
+                                  <div className="muted" style={{ marginBottom: "0.35rem" }}>
+                                    Approval Expires: {new Date(selectedClientForDetail.approval_expires_on).toLocaleDateString()}
+                                  </div>
+                                )}
+                                {selectedClientForDetail.requires_reapproval ? (
+                                  <div className="muted">
+                                    Requires Re-Approval{selectedClientForDetail.last_reapproval_date
+                                      ? ` (last: ${new Date(selectedClientForDetail.last_reapproval_date).toLocaleDateString()})`
+                                      : ""}
+                                  </div>
+                                ) : null}
                               </div>
                             )}
 
@@ -3992,6 +4277,14 @@ function App() {
                                         date_of_onboarding: selectedClientForDetail.date_of_onboarding
                                           ? selectedClientForDetail.date_of_onboarding.slice(0, 10)
                                           : new Date().toISOString().slice(0, 10),
+                                        approval_expires_on: selectedClientForDetail.approval_expires_on
+                                          ? selectedClientForDetail.approval_expires_on.slice(0, 10)
+                                          : "",
+                                        last_reapproval_date: selectedClientForDetail.last_reapproval_date
+                                          ? selectedClientForDetail.last_reapproval_date.slice(0, 10)
+                                          : "",
+                                        requires_reapproval:
+                                          (selectedClientForDetail.requires_reapproval ?? 0) === 1,
                                         physical_address_line1:
                                           selectedClientForDetail.physical_address_line1,
                                         physical_address_line2:
@@ -5127,7 +5420,6 @@ function App() {
                                     role: session?.role ?? null,
                                   });
                                 } catch (e: any) {
-                                  console.error(e);
                                   setWorkOrderError(
                                     typeof e === "string"
                                       ? e
@@ -6561,7 +6853,6 @@ function App() {
                                     });
                                     setShowWorkerForm(false);
                                   } catch (err: any) {
-                                    console.error(err);
                                       setWorkerFormError(
                                         typeof err === "string" ? err : "Failed to create user",
                                       );
@@ -7641,7 +7932,8 @@ function App() {
                 </div>
              </div>
           </div>
-      </div>
+        </div>
+        </>
       )}
       {session && showPasswordModal && (
         <div className="modal-overlay">
@@ -7760,7 +8052,6 @@ function App() {
                     notes: "",
                   });
                 } catch (err) {
-                  console.error("Error creating communication:", err);
                   alert(typeof err === "string" ? err : "Failed to record communication.");
                 } finally {
                   setBusy(false);
@@ -7879,7 +8170,6 @@ function App() {
                     work_order_id: "",
                   });
                 } catch (err) {
-                  console.error("Error creating feedback:", err);
                   alert(typeof err === "string" ? err : "Failed to record feedback.");
                 } finally {
                   setBusy(false);

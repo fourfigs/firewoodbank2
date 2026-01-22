@@ -22,7 +22,7 @@ class GlobalErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ errorInfo });
-    console.error("Uncaught error:", error, errorInfo);
+    console.error("Uncaught error:", error.message);
   }
 
   render() {

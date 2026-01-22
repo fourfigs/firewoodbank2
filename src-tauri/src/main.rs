@@ -8,12 +8,15 @@ use db::init_pool;
 use sync::{SyncRecord, SyncService};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, Sqlite, SqlitePool, Transaction};
+use sqlx::{FromRow, Row, Sqlite, SqlitePool, Transaction};
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
+
+const LOGIN_ATTEMPT_WINDOW_MINUTES: i64 = 15;
+const LOGIN_MAX_FAILED_ATTEMPTS: i64 = 5;
 
 async fn audit_db(pool: &SqlitePool, event: &str, role: &str, actor: &str) {
     let _ = sqlx::query(
@@ -37,6 +40,49 @@ async fn audit_db(pool: &SqlitePool, event: &str, role: &str, actor: &str) {
     .bind::<Option<String>>(None)
     .execute(pool)
     .await;
+}
+
+async fn record_login_attempt(
+    pool: &SqlitePool,
+    username: &str,
+    success: bool,
+) -> Result<(), String> {
+    let attempt_id = Uuid::new_v4().to_string();
+    let success_val = if success { 1 } else { 0 };
+    sqlx::query(
+        r#"
+        INSERT INTO auth_login_attempts (id, username, success, created_at)
+        VALUES (?, ?, ?, datetime('now'))
+        "#,
+    )
+    .bind(&attempt_id)
+    .bind(username)
+    .bind(success_val)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+async fn is_login_locked_out(pool: &SqlitePool, username: &str) -> Result<bool, String> {
+    let window = format!("-{} minutes", LOGIN_ATTEMPT_WINDOW_MINUTES);
+    let row = sqlx::query(
+        r#"
+        SELECT COUNT(*) as count
+        FROM auth_login_attempts
+        WHERE lower(username) = lower(?)
+          AND success = 0
+          AND datetime(created_at) >= datetime('now', ?)
+        "#,
+    )
+    .bind(username)
+    .bind(window)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let count: i64 = row.try_get("count").unwrap_or(0);
+    Ok(count >= LOGIN_MAX_FAILED_ATTEMPTS)
 }
 
 async fn audit_change(
@@ -319,6 +365,9 @@ struct ClientInput {
     how_did_they_hear_about_us: Option<String>,
     referring_agency: Option<String>,
     approval_status: Option<String>,
+    approval_expires_on: Option<String>,
+    last_reapproval_date: Option<String>,
+    requires_reapproval: Option<bool>,
     denial_reason: Option<String>,
     gate_combo: Option<String>,
     notes: Option<String>,
@@ -369,6 +418,9 @@ struct ClientUpdateInput {
     how_did_they_hear_about_us: Option<String>,
     referring_agency: Option<String>,
     approval_status: Option<String>,
+    approval_expires_on: Option<String>,
+    last_reapproval_date: Option<String>,
+    requires_reapproval: Option<bool>,
     denial_reason: Option<String>,
     gate_combo: Option<String>,
     notes: Option<String>,
@@ -425,6 +477,52 @@ struct ClientRow {
     approval_expires_on: Option<String>,
     last_reapproval_date: Option<String>,
     requires_reapproval: Option<i32>,
+}
+
+#[derive(Debug, FromRow)]
+struct ClientExistingRow {
+    client_title: Option<String>,
+    name: String,
+    first_name: Option<String>,
+    last_name: Option<String>,
+    physical_address_line1: String,
+    physical_address_line2: Option<String>,
+    physical_address_city: String,
+    physical_address_state: String,
+    physical_address_postal_code: String,
+    mailing_address_line1: Option<String>,
+    mailing_address_line2: Option<String>,
+    mailing_address_city: Option<String>,
+    mailing_address_state: Option<String>,
+    mailing_address_postal_code: Option<String>,
+    telephone: Option<String>,
+    email: Option<String>,
+    opt_out_email: Option<i32>,
+    emergency_contact_name: Option<String>,
+    emergency_contact_phone: Option<String>,
+    emergency_contact_relationship: Option<String>,
+    household_size: Option<i32>,
+    household_income_range: Option<String>,
+    household_composition: Option<String>,
+    preferred_delivery_times: Option<String>,
+    delivery_restrictions: Option<String>,
+    preferred_driver_id: Option<String>,
+    seasonal_delivery_pattern: Option<String>,
+    date_of_onboarding: Option<String>,
+    how_did_they_hear_about_us: Option<String>,
+    referring_agency: Option<String>,
+    approval_status: String,
+    approval_date: Option<String>,
+    approved_by_user_id: Option<String>,
+    approval_expires_on: Option<String>,
+    last_reapproval_date: Option<String>,
+    requires_reapproval: Option<i32>,
+    denial_reason: Option<String>,
+    gate_combo: Option<String>,
+    notes: Option<String>,
+    wood_size_label: Option<String>,
+    wood_size_other: Option<String>,
+    directions: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -766,6 +864,7 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
     }
 
     let opt_out_email_val = input.opt_out_email.unwrap_or(false) as i32;
+    let requires_reapproval_val = input.requires_reapproval.unwrap_or(false) as i32;
 
     let query = r#"
         INSERT INTO clients (
@@ -781,6 +880,7 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
             preferred_delivery_times, delivery_restrictions, preferred_driver_id, seasonal_delivery_pattern,
             date_of_onboarding,
             how_did_they_hear_about_us, referring_agency, approval_status,
+            approval_expires_on, last_reapproval_date, requires_reapproval,
             denial_reason, gate_combo, notes,
             wood_size_label, wood_size_other, directions,
             created_by_user_id
@@ -795,8 +895,9 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
             ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?,
-            ?, ?, ?,
             ?, ?, ?, ?,
+            ?,
+            ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?,
@@ -837,6 +938,9 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
         .bind(&input.how_did_they_hear_about_us)
         .bind(&input.referring_agency)
         .bind(&approval_status)
+        .bind(&input.approval_expires_on)
+        .bind(&input.last_reapproval_date)
+        .bind(&requires_reapproval_val)
         .bind(&input.denial_reason)
         .bind(&input.gate_combo)
         .bind(&input.notes)
@@ -1005,7 +1109,7 @@ async fn update_client(
         return Err("Name cannot be empty.".to_string());
     }
 
-    let existing = sqlx::query!(
+    let existing = sqlx::query_as::<_, ClientExistingRow>(
         r#"
         SELECT
             client_title, name, first_name, last_name,
@@ -1019,13 +1123,15 @@ async fn update_client(
             preferred_delivery_times, delivery_restrictions, preferred_driver_id, seasonal_delivery_pattern,
             date_of_onboarding,
             how_did_they_hear_about_us, referring_agency,
-            approval_status, approval_date, approved_by_user_id, denial_reason, gate_combo, notes,
+            approval_status, approval_date, approved_by_user_id,
+            approval_expires_on, last_reapproval_date, requires_reapproval,
+            denial_reason, gate_combo, notes,
             wood_size_label, wood_size_other, directions
         FROM clients
         WHERE id = ? AND is_deleted = 0
         "#,
-        input.id
     )
+    .bind(&input.id)
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -1084,6 +1190,9 @@ async fn update_client(
             approval_status = ?,
             approval_date = ?,
             approved_by_user_id = ?,
+            approval_expires_on = ?,
+            last_reapproval_date = ?,
+            requires_reapproval = ?,
             denial_reason = ?,
             gate_combo = ?,
             notes = ?,
@@ -1128,6 +1237,9 @@ async fn update_client(
         .bind(&approval_status)
         .bind(&approval_date)
         .bind(&approved_by_user_id)
+        .bind(&input.approval_expires_on)
+        .bind(&input.last_reapproval_date)
+        .bind(&requires_reapproval_val)
         .bind(&input.denial_reason)
         .bind(&input.gate_combo)
         .bind(&input.notes)
@@ -1224,6 +1336,13 @@ async fn update_client(
         log_field("how_did_they_hear_about_us", prev.how_did_they_hear_about_us, input.how_did_they_hear_about_us.clone());
         log_field("referring_agency", prev.referring_agency, input.referring_agency.clone());
         log_field("approval_status", Some(prev.approval_status), Some(approval_status.clone()));
+        log_field("approval_expires_on", prev.approval_expires_on, input.approval_expires_on.clone());
+        log_field("last_reapproval_date", prev.last_reapproval_date, input.last_reapproval_date.clone());
+        log_field(
+            "requires_reapproval",
+            prev.requires_reapproval.map(|v| if v == 1 { "true".to_string() } else { "false".to_string() }),
+            input.requires_reapproval.map(|v| if v { "true".to_string() } else { "false".to_string() }),
+        );
         log_field("denial_reason", prev.denial_reason, input.denial_reason.clone());
         log_field("gate_combo", prev.gate_combo, input.gate_combo.clone());
         log_field("notes", prev.notes, input.notes.clone());
@@ -1326,38 +1445,34 @@ async fn list_client_communications(
     client_id: Option<String>,
     communication_type: Option<String>,
 ) -> Result<Vec<ClientCommunicationRow>, String> {
-    let query = if let Some(cid) = client_id {
-        if let Some(ct) = communication_type {
-            sqlx::query_as::<_, ClientCommunicationRow>(
-                r#"
-                SELECT id, client_id, communication_type, direction, subject, message, contacted_by_user_id, created_at, notes
-                FROM client_communications
-                WHERE client_id = ? AND communication_type = ?
-                ORDER BY created_at DESC
-                "#,
-            )
-            .bind(&cid)
-            .bind(&ct)
-        } else {
-            sqlx::query_as::<_, ClientCommunicationRow>(
-                r#"
-                SELECT id, client_id, communication_type, direction, subject, message, contacted_by_user_id, created_at, notes
-                FROM client_communications
-                WHERE client_id = ?
-                ORDER BY created_at DESC
-                "#,
-            )
-            .bind(&cid)
-        }
-    } else {
-        sqlx::query_as::<_, ClientCommunicationRow>(
+    let query = match (client_id.as_deref(), communication_type.as_deref()) {
+        (Some(cid), Some(ct)) => sqlx::query_as::<_, ClientCommunicationRow>(
+            r#"
+            SELECT id, client_id, communication_type, direction, subject, message, contacted_by_user_id, created_at, notes
+            FROM client_communications
+            WHERE client_id = ? AND communication_type = ?
+            ORDER BY created_at DESC
+            "#,
+        )
+        .bind(cid)
+        .bind(ct),
+        (Some(cid), None) => sqlx::query_as::<_, ClientCommunicationRow>(
+            r#"
+            SELECT id, client_id, communication_type, direction, subject, message, contacted_by_user_id, created_at, notes
+            FROM client_communications
+            WHERE client_id = ?
+            ORDER BY created_at DESC
+            "#,
+        )
+        .bind(cid),
+        (None, _) => sqlx::query_as::<_, ClientCommunicationRow>(
             r#"
             SELECT id, client_id, communication_type, direction, subject, message, contacted_by_user_id, created_at, notes
             FROM client_communications
             ORDER BY created_at DESC
             LIMIT 100
             "#,
-        )
+        ),
     };
 
     let rows = query
@@ -3449,12 +3564,22 @@ struct ResetPasswordInput {
     new_password: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct PasswordResetRequestInput {
+    identifier: String,
+}
+
 #[tauri::command]
 async fn login_user(state: State<'_, AppState>, input: LoginInput) -> Result<LoginResponse, String> {
     let username = input.username.trim().to_lowercase();
     let password = input.password.trim().to_string();
     if username.is_empty() || password.is_empty() {
         return Err("Username and password are required".to_string());
+    }
+
+    if is_login_locked_out(&state.pool, &username).await? {
+        record_login_attempt(&state.pool, &username, false).await.ok();
+        return Err("Too many login attempts. Please wait and try again.".to_string());
     }
 
     let row = sqlx::query!(
@@ -3482,10 +3607,31 @@ async fn login_user(state: State<'_, AppState>, input: LoginInput) -> Result<Log
     .await
     .map_err(|e| e.to_string())?;
 
-    let row = row.ok_or_else(|| "Invalid username or password".to_string())?;
+    let row = match row {
+        Some(row) => row,
+        None => {
+            record_login_attempt(&state.pool, &username, false).await.ok();
+            audit_db(&state.pool, "login_failed", "unknown", &username).await;
+            return Err("Invalid username or password".to_string());
+        }
+    };
     if !verify(&password, &row.password).map_err(|e| e.to_string())? {
+        record_login_attempt(&state.pool, &username, false).await.ok();
+        audit_db(&state.pool, "login_failed", &row.role, &row.username).await;
         return Err("Invalid username or password".to_string());
     }
+
+    record_login_attempt(&state.pool, &username, true).await.ok();
+    let _ = sqlx::query(
+        r#"
+        DELETE FROM auth_login_attempts
+        WHERE lower(username) = lower(?)
+          AND success = 0
+        "#,
+    )
+    .bind(&username)
+    .execute(&state.pool)
+    .await;
 
     audit_db(&state.pool, "login_user", &row.role, &row.username).await;
     Ok(LoginResponse {
@@ -3592,6 +3738,51 @@ async fn reset_password(
     role: Option<String>,
 ) -> Result<(), String> {
     reset_password_with_pool(&state.pool, input, role).await
+}
+
+#[tauri::command]
+async fn request_password_reset(
+    state: State<'_, AppState>,
+    input: PasswordResetRequestInput,
+) -> Result<(), String> {
+    let identifier = input.identifier.trim().to_lowercase();
+    if identifier.is_empty() {
+        return Err("Username or email is required".to_string());
+    }
+
+    let user = sqlx::query!(
+        r#"
+        SELECT u.id as user_id
+        FROM auth_users au
+        JOIN users u ON u.id = au.user_id
+        WHERE (lower(au.username) = lower(?) OR lower(u.email) = lower(?))
+          AND au.is_deleted = 0
+          AND u.is_deleted = 0
+        LIMIT 1
+        "#,
+        identifier,
+        identifier
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let request_id = Uuid::new_v4().to_string();
+    sqlx::query(
+        r#"
+        INSERT INTO password_reset_requests (id, identifier, user_id, requested_at)
+        VALUES (?, ?, ?, datetime('now'))
+        "#,
+    )
+    .bind(&request_id)
+    .bind(&identifier)
+    .bind(user.map(|u| u.user_id))
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    audit_db(&state.pool, "request_password_reset", "unknown", &identifier).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -4883,6 +5074,7 @@ fn main() -> Result<()> {
             login_user,
             change_password,
             reset_password,
+            request_password_reset,
             list_invoices,
             create_invoice_from_work_order,
             list_pending_changes,
