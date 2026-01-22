@@ -3353,133 +3353,101 @@ function App() {
 
                               {/* Additional Information Section */}
                               <FormSection title="Additional Information (Optional)" defaultOpen={false}>
-                                
-                                {/* Emergency Contact */}
-                                <div style={{ marginBottom: "1rem" }}>
-                                  <h5 style={{ fontSize: "0.9rem", marginBottom: "0.5rem", color: "#666" }}>Emergency Contact</h5>
-                                  <div className="form-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-                                    <label>
-                                      Name
-                                      <input
-                                        value={clientForm.emergency_contact_name}
-                                        onChange={(e) =>
-                                          setClientForm({ ...clientForm, emergency_contact_name: e.target.value })
-                                        }
-                                      />
-                                    </label>
-                                    <label>
-                                      Phone
-                                      <input
-                                        value={clientForm.emergency_contact_phone}
-                                        onChange={(e) =>
-                                          setClientForm({ ...clientForm, emergency_contact_phone: e.target.value })
-                                        }
-                                        onBlur={(e) =>
-                                          setClientForm((prev) => ({
-                                            ...prev,
-                                            emergency_contact_phone: normalizePhone(e.target.value),
-                                          }))
-                                        }
-                                      />
-                                    </label>
-                                    <label>
-                                      Relationship
-                                      <input
-                                        value={clientForm.emergency_contact_relationship}
-                                        onChange={(e) =>
-                                          setClientForm({ ...clientForm, emergency_contact_relationship: e.target.value })
-                                        }
-                                        placeholder="e.g., Spouse, Parent"
-                                      />
-                                    </label>
-                                  </div>
-                                </div>
-
-                                {/* Household Information */}
-                                <div style={{ marginBottom: "1rem" }}>
-                                  <h5 style={{ fontSize: "0.9rem", marginBottom: "0.5rem", color: "#666" }}>Household Information</h5>
-                                  <div className="form-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-                                    <label>
-                                      Household Size
-                                      <input
-                                        type="number"
-                                        min="1"
-                                        value={clientForm.household_size}
-                                        onChange={(e) =>
-                                          setClientForm({ ...clientForm, household_size: e.target.value })
-                                        }
-                                      />
-                                    </label>
-                                    <label>
-                                      <HelpTooltip content="Annual household income range. Used for eligibility determination and reporting.">
-                                        Income Range
-                                      </HelpTooltip>
-                                      <select
-                                        value={clientForm.household_income_range}
-                                        onChange={(e) =>
-                                          setClientForm({ ...clientForm, household_income_range: e.target.value })
-                                        }
-                                      >
-                                        <option value="">Select range</option>
-                                        <option value="under_25k">Under $25,000</option>
-                                        <option value="25k_50k">$25,000 - $50,000</option>
-                                        <option value="50k_75k">$50,000 - $75,000</option>
-                                        <option value="75k_100k">$75,000 - $100,000</option>
-                                        <option value="over_100k">Over $100,000</option>
-                                      </select>
-                                    </label>
-                                    <label className="span-2">
-                                      Household Composition
-                                      <input
-                                        value={clientForm.household_composition}
-                                        onChange={(e) =>
-                                          setClientForm({ ...clientForm, household_composition: e.target.value })
-                                        }
-                                        placeholder="e.g., 2 adults, 1 child"
-                                      />
-                                    </label>
-                                  </div>
-                                </div>
-
-                                {/* Delivery Preferences */}
-                                <div style={{ marginBottom: "1rem" }}>
-                                  <h5 style={{ fontSize: "0.9rem", marginBottom: "0.5rem", color: "#666" }}>Delivery Preferences</h5>
-                                  <div className="form-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
-                                    <label>
-                                      Preferred Delivery Times
-                                      <input
-                                        value={clientForm.preferred_delivery_times}
-                                        onChange={(e) =>
-                                          setClientForm({ ...clientForm, preferred_delivery_times: e.target.value })
-                                        }
-                                        placeholder="e.g., Weekday mornings"
-                                      />
-                                    </label>
-                                    <label>
-                                      Seasonal Pattern
-                                      <select
-                                        value={clientForm.seasonal_delivery_pattern}
-                                        onChange={(e) =>
-                                          setClientForm({ ...clientForm, seasonal_delivery_pattern: e.target.value })
-                                        }
-                                      >
-                                        <option value="">Select pattern</option>
-                                        <option value="winter_only">Winter Only</option>
-                                        <option value="year_round">Year Round</option>
-                                        <option value="summer_only">Summer Only</option>
-                                      </select>
-                                    </label>
+                                <div className="form-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+                                  <label>
+                                    Emergency Contact Name
+                                    <input
+                                      value={clientForm.emergency_contact_name}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, emergency_contact_name: e.target.value })
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    Emergency Contact Phone
+                                    <input
+                                      value={clientForm.emergency_contact_phone}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, emergency_contact_phone: e.target.value })
+                                      }
+                                      onBlur={(e) =>
+                                        setClientForm((prev) => ({
+                                          ...prev,
+                                          emergency_contact_phone: normalizePhone(e.target.value),
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    Relationship
+                                    <input
+                                      value={clientForm.emergency_contact_relationship}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, emergency_contact_relationship: e.target.value })
+                                      }
+                                      placeholder="e.g., Spouse, Parent"
+                                    />
+                                  </label>
+                                  <label>
+                                    Household Size
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={clientForm.household_size}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, household_size: e.target.value })
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    <HelpTooltip content="Annual household income range. Used for eligibility determination and reporting.">
+                                      Income Range
+                                    </HelpTooltip>
+                                    <select
+                                      value={clientForm.household_income_range}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, household_income_range: e.target.value })
+                                      }
+                                    >
+                                      <option value="">Select range</option>
+                                      <option value="under_25k">Under $25,000</option>
+                                      <option value="25k_50k">$25,000 - $50,000</option>
+                                      <option value="50k_75k">$50,000 - $75,000</option>
+                                      <option value="75k_100k">$75,000 - $100,000</option>
+                                      <option value="over_100k">Over $100,000</option>
+                                    </select>
+                                  </label>
+                                  <label className="span-2">
+                                    Household Composition
+                                    <input
+                                      value={clientForm.household_composition}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, household_composition: e.target.value })
+                                      }
+                                      placeholder="e.g., 2 adults, 1 child"
+                                    />
+                                  </label>
+                                  <label>
+                                    Preferred Delivery Times
+                                    <input
+                                      value={clientForm.preferred_delivery_times}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, preferred_delivery_times: e.target.value })
+                                      }
+                                      placeholder="e.g., Weekday mornings"
+                                    />
+                                  </label>
                                   <label>
                                     Preferred Driver
                                     <select
-                                      value={clientForm.preferred_driver_id}
+                                      value={clientForm.preferred_driver_id || ""}
                                       onChange={(e) =>
-                                        setClientForm({ ...clientForm, preferred_driver_id: e.target.value })
+                                        setClientForm({ ...clientForm, preferred_driver_id: e.target.value || null })
                                       }
                                     >
-                                      <option value="">Any</option>
+                                      <option value="">No preference</option>
                                       {users
-                                        .filter((u) => !!u.is_driver)
+                                        .filter((u) => !!u.driver_license_status)
                                         .map((u) => (
                                           <option key={u.id} value={u.id}>
                                             {u.name}
@@ -3487,20 +3455,33 @@ function App() {
                                         ))}
                                     </select>
                                   </label>
-                                    <label className="span-2">
-                                      Delivery Restrictions
-                                      <textarea
-                                        value={clientForm.delivery_restrictions}
-                                        onChange={(e) =>
-                                          setClientForm({ ...clientForm, delivery_restrictions: e.target.value })
-                                        }
-                                        rows={2}
-                                        placeholder="Any restrictions or special instructions for delivery"
-                                      />
-                                    </label>
-                                  </div>
+                                  <label>
+                                    Seasonal Delivery Pattern
+                                    <select
+                                      value={clientForm.seasonal_delivery_pattern || ""}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, seasonal_delivery_pattern: e.target.value || null })
+                                      }
+                                    >
+                                      <option value="">Select pattern</option>
+                                      <option value="winter_only">Winter Only</option>
+                                      <option value="year_round">Year Round</option>
+                                      <option value="summer_only">Summer Only</option>
+                                    </select>
+                                  </label>
+                                  <label className="span-2">
+                                    Delivery Restrictions
+                                    <textarea
+                                      value={clientForm.delivery_restrictions}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, delivery_restrictions: e.target.value })
+                                      }
+                                      rows={2}
+                                      placeholder="Any restrictions or special instructions for delivery"
+                                    />
+                                  </label>
                                 </div>
-                              </div>
+                              </FormSection>
 
                               <div className="actions span-2">
                                 <button
