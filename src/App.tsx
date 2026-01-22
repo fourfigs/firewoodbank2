@@ -37,6 +37,7 @@ import FinancialDashboard from "./components/FinancialDashboard.tsx";
 import WorkOrderStatusDropdown from "./components/WorkOrderStatusDropdown.tsx";
 import ToastNotification, { Toast } from "./components/ToastNotification.tsx";
 import ConfirmationModal from "./components/ConfirmationModal.tsx";
+import LoadingSpinner from "./components/LoadingSpinner.tsx";
 import logo from "./assets/logo.png";
 import firewoodIcon from "./assets/logo.png";
 import "./index.css";
@@ -1787,7 +1788,7 @@ function App() {
                     deliveries={deliveries}
                     inventory={inventory}
                     motdItems={motdItems}
-                    users={users}
+                    users={users.map(u => ({ ...u, is_driver: u.is_driver ?? false }))}
                     userDeliveryHours={userDeliveryHours}
                     workOrders={workOrders}
                     onCreateScheduleEvent={createScheduleEvent}
@@ -3451,7 +3452,7 @@ function App() {
                                   <label>
                                     Preferred Driver
                                     <select
-                                      value={clientForm.preferred_driver_id || ""}
+                                      value={clientForm.preferred_driver_id ?? ""}
                                       onChange={(e) =>
                                         setClientForm({ ...clientForm, preferred_driver_id: e.target.value || null })
                                       }
@@ -3469,7 +3470,7 @@ function App() {
                                   <label>
                                     Seasonal Delivery Pattern
                                     <select
-                                      value={clientForm.seasonal_delivery_pattern || ""}
+                                      value={clientForm.seasonal_delivery_pattern ?? ""}
                                       onChange={(e) =>
                                         setClientForm({ ...clientForm, seasonal_delivery_pattern: e.target.value || null })
                                       }
