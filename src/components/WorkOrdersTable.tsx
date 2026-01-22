@@ -305,6 +305,7 @@ function WorkOrdersTable({
                         role: session.role ?? null,
                         actor: session.username ?? null,
                       });
+                      // Note: Success notification would need to be passed as prop or use context
                       await loadWorkOrders();
                     } finally {
                       setBusy(false);

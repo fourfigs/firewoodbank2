@@ -67,6 +67,9 @@ import {
   normalizeAndValidateState,
   normalizeCity,
 } from "./utils/validation";
+import { getUserFriendlyError } from "./utils/errorMessages";
+import FormSection from "./components/FormSection";
+import HelpTooltip from "./components/HelpTooltip";
 
 // Main navigation tabs - see APP_TSX_TOC.md for section line numbers
 const tabs = [
@@ -1775,7 +1778,7 @@ function App() {
             >
               <h2 style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                 {activeTab}
-                {busy && <span className="badge">Loading…</span>}
+                {busy && <LoadingSpinner size="small" inline />}
               </h2>
               <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
                 {activeTab === "Dashboard" && session && (
@@ -2874,13 +2877,9 @@ function App() {
                                   setShowClientForm(false);
                                   setEditingClientId(null);
                                 } catch (error) {
-                                  const errorMessage =
-                                    error instanceof Error
-                                    ? error.message
-                                      : typeof error === "string"
-                                      ? error
-                                      : "Failed to save client. Please try again.";
+                                  const errorMessage = getUserFriendlyError(error);
                                   setClientError(errorMessage);
+                                  showToast(errorMessage, "error");
                                 } finally {
                                   setBusy(false);
                                 }
@@ -3061,7 +3060,9 @@ function App() {
 
                               {/* Row 4: How Did You Hear, Gate Combo */}
                               <label className="span-2">
-                                How Did You Hear *
+                                <HelpTooltip content="How did the client learn about the firewood bank? This helps track outreach effectiveness.">
+                                  How Did You Hear *
+                                </HelpTooltip>
                                 <input
                                   required
                                   tabIndex={9}
@@ -3257,7 +3258,9 @@ function App() {
                                 />
                               </label>
                               <label>
-                                Approval Status
+                                <HelpTooltip content="Approved: Meets income/need requirements. Exception: Special circumstances. Pending: Awaiting review. Volunteer: Providing service. Denied: Does not meet requirements.">
+                                  Approval Status
+                                </HelpTooltip>
                                 <select
                                   tabIndex={23}
                                   value={clientForm.approval_status}
@@ -3407,7 +3410,9 @@ function App() {
                                       />
                                     </label>
                                     <label>
-                                      Income Range
+                                      <HelpTooltip content="Annual household income range. Used for eligibility determination and reporting.">
+                                        Income Range
+                                      </HelpTooltip>
                                       <select
                                         value={clientForm.household_income_range}
                                         onChange={(e) =>
@@ -5599,13 +5604,12 @@ function App() {
                                     role: session?.role ?? null,
                                   });
                                 } catch (e: any) {
-                                  setWorkOrderError(
-                                    typeof e === "string"
-                                      ? e
-                                      : "Failed to create work order: " + JSON.stringify(e),
-                                  );
+                                  const errorMessage = getUserFriendlyError(e);
+                                  setWorkOrderError(errorMessage);
+                                  showToast(errorMessage, "error");
                                   return;
                                 }
+                                showToast("Work order created successfully");
                                 await loadWorkOrders();
                                 setWorkOrderForm({
                                   client_id: "",
@@ -5727,7 +5731,9 @@ function App() {
                               {workOrderForm.pickup_delivery_type === "delivery" && (
                                 <>
                                   <label>
-                                    Delivery vehicle
+                                    <HelpTooltip content="Select the vehicle used for delivery. F-250 = 1 cord, F-250 1/2 = 0.5 cord (can be paired with another half), Toyota = 0.33 cord.">
+                                      Delivery vehicle
+                                    </HelpTooltip>
                               <select
                                 value={workOrderForm.delivery_size_choice}
                                       onChange={(e) =>
@@ -6801,11 +6807,16 @@ function App() {
                                             }
                                           : prev,
                                       );
+                                      showToast("Work order assignments updated successfully");
                                     } catch (e: any) {
                                       setWorkOrderDetailError(
                                         typeof e === "string"
                                           ? e
                                           : "Failed to update work order.",
+                                      );
+                                      showToast(
+                                        typeof e === "string" ? e : "Failed to update work order.",
+                                        "error"
                                       );
                                     } finally {
                                       setBusy(false);

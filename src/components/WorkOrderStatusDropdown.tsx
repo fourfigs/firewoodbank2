@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 interface WorkOrderStatusDropdownProps {
   currentStatus: string;
@@ -7,6 +7,20 @@ interface WorkOrderStatusDropdownProps {
   onStatusChange: (newStatus: string) => void;
   disabled?: boolean;
 }
+
+const getStatusDescription = (status: string): string => {
+  const descriptions: Record<string, string> = {
+    draft: "Initial work order created but not yet scheduled",
+    scheduled: "Work order is scheduled for a specific date/time",
+    in_progress: "Work is currently being performed",
+    delivered: "Delivery completed, awaiting final confirmation",
+    completed: "Work order fully completed and closed",
+    cancelled: "Work order was cancelled and will not be completed",
+    picked_up: "Pickup completed",
+    issue: "There is an issue that needs attention",
+  };
+  return descriptions[status.toLowerCase()] || "Unknown status";
+};
 
 // Define valid status transitions based on current status and user role
 const getValidStatuses = (currentStatus: string, userRole: string, isDriver: boolean) => {
@@ -76,30 +90,85 @@ export default function WorkOrderStatusDropdown({
   onStatusChange,
   disabled = false,
 }: WorkOrderStatusDropdownProps) {
+  const [showTooltip, setShowTooltip] = useState(false);
   const validStatuses = getValidStatuses(currentStatus, userRole, isDriver);
   const canChangeStatus = validStatuses.length > 1 && !disabled;
 
   return (
-    <select
-      value={currentStatus}
-      onChange={(e) => onStatusChange(e.target.value)}
-      disabled={!canChangeStatus}
-      style={{
-        backgroundColor: getStatusColor(currentStatus) + "20",
-        borderColor: getStatusColor(currentStatus),
-        color: getStatusColor(currentStatus),
-        fontWeight: "bold",
-        padding: "4px 8px",
-        borderRadius: "4px",
-        border: `1px solid ${getStatusColor(currentStatus)}`,
-        cursor: canChangeStatus ? "pointer" : "default",
-      }}
-    >
-      {validStatuses.map((status) => (
-        <option key={status} value={status}>
-          {formatStatusLabel(status)}
-        </option>
-      ))}
-    </select>
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <select
+        value={currentStatus}
+        onChange={(e) => onStatusChange(e.target.value)}
+        disabled={!canChangeStatus}
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+        style={{
+          backgroundColor: getStatusColor(currentStatus) + "20",
+          borderColor: getStatusColor(currentStatus),
+          color: getStatusColor(currentStatus),
+          fontWeight: "bold",
+          padding: "4px 8px",
+          borderRadius: "4px",
+          border: `1px solid ${getStatusColor(currentStatus)}`,
+          cursor: canChangeStatus ? "pointer" : "default",
+        }}
+      >
+        {validStatuses.map((status) => (
+          <option key={status} value={status}>
+            {formatStatusLabel(status)}
+          </option>
+        ))}
+      </select>
+      {showTooltip && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "100%",
+            left: "50%",
+            transform: "translateX(-50%)",
+            marginBottom: "8px",
+            padding: "8px 12px",
+            background: "#333",
+            color: "white",
+            borderRadius: "6px",
+            fontSize: "0.85rem",
+            whiteSpace: "nowrap",
+            zIndex: 1000,
+            pointerEvents: "none",
+            boxShadow: "0 4px 6px rgba(0,0,0,0.2)",
+          }}
+        >
+          <div style={{ fontWeight: "bold", marginBottom: "4px" }}>
+            {formatStatusLabel(currentStatus)}
+          </div>
+          <div>{getStatusDescription(currentStatus)}</div>
+          {validStatuses.length > 1 && (
+            <div style={{ marginTop: "8px", paddingTop: "8px", borderTop: "1px solid rgba(255,255,255,0.2)" }}>
+              <div style={{ fontSize: "0.75rem", opacity: 0.9 }}>Available next statuses:</div>
+              {validStatuses
+                .filter((s) => s !== currentStatus)
+                .map((s) => (
+                  <div key={s} style={{ fontSize: "0.75rem", marginTop: "2px" }}>
+                    • {formatStatusLabel(s)}
+                  </div>
+                ))}
+            </div>
+          )}
+          <div
+            style={{
+              position: "absolute",
+              bottom: "-6px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: 0,
+              height: 0,
+              borderLeft: "6px solid transparent",
+              borderRight: "6px solid transparent",
+              borderTop: "6px solid #333",
+            }}
+          />
+        </div>
+      )}
+    </div>
   );
 }
