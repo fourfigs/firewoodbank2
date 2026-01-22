@@ -2885,473 +2885,474 @@ function App() {
                                 }
                               }}
                             >
-                              {editingClientId && (
-                                <>
+                              {/* Basic Information Section */}
+                              <FormSection title="Basic Information" required defaultOpen={true}>
+                                <div className="form-grid">
+                                  {editingClientId && (
+                                    <>
+                                      <label>
+                                        Onboarding date
+                                        <input
+                                          type="date"
+                                          value={clientForm.date_of_onboarding}
+                                          onChange={(e) =>
+                                            setClientForm({
+                                              ...clientForm,
+                                              date_of_onboarding: e.target.value,
+                                            })
+                                          }
+                                          disabled={!canManage}
+                                        />
+                                      </label>
+                                      {!canManage && (
+                                        <div className="muted" style={{ gridColumn: "1 / -1" }}>
+                                          Only leads/admins can change onboarding date.
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
                                   <label>
-                                    Onboarding date
+                                    First Name *
+                                    <input
+                                      required
+                                      tabIndex={1}
+                                      value={clientForm.first_name}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, first_name: e.target.value })
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    Last Name *
+                                    <input
+                                      required
+                                      tabIndex={2}
+                                      value={clientForm.last_name}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, last_name: e.target.value })
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    Telephone
+                                    <input
+                                      tabIndex={11}
+                                      value={clientForm.telephone}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, telephone: e.target.value })
+                                      }
+                                      onBlur={(e) =>
+                                        setClientForm((prev) => ({
+                                          ...prev,
+                                          telephone: normalizePhone(e.target.value),
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    Email
+                                    <input
+                                      type="email"
+                                      tabIndex={12}
+                                      value={clientForm.email}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, email: e.target.value })
+                                      }
+                                    />
+                                  </label>
+                                  <label className="span-2">
+                                    <HelpTooltip content="How did the client learn about the firewood bank? This helps track outreach effectiveness.">
+                                      How Did You Hear *
+                                    </HelpTooltip>
+                                    <input
+                                      required
+                                      tabIndex={9}
+                                      value={clientForm.how_did_they_hear_about_us}
+                                      onChange={(e) =>
+                                        setClientForm({
+                                          ...clientForm,
+                                          how_did_they_hear_about_us: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <label className="span-2">
+                                    Notes
+                                    <textarea
+                                      tabIndex={11}
+                                      value={clientForm.notes}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, notes: e.target.value })
+                                      }
+                                      rows={3}
+                                    />
+                                  </label>
+                                </div>
+                              </FormSection>
+
+                              {/* Physical Address Section */}
+                              <FormSection title="Physical Address" required defaultOpen={true}>
+                                <div className="form-grid">
+                                  <label className="span-2">
+                                    Address Line 1 *
+                                    <input
+                                      required
+                                      tabIndex={3}
+                                      value={clientForm.physical_address_line1}
+                                      onChange={(e) =>
+                                        setClientForm({
+                                          ...clientForm,
+                                          physical_address_line1: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <label className="span-2">
+                                    Address Line 2
+                                    <input
+                                      tabIndex={4}
+                                      value={clientForm.physical_address_line2}
+                                      onChange={(e) =>
+                                        setClientForm({
+                                          ...clientForm,
+                                          physical_address_line2: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    City *
+                                    <input
+                                      required
+                                      tabIndex={5}
+                                      value={clientForm.physical_address_city}
+                                      onChange={(e) =>
+                                        setClientForm({
+                                          ...clientForm,
+                                          physical_address_city: e.target.value,
+                                        })
+                                      }
+                                      onBlur={(e) =>
+                                        setClientForm((prev) => ({
+                                          ...prev,
+                                          physical_address_city: initCapCity(e.target.value),
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    State *
+                                    <input
+                                      required
+                                      tabIndex={6}
+                                      value={clientForm.physical_address_state}
+                                      onChange={(e) =>
+                                        setClientForm({
+                                          ...clientForm,
+                                          physical_address_state: e.target.value,
+                                        })
+                                      }
+                                      onBlur={(e) =>
+                                        setClientForm((prev) => ({
+                                          ...prev,
+                                          physical_address_state: normalizeState(e.target.value),
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    ZIP *
+                                    <input
+                                      required
+                                      tabIndex={7}
+                                      value={clientForm.physical_address_postal_code}
+                                      onChange={(e) =>
+                                        setClientForm({
+                                          ...clientForm,
+                                          physical_address_postal_code: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    Gate Combo
+                                    <input
+                                      tabIndex={10}
+                                      value={clientForm.gate_combo}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, gate_combo: e.target.value })
+                                      }
+                                    />
+                                  </label>
+                                  <label className="span-2">
+                                    Directions
+                                    <textarea
+                                      tabIndex={21}
+                                      value={clientForm.directions}
+                                      onChange={(e) =>
+                                        setClientForm({ ...clientForm, directions: e.target.value })
+                                      }
+                                      rows={3}
+                                      placeholder="Directions to the client's location"
+                                    />
+                                  </label>
+                                  <label>
+                                    Wood Size *
+                                    <select
+                                      required
+                                      tabIndex={18}
+                                      value={clientForm.wood_size_label}
+                                      onChange={(e) =>
+                                        setClientForm({
+                                          ...clientForm,
+                                          wood_size_label: e.target.value,
+                                        })
+                                      }
+                                    >
+                                      <option value="">Select size</option>
+                                      <option value="12">12 in</option>
+                                      <option value="14">14 in</option>
+                                      <option value="16">16 in</option>
+                                      <option value="other">Other</option>
+                                    </select>
+                                  </label>
+                                  {clientForm.wood_size_label === "other" && (
+                                    <label>
+                                      Wood Size (Other, Inches)
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        tabIndex={19}
+                                        value={clientForm.wood_size_other}
+                                        onChange={(e) =>
+                                          setClientForm({
+                                            ...clientForm,
+                                            wood_size_other: e.target.value,
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                  )}
+                                </div>
+                              </FormSection>
+
+                              {/* Mailing Address Section */}
+                              <FormSection title="Mailing Address" defaultOpen={false}>
+                                <div className="form-grid">
+                                  <label className="checkbox span-2">
+                                    <input
+                                      type="checkbox"
+                                      tabIndex={8}
+                                      checked={clientForm.mailing_same_as_physical}
+                                      onChange={(e) =>
+                                        setClientForm({
+                                          ...clientForm,
+                                          mailing_same_as_physical: e.target.checked,
+                                        })
+                                      }
+                                    />
+                                    Mailing address is the same as physical address
+                                  </label>
+                                  {!clientForm.mailing_same_as_physical && (
+                                    <>
+                                      <label className="span-2">
+                                        Mailing Line 1 *
+                                        <input
+                                          required
+                                          tabIndex={12}
+                                          value={clientForm.mailing_address_line1}
+                                          onChange={(e) =>
+                                            setClientForm({
+                                              ...clientForm,
+                                              mailing_address_line1: e.target.value,
+                                            })
+                                          }
+                                        />
+                                      </label>
+                                      <label className="span-2">
+                                        Mailing Line 2
+                                        <input
+                                          tabIndex={13}
+                                          value={clientForm.mailing_address_line2}
+                                          onChange={(e) =>
+                                            setClientForm({
+                                              ...clientForm,
+                                              mailing_address_line2: e.target.value,
+                                            })
+                                          }
+                                        />
+                                      </label>
+                                      <label>
+                                        Mailing City *
+                                        <input
+                                          required
+                                          tabIndex={14}
+                                          value={clientForm.mailing_address_city}
+                                          onChange={(e) =>
+                                            setClientForm({
+                                              ...clientForm,
+                                              mailing_address_city: e.target.value,
+                                            })
+                                          }
+                                          onBlur={(e) =>
+                                            setClientForm((prev) => ({
+                                              ...prev,
+                                              mailing_address_city: initCapCity(e.target.value),
+                                            }))
+                                          }
+                                        />
+                                      </label>
+                                      <label>
+                                        Mailing State *
+                                        <input
+                                          required
+                                          tabIndex={15}
+                                          value={clientForm.mailing_address_state}
+                                          onChange={(e) =>
+                                            setClientForm({
+                                              ...clientForm,
+                                              mailing_address_state: e.target.value,
+                                            })
+                                          }
+                                          onBlur={(e) =>
+                                            setClientForm((prev) => ({
+                                              ...prev,
+                                              mailing_address_state: normalizeState(e.target.value),
+                                            }))
+                                          }
+                                        />
+                                      </label>
+                                      <label>
+                                        Mailing ZIP *
+                                        <input
+                                          required
+                                          tabIndex={16}
+                                          value={clientForm.mailing_address_postal_code}
+                                          onChange={(e) =>
+                                            setClientForm({
+                                              ...clientForm,
+                                              mailing_address_postal_code: e.target.value,
+                                            })
+                                          }
+                                        />
+                                      </label>
+                                    </>
+                                  )}
+                                </div>
+                              </FormSection>
+
+                              {/* Approval & Agency Section */}
+                              <FormSection title="Approval & Agency" defaultOpen={true}>
+                                <div className="form-grid">
+                                  <label className="span-2">
+                                    Referring Agency
+                                    <input
+                                      tabIndex={22}
+                                      value={clientForm.referring_agency}
+                                      onChange={(e) =>
+                                        setClientForm({
+                                          ...clientForm,
+                                          referring_agency: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    <HelpTooltip content="Approved: Meets income/need requirements. Exception: Special circumstances. Pending: Awaiting review. Volunteer: Providing service. Denied: Does not meet requirements.">
+                                      Approval Status
+                                    </HelpTooltip>
+                                    <select
+                                      tabIndex={23}
+                                      value={clientForm.approval_status}
+                                      onChange={(e) =>
+                                        setClientForm({
+                                          ...clientForm,
+                                          approval_status: e.target.value,
+                                        })
+                                      }
+                                    >
+                                      <option value="approved">approved</option>
+                                      <option value="exception">exception</option>
+                                      <option value="pending">pending approval</option>
+                                      <option value="volunteer">volunteer</option>
+                                      <option value="denied">denied</option>
+                                    </select>
+                                  </label>
+                                  <label>
+                                    Approval Expires On
                                     <input
                                       type="date"
-                                      value={clientForm.date_of_onboarding}
+                                      tabIndex={24}
+                                      value={clientForm.approval_expires_on}
                                       onChange={(e) =>
                                         setClientForm({
                                           ...clientForm,
-                                          date_of_onboarding: e.target.value,
+                                          approval_expires_on: e.target.value,
                                         })
                                       }
-                                      disabled={!canManage}
                                     />
                                   </label>
-                                  {!canManage && (
-                                    <div className="muted">
-                                      Only leads/admins can change onboarding date.
-                                    </div>
-                                  )}
-                                </>
-                              )}
-                              {/* Row 1: First | Last | telephone | email */}
-                              {/* Tab order: columns 1-2 first, then 3-4 */}
-                              <label>
-                                First
-                                <input
-                                  required
-                                  tabIndex={1}
-                                  value={clientForm.first_name}
-                                  onChange={(e) =>
-                                    setClientForm({ ...clientForm, first_name: e.target.value })
-                                  }
-                                />
-                              </label>
-                              <label>
-                                Last
-                                <input
-                                  required
-                                  tabIndex={2}
-                                  value={clientForm.last_name}
-                                  onChange={(e) =>
-                                    setClientForm({ ...clientForm, last_name: e.target.value })
-                                  }
-                                />
-                              </label>
-                              <label>
-                                Telephone
-                                <input
-                                  tabIndex={11}
-                                  value={clientForm.telephone}
-                                  onChange={(e) =>
-                                    setClientForm({ ...clientForm, telephone: e.target.value })
-                                  }
-                                  onBlur={(e) =>
-                                    setClientForm((prev) => ({
-                                      ...prev,
-                                      telephone: normalizePhone(e.target.value),
-                                    }))
-                                  }
-                                />
-                              </label>
-                              <label>
-                                Email
-                                <input
-                                  type="email"
-                                  tabIndex={12}
-                                  value={clientForm.email}
-                                  onChange={(e) =>
-                                    setClientForm({ ...clientForm, email: e.target.value })
-                                  }
-                                />
-                              </label>
-                              {/* Row 2: ADDRESS LINE 1 & 2 */}
-                              <label className="span-2">
-                                Address Line 1
-                                <input
-                                  required
-                                  tabIndex={3}
-                                  value={clientForm.physical_address_line1}
-                                  onChange={(e) =>
-                                    setClientForm({
-                                      ...clientForm,
-                                      physical_address_line1: e.target.value,
-                                    })
-                                  }
-                                />
-                              </label>
-                              <label className="span-2">
-                                Address Line 2
-                                <input
-                                  tabIndex={4}
-                                  value={clientForm.physical_address_line2}
-                                  onChange={(e) =>
-                                    setClientForm({
-                                      ...clientForm,
-                                      physical_address_line2: e.target.value,
-                                    })
-                                  }
-                                />
-                              </label>
-
-                              {/* Row 3: City, State, Zip, Check */}
-                              <label>
-                                City
-                                <input
-                                  required
-                                  tabIndex={5}
-                                  value={clientForm.physical_address_city}
-                                  onChange={(e) =>
-                                    setClientForm({
-                                      ...clientForm,
-                                      physical_address_city: e.target.value,
-                                    })
-                                  }
-                                  onBlur={(e) =>
-                                    setClientForm((prev) => ({
-                                      ...prev,
-                                      physical_address_city: initCapCity(e.target.value),
-                                    }))
-                                  }
-                                />
-                              </label>
-                              <label>
-                                State
-                                <input
-                                  required
-                                  tabIndex={6}
-                                  value={clientForm.physical_address_state}
-                                  onChange={(e) =>
-                                    setClientForm({
-                                      ...clientForm,
-                                      physical_address_state: e.target.value,
-                                    })
-                                  }
-                                  onBlur={(e) =>
-                                    setClientForm((prev) => ({
-                                      ...prev,
-                                      physical_address_state: normalizeState(e.target.value),
-                                    }))
-                                  }
-                                />
-                              </label>
-                              <label>
-                                ZIP
-                                <input
-                                  required
-                                  tabIndex={7}
-                                  value={clientForm.physical_address_postal_code}
-                                  onChange={(e) =>
-                                    setClientForm({
-                                      ...clientForm,
-                                      physical_address_postal_code: e.target.value,
-                                    })
-                                  }
-                                />
-                              </label>
-                              <label className="checkbox">
-                                <input
-                                  type="checkbox"
-                                  tabIndex={8}
-                                  checked={clientForm.mailing_same_as_physical}
-                                  onChange={(e) =>
-                                    setClientForm({
-                                      ...clientForm,
-                                      mailing_same_as_physical: e.target.checked,
-                                    })
-                                  }
-                                />
-                                Mailing The Same
-                              </label>
-
-                              {/* Row 4: How Did You Hear, Gate Combo */}
-                              <label className="span-2">
-                                <HelpTooltip content="How did the client learn about the firewood bank? This helps track outreach effectiveness.">
-                                  How Did You Hear *
-                                </HelpTooltip>
-                                <input
-                                  required
-                                  tabIndex={9}
-                                  value={clientForm.how_did_they_hear_about_us}
-                                  onChange={(e) =>
-                                    setClientForm({
-                                      ...clientForm,
-                                      how_did_they_hear_about_us: e.target.value,
-                                    })
-                                  }
-                                />
-                              </label>
-                              <label className="span-2">
-                                Gate Combo
-                                <input
-                                  tabIndex={10}
-                                  value={clientForm.gate_combo}
-                                  onChange={(e) =>
-                                    setClientForm({ ...clientForm, gate_combo: e.target.value })
-                                  }
-                                />
-                              </label>
-
-                              {/* Row 5: Notes */}
-                              <label className="span-4" style={{ gridColumn: "1 / -1" }}>
-                                Notes
-                                <textarea
-                                  tabIndex={11}
-                                  value={clientForm.notes}
-                                  onChange={(e) =>
-                                    setClientForm({ ...clientForm, notes: e.target.value })
-                                  }
-                                  rows={4}
-                                />
-                              </label>
-
-                              {!clientForm.mailing_same_as_physical && (
-                                <>
-                                  <label className="span-2">
-                                    Mailing Line 1
+                                  <label className="checkbox span-2">
                                     <input
-                                      required
-                                      tabIndex={12}
-                                      value={clientForm.mailing_address_line1}
+                                      type="checkbox"
+                                      checked={clientForm.requires_reapproval}
                                       onChange={(e) =>
                                         setClientForm({
                                           ...clientForm,
-                                          mailing_address_line1: e.target.value,
+                                          requires_reapproval: e.target.checked,
+                                        })
+                                      }
+                                    />
+                                    Requires Re-Approval
+                                  </label>
+                                  <label>
+                                    Last Re-Approval Date
+                                    <input
+                                      type="date"
+                                      tabIndex={25}
+                                      value={clientForm.last_reapproval_date}
+                                      onChange={(e) =>
+                                        setClientForm({
+                                          ...clientForm,
+                                          last_reapproval_date: e.target.value,
                                         })
                                       }
                                     />
                                   </label>
                                   <label className="span-2">
-                                    Mailing Line 2
-                                    <input
-                                      tabIndex={13}
-                                      value={clientForm.mailing_address_line2}
+                                    Reason Qualified Or Not
+                                    <textarea
+                                      tabIndex={26}
+                                      value={clientForm.denial_reason || ""}
                                       onChange={(e) =>
-                                        setClientForm({
-                                          ...clientForm,
-                                          mailing_address_line2: e.target.value,
-                                        })
+                                        setClientForm({ ...clientForm, denial_reason: e.target.value })
+                                      }
+                                      rows={2}
+                                      placeholder={
+                                        clientForm.approval_status === "denied"
+                                          ? "Denial reason"
+                                          : "Qualification notes"
                                       }
                                     />
                                   </label>
-                                  <label>
-                                    Mailing City
+                                  <label className="checkbox span-2">
                                     <input
-                                      required
-                                      tabIndex={14}
-                                      value={clientForm.mailing_address_city}
+                                      type="checkbox"
+                                      checked={clientForm.opt_out_email}
                                       onChange={(e) =>
                                         setClientForm({
                                           ...clientForm,
-                                          mailing_address_city: e.target.value,
-                                        })
-                                      }
-                                      onBlur={(e) =>
-                                        setClientForm((prev) => ({
-                                          ...prev,
-                                          mailing_address_city: initCapCity(e.target.value),
-                                        }))
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    Mailing State
-                                    <input
-                                      required
-                                      tabIndex={15}
-                                      value={clientForm.mailing_address_state}
-                                      onChange={(e) =>
-                                        setClientForm({
-                                          ...clientForm,
-                                          mailing_address_state: e.target.value,
-                                        })
-                                      }
-                                      onBlur={(e) =>
-                                        setClientForm((prev) => ({
-                                          ...prev,
-                                          mailing_address_state: normalizeState(e.target.value),
-                                        }))
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    Mailing Postal
-                                    <input
-                                      required
-                                      tabIndex={16}
-                                      value={clientForm.mailing_address_postal_code}
-                                      onChange={(e) =>
-                                        setClientForm({
-                                          ...clientForm,
-                                          mailing_address_postal_code: e.target.value,
+                                          opt_out_email: e.target.checked,
                                         })
                                       }
                                     />
+                                    Opt out of email mailing list (client will still be on mail list)
                                   </label>
-                                </>
-                              )}
-                              {/* Wood size and gate combo under notes */}
-                              <label>
-                                Wood Size *
-                                <select
-                                  required
-                                  tabIndex={18}
-                                  value={clientForm.wood_size_label}
-                                  onChange={(e) =>
-                                    setClientForm({
-                                      ...clientForm,
-                                      wood_size_label: e.target.value,
-                                    })
-                                  }
-                                >
-                                  <option value="">Select size</option>
-                                  <option value="12">12 in</option>
-                                  <option value="14">14 in</option>
-                                  <option value="16">16 in</option>
-                                  <option value="other">Other</option>
-                                </select>
-                              </label>
-                              {clientForm.wood_size_label === "other" && (
-                                <label>
-                                  Wood Size (Other, Inches)
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    tabIndex={19}
-                                    value={clientForm.wood_size_other}
-                                    onChange={(e) =>
-                                      setClientForm({
-                                        ...clientForm,
-                                        wood_size_other: e.target.value,
-                                      })
-                                    }
-                                  />
-                                </label>
-                              )}
-                              {/* Directions (spans all 4 columns, 2 rows) - above divider */}
-                              <label style={{ gridColumn: "1 / -1", gridRow: "span 2" }}>
-                                Directions
-                                <textarea
-                                  tabIndex={21}
-                                  value={clientForm.directions}
-                                  onChange={(e) =>
-                                    setClientForm({ ...clientForm, directions: e.target.value })
-                                  }
-                                  rows={4}
-                                  placeholder="Directions to the client's location"
-                                />
-                              </label>
-                              {/* DIVIDER (spans all 4) */}
-                              <div
-                                style={{
-                                  gridColumn: "1 / -1",
-                                  borderTop: "1px solid #ddd",
-                                  margin: "1rem 0",
-                                }}
-                              ></div>
-                              {/* Below divider: Agency, Acceptance (Approval Status), and Reason info */}
-                              <label className="span-2">
-                                Referring Agency
-                                <input
-                                  tabIndex={22}
-                                  value={clientForm.referring_agency}
-                                  onChange={(e) =>
-                                    setClientForm({
-                                      ...clientForm,
-                                      referring_agency: e.target.value,
-                                    })
-                                  }
-                                />
-                              </label>
-                              <label>
-                                <HelpTooltip content="Approved: Meets income/need requirements. Exception: Special circumstances. Pending: Awaiting review. Volunteer: Providing service. Denied: Does not meet requirements.">
-                                  Approval Status
-                                </HelpTooltip>
-                                <select
-                                  tabIndex={23}
-                                  value={clientForm.approval_status}
-                                  onChange={(e) =>
-                                    setClientForm({
-                                      ...clientForm,
-                                      approval_status: e.target.value,
-                                    })
-                                  }
-                                >
-                                  <option value="approved">approved</option>
-                                  <option value="exception">exception</option>
-                                  <option value="pending">pending approval</option>
-                                  <option value="volunteer">volunteer</option>
-                                  <option value="denied">denied</option>
-                                </select>
-                              </label>
-                              <label>
-                                Approval Expires On
-                                <input
-                                  type="date"
-                                  tabIndex={24}
-                                  value={clientForm.approval_expires_on}
-                                  onChange={(e) =>
-                                    setClientForm({
-                                      ...clientForm,
-                                      approval_expires_on: e.target.value,
-                                    })
-                                  }
-                                />
-                              </label>
-                              <label className="checkbox span-2">
-                                <input
-                                  type="checkbox"
-                                  checked={clientForm.requires_reapproval}
-                                  onChange={(e) =>
-                                    setClientForm({
-                                      ...clientForm,
-                                      requires_reapproval: e.target.checked,
-                                    })
-                                  }
-                                />
-                                Requires Re-Approval
-                              </label>
-                              <label>
-                                Last Re-Approval Date
-                                <input
-                                  type="date"
-                                  tabIndex={25}
-                                  value={clientForm.last_reapproval_date}
-                                  onChange={(e) =>
-                                    setClientForm({
-                                      ...clientForm,
-                                      last_reapproval_date: e.target.value,
-                                    })
-                                  }
-                                />
-                              </label>
-                              <label>
-                                Reason Qualified Or Not
-                                <textarea
-                                  tabIndex={26}
-                                  value={clientForm.denial_reason || ""}
-                                  onChange={(e) =>
-                                    setClientForm({ ...clientForm, denial_reason: e.target.value })
-                                  }
-                                  rows={2}
-                                  placeholder={
-                                    clientForm.approval_status === "denied"
-                                      ? "Denial reason"
-                                      : "Qualification notes"
-                                  }
-                                />
-                              </label>
-                              <label className="checkbox span-2">
-                                <input
-                                  type="checkbox"
-                                  checked={clientForm.opt_out_email}
-                                  onChange={(e) =>
-                                    setClientForm({
-                                      ...clientForm,
-                                      opt_out_email: e.target.checked,
-                                    })
-                                  }
-                                />
-                                Opt out of email mailing list (client will still be on mail list)
-                              </label>
-                              
+                                </div>
+                              </FormSection>
+
                               {/* Additional Information Section */}
-                              <div style={{ gridColumn: "1 / -1", borderTop: "1px solid #ddd", marginTop: "1rem", paddingTop: "1rem" }}>
-                                <h4 style={{ marginBottom: "0.75rem" }}>Additional Information (Optional)</h4>
+                              <FormSection title="Additional Information (Optional)" defaultOpen={false}>
                                 
                                 {/* Emergency Contact */}
                                 <div style={{ marginBottom: "1rem" }}>
