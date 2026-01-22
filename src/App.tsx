@@ -1484,8 +1484,13 @@ function App() {
       .toUpperCase();
   }, [session]);
 
+  const [workerDirectoryFilter, setWorkerDirectoryFilter] = useState<{
+    hipaa: "all" | "certified" | "not_certified";
+    dlStatus: "all" | "valid" | "expiring" | "expired";
+  }>({ hipaa: "all", dlStatus: "all" });
+
   const workerDirectoryUsers = useMemo(() => {
-    const base = [...users];
+    let base = [...users];
     if (
       session &&
       (session.role === "admin" ||
@@ -1524,8 +1529,89 @@ function App() {
         });
       }
     }
+
+    // Apply HIPAA filter
+    if (workerDirectoryFilter.hipaa !== "all") {
+      base = base.filter((u) => {
+        const isCertified = u.hipaa_certified === 1;
+        return workerDirectoryFilter.hipaa === "certified" ? isCertified : !isCertified;
+      });
+    }
+
+    // Apply DL status filter
+    if (workerDirectoryFilter.dlStatus !== "all") {
+      base = base.filter((u) => {
+        if (!u.driver_license_expires_on) return false;
+        const expiryDate = new Date(u.driver_license_expires_on);
+        const daysUntilExpiry = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+        if (workerDirectoryFilter.dlStatus === "expired") return daysUntilExpiry < 0;
+        if (workerDirectoryFilter.dlStatus === "expiring") return daysUntilExpiry <= 15 && daysUntilExpiry >= 0;
+        if (workerDirectoryFilter.dlStatus === "valid") return daysUntilExpiry > 15;
+        return true;
+      });
+    }
+
     return base;
-  }, [session, users]);
+  }, [session, users, workerDirectoryFilter]);
+
+  // Calculate hours for a specific worker
+  const calculateWorkerHours = (workerName: string) => {
+    const workerNameLower = workerName.toLowerCase();
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
+    
+    let totalHours = 0;
+    let weeklyHours = 0;
+    let upcomingHours = 0;
+
+    workOrders.forEach((wo) => {
+      let assignees: string[] = [];
+      try {
+        const parsed = JSON.parse(wo.assignees_json ?? "[]");
+        if (Array.isArray(parsed)) {
+          assignees = parsed
+            .map((x) => (typeof x === "string" ? x.toLowerCase() : ""))
+            .filter(Boolean);
+        }
+      } catch {
+        assignees = [];
+      }
+
+      const isAssigned = assignees.includes(workerNameLower);
+      if (!isAssigned) return;
+
+      const woStatus = (wo.status ?? "").toLowerCase();
+      const woDate = wo.scheduled_date ? new Date(wo.scheduled_date) : null;
+      const hours = wo.work_hours != null ? Number(wo.work_hours) : 0;
+
+      // Total hours from completed work orders
+      if (woStatus === "completed" && hours > 0) {
+        totalHours += hours;
+        if (woDate && woDate >= weekStart && woDate < weekEnd) {
+          weeklyHours += hours;
+        }
+      }
+
+      // Upcoming hours from scheduled/in_progress work orders
+      if ((woStatus === "scheduled" || woStatus === "in_progress") && woDate && woDate >= now) {
+        // Estimate hours: use work_hours if available, otherwise estimate from mileage
+        if (hours > 0) {
+          upcomingHours += hours;
+        } else if (wo.mileage != null && typeof wo.mileage === "number") {
+          const estimatedHours = Math.max(0.1, wo.mileage * (0.75 / 60));
+          upcomingHours += estimatedHours;
+        } else {
+          upcomingHours += 1.5; // Default estimate
+        }
+      }
+    });
+
+    return { totalHours, weeklyHours, upcomingHours };
+  };
 
   const userDeliveryHours = useMemo(() => {
     if (!session?.username) return { hours: 0, deliveries: 0, woodCreditCords: 0 };
@@ -1733,6 +1819,41 @@ function App() {
                         monthly={profileHourTotals.monthly}
                         total={profileHourTotals.total}
                       />
+                      {/* DL Expiration Warning for Profile */}
+                      {(() => {
+                        const dlExpiresOn = profileUser?.driver_license_expires_on ? new Date(profileUser.driver_license_expires_on) : null;
+                        if (!dlExpiresOn) return null;
+                        const daysUntilExpiry = Math.ceil((dlExpiresOn.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                        const isExpiringSoon = daysUntilExpiry <= 15 && daysUntilExpiry >= 0;
+                        const isExpired = daysUntilExpiry < 0;
+                        if (!isExpiringSoon && !isExpired) return null;
+
+                        return (
+                          <div
+                            className="card"
+                            style={{
+                              background: isExpired ? "#ffebee" : "#fff3cd",
+                              borderColor: isExpired ? "#e53935" : "#ffc107",
+                              borderWidth: "2px",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.75rem",
+                              marginTop: "1rem",
+                            }}
+                          >
+                            <span style={{ fontSize: "1.5rem" }}>🚨</span>
+                            <div>
+                              <strong style={{ color: isExpired ? "#c62828" : "#856404" }}>
+                                Driver License {isExpired ? "Expired" : "Expiring Soon"}
+                              </strong>
+                              <div style={{ fontSize: "0.9rem", color: isExpired ? "#c62828" : "#856404", marginTop: "0.25rem" }}>
+                                Your driver license {isExpired ? "expired" : "expires"} on {dlExpiresOn.toLocaleDateString()}
+                                {isExpiringSoon && ` (${daysUntilExpiry} days)`}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
                       {profileEditMode ? (
                         <div className="stack">
                           <div>
@@ -7220,15 +7341,69 @@ function App() {
                           </div>
                         )}
                       </div>
+                      {/* Filters */}
+                      <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem", alignItems: "center" }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <span>HIPAA:</span>
+                          <select
+                            value={workerDirectoryFilter.hipaa}
+                            onChange={(e) =>
+                              setWorkerDirectoryFilter({
+                                ...workerDirectoryFilter,
+                                hipaa: e.target.value as "all" | "certified" | "not_certified",
+                              })
+                            }
+                            style={{ padding: "0.25rem 0.5rem" }}
+                          >
+                            <option value="all">All</option>
+                            <option value="certified">Certified</option>
+                            <option value="not_certified">Not Certified</option>
+                          </select>
+                        </label>
+                        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <span>DL Status:</span>
+                          <select
+                            value={workerDirectoryFilter.dlStatus}
+                            onChange={(e) =>
+                              setWorkerDirectoryFilter({
+                                ...workerDirectoryFilter,
+                                dlStatus: e.target.value as "all" | "valid" | "expiring" | "expired",
+                              })
+                            }
+                            style={{ padding: "0.25rem 0.5rem" }}
+                          >
+                            <option value="all">All</option>
+                            <option value="valid">Valid</option>
+                            <option value="expiring">Expiring (≤15 days)</option>
+                            <option value="expired">Expired</option>
+                          </select>
+                        </label>
+                        <button
+                          className="ghost"
+                          type="button"
+                          onClick={() => setWorkerDirectoryFilter({ hipaa: "all", dlStatus: "all" })}
+                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem" }}
+                        >
+                          Clear Filters
+                        </button>
+                      </div>
                       <div className="table">
                         <div className="table-head">
                           <span>Name</span>
                           <span>Phone</span>
                           <span>Schedule</span>
                           <span>Credentials</span>
+                          {(isAdmin || isStaffLike) && <span>Hours</span>}
                           <span>Action</span>
                         </div>
-                          {workerDirectoryUsers.map((u) => (
+                          {workerDirectoryUsers.map((u) => {
+                            const workerHours = (isAdmin || isStaffLike) ? calculateWorkerHours(u.name) : null;
+                            const dlExpiresOn = u.driver_license_expires_on ? new Date(u.driver_license_expires_on) : null;
+                            const daysUntilExpiry = dlExpiresOn ? Math.ceil((dlExpiresOn.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null;
+                            const dlExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 15 && daysUntilExpiry >= 0;
+                            const dlExpired = daysUntilExpiry !== null && daysUntilExpiry < 0;
+                            
+                            return (
                           <div
                             className="table-row"
                             key={u.id}
@@ -7250,11 +7425,34 @@ function App() {
                             </div>
                             <div className="muted">{u.telephone ?? "—"}</div>
                             <div className="muted">{u.availability_notes ?? "—"}</div>
-                            <div className="muted">
-                                DL: {u.driver_license_status ?? "—"} | Driver:{" "}
-                                {u.is_driver ? "Yes" : "No"} | Vehicle: {u.vehicle ?? "—"} | HIPAA:{" "}
-                                {u.hipaa_certified ? "Yes" : "Unknown"}
+                            <div className="muted" style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", alignItems: "center" }}>
+                                <span>DL: {u.driver_license_status ?? "—"}</span>
+                                {dlExpiringSoon && (
+                                  <span className="badge" style={{ background: "#fff3cd", color: "#856404", fontSize: "0.75rem" }}>
+                                    Expires in {daysUntilExpiry} days
+                                  </span>
+                                )}
+                                {dlExpired && (
+                                  <span className="badge" style={{ background: "#f8d7da", color: "#721c24", fontSize: "0.75rem" }}>
+                                    Expired
+                                  </span>
+                                )}
+                                <span>| Driver: {u.is_driver ? "Yes" : "No"}</span>
+                                <span>| Vehicle: {u.vehicle ?? "—"}</span>
+                                <span>| HIPAA: {u.hipaa_certified ? (
+                                  <span className="badge" style={{ background: "#d4edda", color: "#155724", fontSize: "0.75rem", marginLeft: "0.25rem" }}>
+                                    ✓ Certified
+                                  </span>
+                                ) : "Unknown"}</span>
                             </div>
+                            {(isAdmin || isStaffLike) && workerHours && (
+                              <div className="muted" style={{ fontSize: "0.85rem" }}>
+                                <div>Total: {workerHours.totalHours.toFixed(1)}h</div>
+                                <div>Weekly: {workerHours.weeklyHours.toFixed(1)}h</div>
+                                <div>Upcoming: {workerHours.upcomingHours.toFixed(1)}h</div>
+                              </div>
+                            )}
+                            {!(isAdmin || isStaffLike) && <div></div>}
                             <div>
                               <button
                                 className="ghost"
@@ -7269,7 +7467,7 @@ function App() {
                               </button>
                             </div>
                           </div>
-                        ))}
+                        )})}
                           {!workerDirectoryUsers.length && (
                             <div className="table-row">No workers yet.</div>
                           )}

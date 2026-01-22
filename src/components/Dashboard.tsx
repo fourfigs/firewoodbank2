@@ -36,6 +36,9 @@ type UserRow = {
   role: string;
   telephone?: string | null;
   availability_schedule?: string | null;
+  driver_license_expires_on?: string | null;
+  hipaa_certified?: number;
+  is_driver?: boolean;
 };
 
 type UserSession = {
@@ -372,6 +375,61 @@ export default function Dashboard({
           </div>
         </div>
       )}
+
+      {/* DL Expiration Warnings */}
+      {(() => {
+        const expiringDrivers = users.filter((u) => {
+          if (!u.driver_license_expires_on) return false;
+          const expiryDate = new Date(u.driver_license_expires_on);
+          const daysUntilExpiry = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+          return daysUntilExpiry <= 15 && daysUntilExpiry >= 0;
+        });
+        const expiredDrivers = users.filter((u) => {
+          if (!u.driver_license_expires_on) return false;
+          const expiryDate = new Date(u.driver_license_expires_on);
+          const daysUntilExpiry = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+          return daysUntilExpiry < 0;
+        });
+
+        if (expiringDrivers.length === 0 && expiredDrivers.length === 0) return null;
+
+        return (
+          <div
+            className="card"
+            style={{
+              background: expiredDrivers.length > 0 ? "#ffebee" : "#fff3cd",
+              borderColor: expiredDrivers.length > 0 ? "#e53935" : "#ffc107",
+              borderWidth: "2px",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.75rem",
+            }}
+          >
+            <span style={{ fontSize: "1.5rem" }}>🚨</span>
+            <div style={{ flex: 1 }}>
+              <strong style={{ color: expiredDrivers.length > 0 ? "#c62828" : "#856404" }}>
+                Driver License {expiredDrivers.length > 0 ? "Expired" : "Expiring Soon"}
+              </strong>
+              <div style={{ fontSize: "0.9rem", color: expiredDrivers.length > 0 ? "#c62828" : "#856404", marginTop: "0.25rem" }}>
+                {expiredDrivers.length > 0 && (
+                  <div>
+                    <strong>Expired:</strong> {expiredDrivers.map((u) => u.name).join(", ")}
+                  </div>
+                )}
+                {expiringDrivers.length > 0 && (
+                  <div>
+                    <strong>Expiring within 15 days:</strong> {expiringDrivers.map((u) => {
+                      const expiryDate = new Date(u.driver_license_expires_on!);
+                      const days = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                      return `${u.name} (${days} days)`;
+                    }).join(", ")}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Red warning if orders exceed wood on hand */}
       {woodShortage.isShort && woodSummary.hasSplitItem && (
