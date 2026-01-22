@@ -35,6 +35,8 @@ import WorkOrdersTable from "./components/WorkOrdersTable.tsx";
 import ComprehensiveMetrics from "./components/ComprehensiveMetrics.tsx";
 import FinancialDashboard from "./components/FinancialDashboard.tsx";
 import WorkOrderStatusDropdown from "./components/WorkOrderStatusDropdown.tsx";
+import ToastNotification, { Toast } from "./components/ToastNotification.tsx";
+import ConfirmationModal from "./components/ConfirmationModal.tsx";
 import logo from "./assets/logo.png";
 import firewoodIcon from "./assets/logo.png";
 import "./index.css";
@@ -353,6 +355,22 @@ function App() {
   const [workOrdersPageSize, setWorkOrdersPageSize] = useState(50);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [confirmationModal, setConfirmationModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmLabel?: string;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
+  const showToast = (message: string, type: Toast["type"] = "success") => {
+    setToast({ id: Date.now().toString(), message, type });
+  };
   const [showClientForm, setShowClientForm] = useState(false);
   const [showInventoryForm, setShowInventoryForm] = useState(false);
   const [showWorkOrderForm, setShowWorkOrderForm] = useState(false);
@@ -2725,8 +2743,10 @@ function App() {
                                       role: session?.role ?? null,
                                       actor: session?.username ?? null,
                                     });
+                                    showToast("Client updated successfully");
                                   } else {
                                     await invokeTauri("create_client", { input: payload });
+                                    showToast("Client created successfully");
                                   }
                                   await loadClients();
                                   resetClientForm();
@@ -3752,6 +3772,7 @@ function App() {
                               {clientSortField === "state" &&
                                 (clientSortDirection === "asc" ? "↑" : "↓")}
                             </span>
+                            <span>Action</span>
                           </div>
                           {pagedClients.map((c) => {
                             const nameParts = c.name.trim().split(" ");
@@ -3809,6 +3830,23 @@ function App() {
                                 </div>
                                 <div className="client-cell hide-on-mobile">
                                   {canViewClientPII ? c.physical_address_state : "Hidden"}
+                                </div>
+                                <div className="client-cell">
+                                  <button
+                                    className="ghost"
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedClientForDetail(c);
+                                      setClientDetailSidebarOpen(true);
+                                      loadClientApprovalHistory(c.id);
+                                      loadClientCommunications(c.id);
+                                      loadClientFeedback(c.id);
+                                    }}
+                                    style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem" }}
+                                  >
+                                    View Details
+                                  </button>
                                 </div>
                               </div>
                             );
@@ -4348,23 +4386,32 @@ function App() {
                                     className="ghost"
                                     type="button"
                                     onClick={async () => {
-                                      if (
-                                        !window.confirm(
-                                          `Delete client ${selectedClientForDetail.name}? This marks them deleted.`,
-                                        )
-                                      )
-                                        return;
-                                      setBusy(true);
-                                      try {
-                                        await invokeTauri("delete_client", {
-                                          id: selectedClientForDetail.id,
-                                        });
-                                        await loadClients();
-                                        setClientDetailSidebarOpen(false);
-                                        setSelectedClientForDetail(null);
-                                      } finally {
-                                        setBusy(false);
-                                      }
+                                      setConfirmationModal({
+                                        isOpen: true,
+                                        title: "Delete Client",
+                                        message: `Delete client ${selectedClientForDetail.name}? This marks them deleted.`,
+                                        confirmLabel: "Delete",
+                                        onConfirm: async () => {
+                                          setConfirmationModal({ ...confirmationModal, isOpen: false });
+                                          setBusy(true);
+                                          try {
+                                            await invokeTauri("delete_client", {
+                                              id: selectedClientForDetail.id,
+                                            });
+                                            await loadClients();
+                                            setClientDetailSidebarOpen(false);
+                                            setSelectedClientForDetail(null);
+                                            showToast("Client deleted successfully");
+                                          } catch (error) {
+                                            showToast(
+                                              error instanceof Error ? error.message : "Failed to delete client",
+                                              "error"
+                                            );
+                                          } finally {
+                                            setBusy(false);
+                                          }
+                                        },
+                                      });
                                     }}
                                     style={{
                                       padding: "0.25rem 0.5rem",
@@ -4515,12 +4562,14 @@ function App() {
                                   role: session?.role ?? null,
                                   actor: session?.username ?? null,
                                 });
+                                showToast("Inventory item updated successfully");
                               } else {
                                 await invokeTauri("create_inventory_item", {
                                   input: payload,
                                   role: session?.role ?? null,
                                   actor: session?.username ?? null,
                                 });
+                                showToast("Inventory item created successfully");
                               }
                               await loadInventory();
                               resetInventoryForm();
@@ -4789,21 +4838,30 @@ function App() {
                                       className="ghost"
                                       type="button"
                                       onClick={async () => {
-                                        if (
-                                          !window.confirm(
-                                            `Delete ${item.name}? This marks it deleted.`,
-                                          )
-                                        )
-                                          return;
-                                        setBusy(true);
-                                        try {
-                                          await invokeTauri("delete_inventory_item", {
-                                            id: item.id,
-                                          });
-                                          await loadInventory();
-                                        } finally {
-                                          setBusy(false);
-                                        }
+                                        setConfirmationModal({
+                                          isOpen: true,
+                                          title: "Delete Inventory Item",
+                                          message: `Delete ${item.name}? This marks it deleted.`,
+                                          confirmLabel: "Delete",
+                                          onConfirm: async () => {
+                                            setConfirmationModal({ ...confirmationModal, isOpen: false });
+                                            setBusy(true);
+                                            try {
+                                              await invokeTauri("delete_inventory_item", {
+                                                id: item.id,
+                                              });
+                                              await loadInventory();
+                                              showToast("Inventory item deleted successfully");
+                                            } catch (error) {
+                                              showToast(
+                                                error instanceof Error ? error.message : "Failed to delete inventory item",
+                                                "error"
+                                              );
+                                            } finally {
+                                              setBusy(false);
+                                            }
+                                          },
+                                        });
                                       }}
                                     >
                                       Delete
@@ -4900,7 +4958,7 @@ function App() {
                               <button
                                 className="ping"
                                 type="button"
-                                disabled={!workOrder?.id || busy}
+                                        disabled={!workOrder?.id || busy || false}
                                 onClick={async () => {
                                   if (!workOrder?.id) return;
                                   const edit = progressEdits[workOrder.id] ?? {
@@ -6252,8 +6310,8 @@ function App() {
                       <WorkOrdersTable
                         workOrders={pagedWorkOrders}
                         session={session}
-                        isDriver={isDriver}
-                        canViewPII={canViewPII}
+                        isDriver={isDriver ?? false}
+                        canViewPII={canViewPII ?? false}
                         selectedWorkOrderId={selectedWorkOrderId}
                         onSelect={setSelectedWorkOrderId}
                         onOpenDetail={openWorkOrderDetail}
@@ -7168,6 +7226,7 @@ function App() {
                           <span>Phone</span>
                           <span>Schedule</span>
                           <span>Credentials</span>
+                          <span>Action</span>
                         </div>
                           {workerDirectoryUsers.map((u) => (
                           <div
@@ -7195,6 +7254,19 @@ function App() {
                                 DL: {u.driver_license_status ?? "—"} | Driver:{" "}
                                 {u.is_driver ? "Yes" : "No"} | Vehicle: {u.vehicle ?? "—"} | HIPAA:{" "}
                                 {u.hipaa_certified ? "Yes" : "Unknown"}
+                            </div>
+                            <div>
+                              <button
+                                className="ghost"
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openWorkerDetail(u);
+                                }}
+                                style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem" }}
+                              >
+                                View Details
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -7808,26 +7880,35 @@ function App() {
                                       className="ghost"
                                       type="button"
                                       onClick={async () => {
-                                        if (
-                                          !window.confirm(
-                                            `Delete worker ${selectedWorker.name}? This marks them deleted.`,
-                                          )
-                                        )
-                                          return;
-                                        setBusy(true);
-                                        try {
-                                          await invokeTauri("delete_user", {
-                                            id: selectedWorker.id,
-                                            role: session?.role ?? null,
-                                            actor: session?.username ?? null,
-                                          });
-                                          await loadUsers();
-                                          setWorkerDetailOpen(false);
-                                          setSelectedWorker(null);
-                                          setWorkerDetailEditMode(false);
-                                        } finally {
-                                          setBusy(false);
-                                        }
+                                        setConfirmationModal({
+                                          isOpen: true,
+                                          title: "Delete Worker",
+                                          message: `Delete worker ${selectedWorker.name}? This marks them deleted.`,
+                                          confirmLabel: "Delete",
+                                          onConfirm: async () => {
+                                            setConfirmationModal({ ...confirmationModal, isOpen: false });
+                                            setBusy(true);
+                                            try {
+                                              await invokeTauri("delete_user", {
+                                                id: selectedWorker.id,
+                                                role: session?.role ?? null,
+                                                actor: session?.username ?? null,
+                                              });
+                                              await loadUsers();
+                                              setWorkerDetailOpen(false);
+                                              setSelectedWorker(null);
+                                              setWorkerDetailEditMode(false);
+                                              showToast("Worker deleted successfully");
+                                            } catch (error) {
+                                              showToast(
+                                                error instanceof Error ? error.message : "Failed to delete worker",
+                                                "error"
+                                              );
+                                            } finally {
+                                              setBusy(false);
+                                            }
+                                          },
+                                        });
                                       }}
                                       style={{
                                         padding: "0.25rem 0.5rem",
@@ -8250,6 +8331,23 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Toast Notification */}
+      <ToastNotification
+        toast={toast}
+        onClose={() => setToast(null)}
+      />
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmationModal.isOpen}
+        title={confirmationModal.title}
+        message={confirmationModal.message}
+        confirmLabel={confirmationModal.confirmLabel}
+        onConfirm={confirmationModal.onConfirm}
+        onCancel={() => setConfirmationModal({ ...confirmationModal, isOpen: false })}
+        confirmButtonStyle={{ background: "#b3261e", color: "white" }}
+      />
     </div>
   );
 }

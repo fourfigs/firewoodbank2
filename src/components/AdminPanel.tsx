@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { invokeTauri } from "../api/tauri";
+import ConfirmationModal from "./ConfirmationModal";
 
 type MotdRow = {
   id: string;
@@ -36,6 +37,10 @@ export default function AdminPanel({ session }: AdminPanelProps) {
   const [changeRequests, setChangeRequests] = useState<ChangeRequestRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    isOpen: boolean;
+    id: string | null;
+  }>({ isOpen: false, id: null });
 
   // MOTD Form
   const [motdForm, setMotdForm] = useState({
@@ -96,11 +101,16 @@ export default function AdminPanel({ session }: AdminPanelProps) {
   };
 
   const handleDeleteMotd = async (id: string) => {
-    if (!window.confirm("Delete this message?")) return;
+    setDeleteConfirmation({ isOpen: true, id });
+  };
+
+  const confirmDeleteMotd = async () => {
+    if (!deleteConfirmation.id) return;
     setBusy(true);
     try {
-      await invokeTauri("delete_motd", { id });
+      await invokeTauri("delete_motd", { id: deleteConfirmation.id });
       await loadMotds();
+      setDeleteConfirmation({ isOpen: false, id: null });
     } catch (e: any) {
       setError(e.toString());
     } finally {
@@ -287,6 +297,16 @@ export default function AdminPanel({ session }: AdminPanelProps) {
           </div>
         </div>
       )}
+
+      <ConfirmationModal
+        isOpen={deleteConfirmation.isOpen}
+        title="Delete Message"
+        message="Delete this message?"
+        confirmLabel="Delete"
+        onConfirm={confirmDeleteMotd}
+        onCancel={() => setDeleteConfirmation({ isOpen: false, id: null })}
+        confirmButtonStyle={{ background: "#b3261e", color: "white" }}
+      />
     </div>
   );
 }

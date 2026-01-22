@@ -47,6 +47,7 @@ function WorkOrdersTable({
             <span>Status</span>
             <span>Scheduled</span>
             <span>Mileage</span>
+            <span>Action</span>
           </>
         ) : isDriver ? (
           <>
@@ -54,6 +55,7 @@ function WorkOrdersTable({
             <span>Status</span>
             <span>Scheduled</span>
             <span>Contact</span>
+            <span>Action</span>
           </>
         ) : (
           <>
@@ -61,6 +63,7 @@ function WorkOrdersTable({
             <span>Status</span>
             <span>Scheduled</span>
             <span>Notes</span>
+            <span>Action</span>
           </>
         )}
       </div>
@@ -87,6 +90,19 @@ function WorkOrdersTable({
               </div>
               <div>{wo.scheduled_date ?? "—"}</div>
               <div className="muted">{wo.mileage != null ? `${wo.mileage} mi` : "—"}</div>
+              <div>
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenDetail(wo);
+                  }}
+                  style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem" }}
+                >
+                  View Details
+                </button>
+              </div>
             </>
           ) : isDriver ? (
             <>
@@ -119,6 +135,19 @@ function WorkOrdersTable({
               </div>
               <div>{wo.scheduled_date ?? "—"}</div>
               <div className="muted">{wo.telephone ?? "—"}</div>
+              <div>
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenDetail(wo);
+                  }}
+                  style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem" }}
+                >
+                  View Details
+                </button>
+              </div>
             </>
           ) : (
             <>
@@ -149,6 +178,19 @@ function WorkOrdersTable({
               </div>
               <div>{wo.scheduled_date ?? "—"}</div>
               <div className="muted">{showPII ? (wo.notes ?? "—") : "PII hidden"}</div>
+              <div>
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenDetail(wo);
+                  }}
+                  style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem" }}
+                >
+                  View Details
+                </button>
+              </div>
             </>
           )}
           {(isDriver || session.role === "lead" || session.role === "admin") && (

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import EventCreationModal from "./EventCreationModal";
 
 // Types mirrored from App.tsx (ideally these should be in a shared types file)
 type InventoryRow = {
@@ -141,15 +142,7 @@ export default function Dashboard({
 }: DashboardProps) {
   const [calendarView, setCalendarView] = useState<"2weeks" | "month">("2weeks");
   const [currentDate] = useState(new Date());
-  const [eventForm, setEventForm] = useState({
-    title: "",
-    description: "",
-    event_type: "cutting",
-    start_date: "",
-    end_date: "",
-    color_code: DEFAULT_EVENT_COLORS.cutting,
-  });
-  const [eventError, setEventError] = useState<string | null>(null);
+  const [showEventModal, setShowEventModal] = useState(false);
 
   // --- Wood Summary Logic ---
   const woodSummary = useMemo(() => {
@@ -291,6 +284,21 @@ export default function Dashboard({
     return [...events, ...defaultEvents];
   }, [deliveries]);
 
+  // Format relative date (today, tomorrow, two days, etc.)
+  const formatRelativeDate = (date: Date): string => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const eventDate = new Date(date);
+    eventDate.setHours(0, 0, 0, 0);
+    const diffDays = Math.floor((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return "today";
+    if (diffDays === 1) return "tomorrow";
+    if (diffDays === 2) return "two days";
+    if (diffDays <= 7) return `${diffDays} days`;
+    return eventDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
   // --- Upcoming Deliveries ---
   const upcomingDeliveries = useMemo(() => {
     const now = new Date();
@@ -303,8 +311,11 @@ export default function Dashboard({
       d.setDate(now.getDate() + i);
       days.push(d);
     }
+    // Get all events but filter out default scheduled days
     const combined = days.flatMap((d) => getEventsForDate(d));
-    return combined
+    // Filter out default events (those with id starting with "default-")
+    const realEvents = combined.filter((d) => !d.id.startsWith("default-"));
+    return realEvents
       .filter((d) => new Date(d.start_date) >= now && new Date(d.start_date) <= horizon)
       .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
       .slice(0, 5);
@@ -335,15 +346,6 @@ export default function Dashboard({
   const isAdminOrLead = session.role === "admin" || session.role === "lead";
   const canCreateEvents =
     session.role === "admin" || session.role === "staff" || session.role === "employee";
-  const handleEventTypeChange = (value: string) => {
-    const color = DEFAULT_EVENT_COLORS[value] ?? DEFAULT_EVENT_COLORS.other;
-    setEventForm((prev) => ({
-      ...prev,
-      event_type: value,
-      color_code: color,
-      title: prev.title || `${value.charAt(0).toUpperCase()}${value.slice(1)} day`,
-    }));
-  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", paddingBottom: "2rem" }}>
@@ -453,7 +455,17 @@ export default function Dashboard({
               }}
             >
               <h3>Schedule</h3>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                {canCreateEvents && (
+                  <button
+                    className="icon-button"
+                    onClick={() => setShowEventModal(true)}
+                    title="Add Event"
+                    style={{ marginRight: "0.5rem" }}
+                  >
+                    +
+                  </button>
+                )}
                 <button
                   className={calendarView === "2weeks" ? "ping" : "ghost"}
                   onClick={() => setCalendarView("2weeks")}
@@ -470,109 +482,6 @@ export default function Dashboard({
                 </button>
               </div>
             </div>
-
-            {canCreateEvents && (
-              <div
-                style={{
-                  border: "1px solid #eee",
-                  borderRadius: "6px",
-                  padding: "0.75rem",
-                  marginBottom: "1rem",
-                  background: "#fafafa",
-                }}
-              >
-                <div className="list-head" style={{ marginBottom: "0.5rem" }}>
-                  <h4>Create schedule event</h4>
-                </div>
-                {eventError && <div style={{ color: "#b91c1c" }}>{eventError}</div>}
-                <form
-                  style={{ display: "grid", gap: "0.5rem", gridTemplateColumns: "1fr 1fr" }}
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    setEventError(null);
-                    if (!eventForm.start_date) {
-                      setEventError("Pick a date/time for the event.");
-                      return;
-                    }
-                    const title =
-                      eventForm.title ||
-                      `${eventForm.event_type.charAt(0).toUpperCase()}${eventForm.event_type.slice(1)} day`;
-                    if (!onCreateScheduleEvent) {
-                      setEventError("Event creation is not available.");
-                      return;
-                    }
-                    try {
-                      await onCreateScheduleEvent({
-                        title,
-                        description: eventForm.description || null,
-                        event_type: eventForm.event_type,
-                        start_date: eventForm.start_date,
-                        end_date: eventForm.end_date || null,
-                        color_code: eventForm.color_code || null,
-                      });
-                      setEventForm({
-                        title: "",
-                        description: "",
-                        event_type: "cutting",
-                        start_date: "",
-                        end_date: "",
-                        color_code: DEFAULT_EVENT_COLORS.cutting,
-                      });
-                    } catch (err) {
-                      setEventError(
-                        err instanceof Error ? err.message : "Failed to create schedule event.",
-                      );
-                    }
-                  }}
-                >
-                  <label style={{ gridColumn: "1 / -1" }}>
-                    Title
-                    <input
-                      value={eventForm.title}
-                      onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
-                      placeholder="Cutting day"
-                    />
-                  </label>
-                  <label>
-                    Type
-                    <select
-                      value={eventForm.event_type}
-                      onChange={(e) => handleEventTypeChange(e.target.value)}
-                    >
-                      <option value="delivery">delivery</option>
-                      <option value="cutting">cutting</option>
-                      <option value="hauling">hauling</option>
-                      <option value="splitting">splitting</option>
-                      <option value="other">other</option>
-                    </select>
-                  </label>
-                  <label>
-                    Start
-                    <input
-                      type="datetime-local"
-                      value={eventForm.start_date}
-                      onChange={(e) => setEventForm({ ...eventForm, start_date: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    End
-                    <input
-                      type="datetime-local"
-                      value={eventForm.end_date}
-                      onChange={(e) => setEventForm({ ...eventForm, end_date: e.target.value })}
-                    />
-                  </label>
-                  <div style={{ display: "flex", alignItems: "flex-end", gap: "0.5rem" }}>
-                    <button className="ping" type="submit">
-                      Add event
-                    </button>
-                    <span className="muted" style={{ fontSize: "0.8rem" }}>
-                      Staff/employee/admin only
-                    </span>
-                  </div>
-                </form>
-              </div>
-            )}
 
             {/* Calendar Grid */}
             <div
@@ -721,7 +630,7 @@ export default function Dashboard({
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
-                        gap: "0.25rem",
+                        gap: "0.5rem",
                         padding: "0.25rem 0.5rem",
                         borderRadius: "4px",
                         fontSize: "0.8rem",
@@ -737,6 +646,25 @@ export default function Dashboard({
                       <span style={{ opacity: 0.7, fontSize: "0.7rem" }}>
                         {status}
                       </span>
+                      {onOpenOrderSelect && (
+                        <button
+                          className="ghost"
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenOrderSelect(wo);
+                          }}
+                          style={{
+                            padding: "0.125rem 0.25rem",
+                            fontSize: "0.7rem",
+                            marginLeft: "0.25rem",
+                            background: "rgba(255,255,255,0.2)",
+                          }}
+                          title="View Details"
+                        >
+                          View
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -761,7 +689,7 @@ export default function Dashboard({
                         {d.event_type}
                       </span>
                     </span>
-                    <span>{new Date(d.start_date).toLocaleDateString()}</span>
+                    <span>{formatRelativeDate(new Date(d.start_date))}</span>
                   </li>
                 );
               })}
@@ -860,8 +788,24 @@ export default function Dashboard({
                             ({u.role})
                           </span>
                         </div>
-                        <div style={{ color: "#666", fontSize: "0.9rem" }}>
-                          {u.telephone || "—"}
+                        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                          <div style={{ color: "#666", fontSize: "0.9rem" }}>
+                            {u.telephone || "—"}
+                          </div>
+                          {onWorkerSelect && (
+                            <button
+                              className="ghost"
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onWorkerSelect(u);
+                              }}
+                              style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem" }}
+                              title="View Details"
+                            >
+                              View
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -873,6 +817,15 @@ export default function Dashboard({
 
         </div>
       </div>
+
+      {/* Event Creation Modal */}
+      {canCreateEvents && onCreateScheduleEvent && (
+        <EventCreationModal
+          isOpen={showEventModal}
+          onClose={() => setShowEventModal(false)}
+          onCreateEvent={onCreateScheduleEvent}
+        />
+      )}
     </div>
   );
 }
