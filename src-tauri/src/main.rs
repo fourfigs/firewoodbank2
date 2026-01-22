@@ -10,8 +10,9 @@ use bcrypt::{hash, verify, DEFAULT_COST};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Sqlite, SqlitePool, Transaction};
 use std::collections::HashSet;
+use std::fs;
 use std::path::PathBuf;
-use tauri::{Manager, State};
+use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
 async fn audit_db(pool: &SqlitePool, event: &str, role: &str, actor: &str) {
@@ -91,18 +92,21 @@ fn is_staff_like(role: &str) -> bool {
     role == "staff" || role == "employee"
 }
 
-fn resolve_database_url() -> String {
+fn resolve_database_url(app: &AppHandle) -> String {
     // Prefer explicit env var if provided (absolute path recommended).
     if let Ok(url) = std::env::var("DATABASE_URL") {
         return url;
     }
-    // Fallback to a db file at project root when running in dev (current dir is usually src-tauri).
-    let mut root_db = PathBuf::from("../firewoodbank.db");
-    if !root_db.exists() {
-        // Try local dir as last resort.
-        root_db = PathBuf::from("firewoodbank.db");
+    // Use the app data directory for cross-platform consistency.
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| PathBuf::from("."));
+    if let Err(err) = fs::create_dir_all(&data_dir) {
+        eprintln!("Failed to create app data directory: {err}");
     }
-    let canonical = root_db.canonicalize().unwrap_or(root_db);
+    let db_path = data_dir.join("firewoodbank.db");
+    let canonical = db_path.canonicalize().unwrap_or(db_path);
     // Convert Windows backslashes to forward slashes and URL-encode spaces for SQLite URL
     let path_str = canonical.to_string_lossy().replace('\\', "/");
     // Remove Windows extended path prefix if present (\\?\)
@@ -1284,6 +1288,187 @@ async fn delete_inventory_item(state: State<'_, AppState>, id: String) -> Result
     Ok(())
 }
 
+#[derive(Debug)]
+struct ScheduleUpdateResult {
+    previous_scheduled_date: Option<String>,
+    next_scheduled_date: Option<String>,
+    previous_status: String,
+    next_status: String,
+    schedule_changed: bool,
+    status_changed: bool,
+}
+
+#[derive(sqlx::FromRow)]
+struct WorkOrderScheduleRow {
+    status: String,
+    scheduled_date: Option<String>,
+    client_name: String,
+    assignees_json: Option<String>,
+    delivery_size_cords: Option<f64>,
+    pickup_quantity_cords: Option<f64>,
+    pickup_delivery_type: Option<String>,
+}
+
+async fn apply_work_order_schedule_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    work_order_id: &str,
+    scheduled_date: Option<String>,
+    previous_status_override: Option<String>,
+) -> Result<ScheduleUpdateResult, String> {
+    let existing = sqlx::query_as::<_, WorkOrderScheduleRow>(
+        r#"
+        SELECT
+            status,
+            scheduled_date,
+            client_name,
+            assignees_json,
+            delivery_size_cords,
+            pickup_quantity_cords,
+            pickup_delivery_type
+        FROM work_orders
+        WHERE id = ? AND is_deleted = 0
+        "#,
+    )
+    .bind(work_order_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let existing = match existing {
+        Some(row) => row,
+        None => return Err("Work order not found or has been deleted".to_string()),
+    };
+
+    let schedule_changed = existing.scheduled_date != scheduled_date;
+    let mut next_status = existing.status.clone();
+
+    // Only auto-schedule if currently in draft state
+    // Allow scheduling of work orders that are already in progress
+    if scheduled_date.is_some() && existing.status.to_lowercase() == "draft" {
+        next_status = "scheduled".to_string();
+    }
+
+    let status_changed = next_status != existing.status;
+    if status_changed {
+        sqlx::query(
+            r#"
+            UPDATE work_orders
+            SET status = ?, updated_at = datetime('now')
+            WHERE id = ? AND is_deleted = 0
+            "#,
+        )
+        .bind(&next_status)
+        .bind(work_order_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    if schedule_changed {
+        sqlx::query(
+            r#"
+            UPDATE work_orders
+            SET scheduled_date = ?, updated_at = datetime('now')
+            WHERE id = ? AND is_deleted = 0
+            "#,
+        )
+        .bind(&scheduled_date)
+        .bind(work_order_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    // Only adjust inventory if status actually changed
+    if status_changed {
+        let is_pickup = existing
+            .pickup_delivery_type
+            .as_deref()
+            .map(|value| value.eq_ignore_ascii_case("pickup"))
+            .unwrap_or(false);
+        let inventory_cords = if is_pickup {
+            existing.pickup_quantity_cords.unwrap_or(0.0)
+        } else {
+            existing.delivery_size_cords.unwrap_or(0.0)
+        };
+
+        // Use the previous status for inventory adjustment
+        adjust_inventory_for_transition_tx(
+            tx,
+            &existing.status,
+            &next_status,
+            inventory_cords,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    if let Some(start_date) = &scheduled_date {
+        let existing_delivery = sqlx::query!(
+            r#"
+            SELECT id
+            FROM delivery_events
+            WHERE work_order_id = ?
+              AND event_type = 'delivery'
+              AND is_deleted = 0
+            LIMIT 1
+            "#,
+            work_order_id
+        )
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if let Some(row) = existing_delivery {
+            sqlx::query(
+                r#"
+                UPDATE delivery_events
+                SET start_date = ?, updated_at = datetime('now')
+                WHERE id = ?
+                "#,
+            )
+            .bind(start_date)
+            .bind(&row.id)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| e.to_string())?;
+        } else {
+            let delivery_id = Uuid::new_v4().to_string();
+            let assigned_json = existing.assignees_json.unwrap_or_else(|| "[]".to_string());
+            sqlx::query(
+                r#"
+                INSERT INTO delivery_events (
+                    id, title, description, event_type, work_order_id,
+                    start_date, end_date, color_code, assigned_user_ids_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                "#,
+            )
+            .bind(&delivery_id)
+            .bind(format!("Delivery for {}", existing.client_name))
+            .bind::<Option<String>>(None)
+            .bind("delivery")
+            .bind(work_order_id)
+            .bind(start_date)
+            .bind::<Option<String>>(None)
+            .bind("#e67f1e")
+            .bind(&assigned_json)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(ScheduleUpdateResult {
+        previous_scheduled_date: existing.scheduled_date,
+        next_scheduled_date: scheduled_date,
+        previous_status: existing.status,
+        next_status,
+        schedule_changed,
+        status_changed,
+    })
+}
+
 #[tauri::command]
 async fn create_work_order(
     state: State<'_, AppState>,
@@ -1291,7 +1476,17 @@ async fn create_work_order(
     role: Option<String>,
 ) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
-    let status = input.status.unwrap_or_else(|| "draft".to_string());
+    let mut status = input.status.unwrap_or_else(|| "draft".to_string());
+    if input.scheduled_date.is_some() {
+        let status_lower = status.to_lowercase();
+        let terminal_states = ["completed", "cancelled", "picked_up"];
+        let active_states = ["in_progress", "delivered", "issue"];
+        if !terminal_states.contains(&status_lower.as_str())
+            && !active_states.contains(&status_lower.as_str())
+        {
+            status = "scheduled".to_string();
+        }
+    }
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
     let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
     if role_val != "admin" && !is_staff_like(&role_val) {
@@ -1400,56 +1595,21 @@ async fn create_work_order(
         }
     }
 
-    let inventory_cords = if status.eq_ignore_ascii_case("picked_up") {
-        input.pickup_quantity_cords.unwrap_or(0.0)
-    } else {
-        input.delivery_size_cords.unwrap_or(0.0)
-    };
-    adjust_inventory_for_transition_tx(&mut tx, "draft", &status, inventory_cords)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let assigned_json = assignees_store.clone();
-
-    // Auto-create a delivery event when a work order is scheduled.
-    if let Some(start_date) = &input.scheduled_date {
-        let delivery_id = Uuid::new_v4().to_string();
-        let delivery_query = r#"
-            INSERT INTO delivery_events (
-                id, title, description, event_type, work_order_id,
-                start_date, end_date, color_code, assigned_user_ids_json
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        "#;
-
-        sqlx::query(delivery_query)
-            .bind(&delivery_id)
-            .bind(format!("Delivery for {}", input.client_name))
-            .bind::<Option<String>>(None)
-            .bind("delivery")
-            .bind(&id)
-            .bind(start_date)
-            .bind::<Option<String>>(None)
-            .bind("#e67f1e")
-            .bind(&assigned_json)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
-    }
+    apply_work_order_schedule_tx(
+        &mut tx,
+        &id,
+        input.scheduled_date.clone(),
+        Some("draft".to_string()),
+    )
+    .await?;
 
     tx.commit().await.map_err(|e| e.to_string())?;
 
     Ok(id)
 }
 
-#[tauri::command]
-async fn list_work_orders(
-    state: State<'_, AppState>,
-    role: Option<String>,
-    username: Option<String>,
-    hipaa_certified: Option<bool>,
-    is_driver: Option<bool>,
-) -> Result<Vec<WorkOrderRow>, String> {
+async fn reconcile_work_orders(pool: &SqlitePool) -> Result<()> {
+    let mut tx = pool.begin().await?;
     sqlx::query(
         r#"
         UPDATE work_orders
@@ -1459,9 +1619,8 @@ async fn list_work_orders(
           AND lower(status) IN ('received', 'pending', 'rescheduled', 'draft')
         "#,
     )
-    .execute(&state.pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .execute(&mut *tx)
+    .await?;
 
     #[derive(sqlx::FromRow)]
     struct MissingDeliveryRow {
@@ -1489,9 +1648,8 @@ async fn list_work_orders(
           )
         "#,
     )
-    .fetch_all(&state.pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .fetch_all(&mut *tx)
+    .await?;
 
     for missing in missing_deliveries {
         let delivery_id = Uuid::new_v4().to_string();
@@ -1513,11 +1671,31 @@ async fn list_work_orders(
         .bind::<Option<String>>(None)
         .bind("#e67f1e")
         .bind(&missing.assignees_json)
-        .execute(&state.pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .execute(&mut *tx)
+        .await?;
     }
 
+    tx.commit().await?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn reconcile_work_orders_command(state: State<'_, AppState>) -> Result<(), String> {
+    reconcile_work_orders(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    audit_db(&state.pool, "reconcile_work_orders", "system", "system").await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_work_orders(
+    state: State<'_, AppState>,
+    role: Option<String>,
+    username: Option<String>,
+    hipaa_certified: Option<bool>,
+    is_driver: Option<bool>,
+) -> Result<Vec<WorkOrderRow>, String> {
     let mut rows = sqlx::query_as::<_, WorkOrderRow>(
         r#"
         SELECT
@@ -2052,6 +2230,118 @@ struct WorkOrderStatusInput {
     mileage: Option<f64>,
     work_hours: Option<f64>,
     is_driver: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WoodTakenInput {
+    user_id: Option<String>,
+    client_id: Option<String>,
+    cords: f64,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct ExpenseRow {
+    id: String,
+    description: String,
+    amount: f64,
+    category: String,
+    vendor: Option<String>,
+    receipt_path: Option<String>,
+    expense_date: String,
+    work_order_id: Option<String>,
+    recorded_by_user_id: String,
+    notes: Option<String>,
+    created_at: String,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct DonationRow {
+    id: String,
+    donor_name: Option<String>,
+    donor_contact: Option<String>,
+    donation_type: String,
+    description: String,
+    quantity: Option<f64>,
+    unit: Option<String>,
+    monetary_value: Option<f64>,
+    received_date: String,
+    recorded_by_user_id: String,
+    notes: Option<String>,
+    created_at: String,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct TimeEntryRow {
+    id: String,
+    user_id: String,
+    work_order_id: Option<String>,
+    activity_type: String,
+    hours_worked: f64,
+    is_volunteer_time: i64,
+    hourly_rate: Option<f64>,
+    date_worked: String,
+    recorded_by_user_id: String,
+    notes: Option<String>,
+    created_at: String,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct BudgetCategoryRow {
+    id: String,
+    name: String,
+    description: Option<String>,
+    annual_budget: Option<f64>,
+    category_type: String,
+    is_active: i64,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct WorkOrderStatusHistoryRow {
+    id: String,
+    work_order_id: String,
+    old_status: Option<String>,
+    new_status: String,
+    changed_by_user_id: Option<String>,
+    change_reason: Option<String>,
+    mileage_recorded: Option<f64>,
+    work_hours_recorded: Option<f64>,
+    changed_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExpenseInput {
+    description: String,
+    amount: f64,
+    category: String,
+    vendor: Option<String>,
+    expense_date: String,
+    work_order_id: Option<String>,
+    notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DonationInput {
+    donor_name: Option<String>,
+    donor_contact: Option<String>,
+    donation_type: String,
+    description: String,
+    quantity: Option<f64>,
+    unit: Option<String>,
+    monetary_value: Option<f64>,
+    received_date: String,
+    notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TimeEntryInput {
+    user_id: String,
+    work_order_id: Option<String>,
+    activity_type: String,
+    hours_worked: f64,
+    is_volunteer_time: bool,
+    hourly_rate: Option<f64>,
+    date_worked: String,
+    notes: Option<String>,
 }
 
 #[derive(Debug, FromRow)]
@@ -2863,112 +3153,15 @@ async fn update_work_order_schedule(
 
     let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
 
-    let existing = sqlx::query!(
-        r#"
-        SELECT scheduled_date, client_name, status
-        FROM work_orders
-        WHERE id = ? AND is_deleted = 0
-        "#,
-        input.work_order_id
+    let schedule_result = apply_work_order_schedule_tx(
+        &mut tx,
+        &input.work_order_id,
+        input.scheduled_date.clone(),
+        None,
     )
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
-    let existing = match existing {
-        Some(e) => e,
-        None => return Err("Work order not found or has been deleted".to_string()),
-    };
-
-    sqlx::query(
-        r#"
-        UPDATE work_orders
-        SET scheduled_date = ?, updated_at = datetime('now')
-        WHERE id = ? AND is_deleted = 0
-        "#,
-    )
-    .bind(&input.scheduled_date)
-    .bind(&input.work_order_id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
-
-    let next_status = match input.scheduled_date.as_ref() {
-        Some(_) => {
-            let current = existing.status.to_lowercase();
-            if ["completed", "cancelled", "picked_up", "in_progress", "issue"].contains(&current.as_str()) {
-                None
-            } else {
-                Some("scheduled".to_string())
-            }
-        }
-        None => None,
-    };
-
-    if let Some(status) = &next_status {
-        sqlx::query(
-            r#"
-            UPDATE work_orders
-            SET status = ?, updated_at = datetime('now')
-            WHERE id = ? AND is_deleted = 0
-            "#,
-        )
-        .bind(status)
-        .bind(&input.work_order_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
-    }
-
-    if let Some(start_date) = &input.scheduled_date {
-        let existing_delivery = sqlx::query!(
-            r#"SELECT id FROM delivery_events WHERE work_order_id = ? AND is_deleted = 0 LIMIT 1"#,
-            input.work_order_id
-        )
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
-
-        if let Some(row) = existing_delivery {
-            sqlx::query(
-                r#"
-                UPDATE delivery_events
-                SET start_date = ?, updated_at = datetime('now')
-                WHERE id = ?
-                "#,
-            )
-            .bind(start_date)
-            .bind(&row.id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
-        } else {
-            let delivery_id = Uuid::new_v4().to_string();
-            sqlx::query(
-                r#"
-                INSERT INTO delivery_events (
-                    id, title, description, event_type, work_order_id,
-                    start_date, end_date, color_code, assigned_user_ids_json
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                "#,
-            )
-            .bind(&delivery_id)
-            .bind(format!("Delivery for {}", existing.client_name))
-            .bind::<Option<String>>(None)
-            .bind("delivery")
-            .bind(&input.work_order_id)
-            .bind(start_date)
-            .bind::<Option<String>>(None)
-            .bind("#e67f1e")
-            .bind("[]")
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
-        }
-    }
-
-    if existing.scheduled_date != input.scheduled_date {
+    if schedule_result.schedule_changed {
         audit_change(
             &state.pool,
             "update_work_order_schedule",
@@ -2977,27 +3170,25 @@ async fn update_work_order_schedule(
             "work_orders",
             &input.work_order_id,
             "scheduled_date",
-            existing.scheduled_date,
-            input.scheduled_date,
+            schedule_result.previous_scheduled_date,
+            schedule_result.next_scheduled_date,
         )
         .await;
     }
 
-    if let Some(status) = next_status {
-        if existing.status != status {
-            audit_change(
-                &state.pool,
-                "update_work_order_schedule",
-                &role_val,
-                &actor_val,
-                "work_orders",
-                &input.work_order_id,
-                "status",
-                Some(existing.status.clone()),
-                Some(status.clone()),
-            )
-            .await;
-        }
+    if schedule_result.status_changed {
+        audit_change(
+            &state.pool,
+            "update_work_order_schedule",
+            &role_val,
+            &actor_val,
+            "work_orders",
+            &input.work_order_id,
+            "status",
+            Some(schedule_result.previous_status),
+            Some(schedule_result.next_status),
+        )
+        .await;
     }
 
     tx.commit().await.map_err(|e| e.to_string())?;
@@ -3005,7 +3196,74 @@ async fn update_work_order_schedule(
     Ok(())
 }
 
+// ===== WORK ORDER STATUS HANDLING =====
+// Major overhaul completed January 2026:
+// - Fixed overly restrictive database triggers
+// - Added proper business logic validation
+// - Implemented role-based status transition permissions
+// - Added status history tracking
+// - Fixed inventory adjustment logic
+//
+// See APP_TSX_TOC.md for frontend status handling improvements
+
 #[tauri::command]
+// Validate status transition based on business rules
+fn validate_status_transition(
+    current_status: &str,
+    new_status: &str,
+    user_role: &str,
+    is_driver: bool,
+) -> Result<(), String> {
+    let current_lower = current_status.to_lowercase();
+    let new_lower = new_status.to_lowercase();
+
+    // Terminal states - no transitions allowed
+    if ["completed", "cancelled", "picked_up"].contains(&current_lower.as_str()) {
+        return Err(format!("Cannot change status from terminal state '{}'", current_status));
+    }
+
+    // Define allowed transitions by user role
+    let allowed_transitions: std::collections::HashMap<&str, Vec<&str>> = [
+        ("draft", vec!["scheduled", "cancelled"]),
+        ("scheduled", vec!["in_progress", "completed", "cancelled"]),
+        ("in_progress", vec!["delivered", "completed", "issue", "cancelled"]),
+        ("delivered", vec!["completed", "in_progress", "cancelled"]),
+        ("issue", vec!["in_progress", "cancelled"]),
+    ].into_iter().collect();
+
+    // Check if transition is allowed
+    if let Some(allowed) = allowed_transitions.get(current_lower.as_str()) {
+        if !allowed.contains(&new_lower.as_str()) {
+            return Err(format!("Invalid status transition from '{}' to '{}'", current_status, new_status));
+        }
+    } else {
+        return Err(format!("Unknown current status: '{}'", current_status));
+    }
+
+    // Role-based restrictions
+    match user_role {
+        "volunteer" if !is_driver => {
+            return Err("Volunteers can only update status if they are drivers".to_string());
+        }
+        "driver" | "volunteer" => {
+            // Drivers can only go to limited statuses
+            let driver_allowed = ["in_progress", "delivered", "issue"];
+            if !driver_allowed.contains(&new_lower.as_str()) {
+                return Err("Drivers can only change status to: in_progress, delivered, or issue".to_string());
+            }
+        }
+        "staff" | "employee" => {
+            // Staff cannot mark as completed (requires admin/lead)
+            if new_lower == "completed" {
+                return Err("Only admins or leads can mark work orders as completed".to_string());
+            }
+        }
+        _ => {} // Admin and lead can do all transitions
+    }
+
+    Ok(())
+}
+
 async fn update_work_order_status(
     state: State<'_, AppState>,
     input: WorkOrderStatusInput,
@@ -3015,6 +3273,7 @@ async fn update_work_order_status(
     let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
     let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
     let driver_capable = input.is_driver.unwrap_or(false);
+
     audit_db(
         &state.pool,
         "update_work_order_status",
@@ -3047,6 +3306,11 @@ async fn update_work_order_status(
         .status
         .clone()
         .unwrap_or_else(|| current_status.clone());
+
+    // Validate the status transition
+    if input.status.is_some() {
+        validate_status_transition(&current_status, &next_status, &role_val, driver_capable)?;
+    }
     let delivery_size = if next_status.eq_ignore_ascii_case("picked_up")
         || current_status.eq_ignore_ascii_case("picked_up")
     {
@@ -3107,6 +3371,28 @@ async fn update_work_order_status(
     }
 
     if current_status != next_status {
+        // Record status change in history
+        let history_id = Uuid::new_v4().to_string();
+        sqlx::query(
+            r#"
+            INSERT INTO work_order_status_history (
+                id, work_order_id, old_status, new_status, changed_by_user_id,
+                mileage_recorded, work_hours_recorded, changed_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            "#,
+        )
+        .bind(&history_id)
+        .bind(&input.work_order_id)
+        .bind(&current_status)
+        .bind(&next_status)
+        .bind(&actor_val)
+        .bind(&input.mileage)
+        .bind(&input.work_hours)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
         audit_change(
             &state.pool,
             "update_work_order_status",
@@ -3202,6 +3488,382 @@ async fn update_work_order_status(
     tx.commit().await.map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+#[tauri::command]
+async fn record_wood_taken(
+    state: State<'_, AppState>,
+    input: WoodTakenInput,
+    role: Option<String>,
+    actor: Option<String>,
+) -> Result<(), String> {
+    if input.cords <= 0.0 {
+        return Err("Wood taken must be greater than zero.".to_string());
+    }
+    if input.user_id.is_none() && input.client_id.is_none() {
+        return Err("Provide a user_id or client_id to record wood taken.".to_string());
+    }
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
+    let mut tx = state.pool.begin().await.map_err(|e| e.to_string())?;
+
+    if let Some(user_id) = &input.user_id {
+        let result = sqlx::query(
+            r#"
+            UPDATE users
+            SET wood_taken_cords = COALESCE(wood_taken_cords, 0) + ?,
+                updated_at = datetime('now')
+            WHERE id = ? AND is_deleted = 0
+            "#,
+        )
+        .bind(input.cords)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if result.rows_affected() == 0 {
+            return Err("User not found or deleted.".to_string());
+        }
+    }
+
+    if let Some(client_id) = &input.client_id {
+        let result = sqlx::query(
+            r#"
+            UPDATE clients
+            SET wood_taken_cords = COALESCE(wood_taken_cords, 0) + ?,
+                updated_at = datetime('now')
+            WHERE id = ? AND is_deleted = 0
+            "#,
+        )
+        .bind(input.cords)
+        .bind(client_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if result.rows_affected() == 0 {
+            return Err("Client not found or deleted.".to_string());
+        }
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+    audit_db(&state.pool, "record_wood_taken", &role_val, &actor_val).await;
+    Ok(())
+}
+
+// ===== FINANCIAL TRACKING SYSTEM =====
+// Added January 2026 - Complete financial management:
+// - Expense tracking with categories and work order association
+// - Donation management (wood, money, equipment, services)
+// - Time entry system for volunteer/paid hour attribution
+// - Budget analysis and financial reporting
+//
+// See APP_TSX_TOC.md for Finance tab implementation
+
+#[tauri::command]
+async fn create_expense(
+    state: State<'_, AppState>,
+    input: ExpenseInput,
+    role: Option<String>,
+    actor: Option<String>,
+) -> Result<String, String> {
+    let id = Uuid::new_v4().to_string();
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
+
+    if input.amount <= 0.0 {
+        return Err("Expense amount must be greater than zero.".to_string());
+    }
+
+    sqlx::query(
+        r#"
+        INSERT INTO expenses (
+            id, description, amount, category, vendor, expense_date,
+            work_order_id, recorded_by_user_id, notes, created_at, updated_at, is_deleted
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+        "#,
+    )
+    .bind(&id)
+    .bind(&input.description)
+    .bind(input.amount)
+    .bind(&input.category)
+    .bind(&input.vendor)
+    .bind(&input.expense_date)
+    .bind(&input.work_order_id)
+    .bind(&actor_val)
+    .bind(&input.notes)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    audit_db(&state.pool, "create_expense", &role_val, &actor_val).await;
+    Ok(id)
+}
+
+#[tauri::command]
+async fn list_expenses(
+    state: State<'_, AppState>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    category: Option<String>,
+) -> Result<Vec<ExpenseRow>, String> {
+    let mut query = String::from(
+        r#"
+        SELECT
+            id, description, amount, category, vendor, receipt_path,
+            expense_date, work_order_id, recorded_by_user_id, notes, created_at
+        FROM expenses
+        WHERE is_deleted = 0
+        "#,
+    );
+
+    let mut conditions = Vec::new();
+
+    if let Some(start) = &start_date {
+        conditions.push(format!("expense_date >= '{}'", start));
+    }
+    if let Some(end) = &end_date {
+        conditions.push(format!("expense_date <= '{}'", end));
+    }
+    if let Some(cat) = &category {
+        conditions.push(format!("category = '{}'", cat));
+    }
+
+    if !conditions.is_empty() {
+        query.push_str(&format!(" AND {}", conditions.join(" AND ")));
+    }
+
+    query.push_str(" ORDER BY expense_date DESC");
+
+    let expenses = sqlx::query_as::<_, ExpenseRow>(&query)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(expenses)
+}
+
+#[tauri::command]
+async fn create_donation(
+    state: State<'_, AppState>,
+    input: DonationInput,
+    role: Option<String>,
+    actor: Option<String>,
+) -> Result<String, String> {
+    let id = Uuid::new_v4().to_string();
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
+
+    sqlx::query(
+        r#"
+        INSERT INTO donations (
+            id, donor_name, donor_contact, donation_type, description,
+            quantity, unit, monetary_value, received_date, recorded_by_user_id,
+            notes, created_at, updated_at, is_deleted
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+        "#,
+    )
+    .bind(&id)
+    .bind(&input.donor_name)
+    .bind(&input.donor_contact)
+    .bind(&input.donation_type)
+    .bind(&input.description)
+    .bind(input.quantity)
+    .bind(&input.unit)
+    .bind(input.monetary_value)
+    .bind(&input.received_date)
+    .bind(&actor_val)
+    .bind(&input.notes)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    audit_db(&state.pool, "create_donation", &role_val, &actor_val).await;
+    Ok(id)
+}
+
+#[tauri::command]
+async fn list_donations(
+    state: State<'_, AppState>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    donation_type: Option<String>,
+) -> Result<Vec<DonationRow>, String> {
+    let mut query = String::from(
+        r#"
+        SELECT
+            id, donor_name, donor_contact, donation_type, description,
+            quantity, unit, monetary_value, received_date, recorded_by_user_id,
+            notes, created_at
+        FROM donations
+        WHERE is_deleted = 0
+        "#,
+    );
+
+    let mut conditions = Vec::new();
+
+    if let Some(start) = &start_date {
+        conditions.push(format!("received_date >= '{}'", start));
+    }
+    if let Some(end) = &end_date {
+        conditions.push(format!("received_date <= '{}'", end));
+    }
+    if let Some(dtype) = &donation_type {
+        conditions.push(format!("donation_type = '{}'", dtype));
+    }
+
+    if !conditions.is_empty() {
+        query.push_str(&format!(" AND {}", conditions.join(" AND ")));
+    }
+
+    query.push_str(" ORDER BY received_date DESC");
+
+    let donations = sqlx::query_as::<_, DonationRow>(&query)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(donations)
+}
+
+#[tauri::command]
+async fn create_time_entry(
+    state: State<'_, AppState>,
+    input: TimeEntryInput,
+    role: Option<String>,
+    actor: Option<String>,
+) -> Result<String, String> {
+    let id = Uuid::new_v4().to_string();
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
+
+    if input.hours_worked <= 0.0 {
+        return Err("Hours worked must be greater than zero.".to_string());
+    }
+
+    sqlx::query(
+        r#"
+        INSERT INTO time_entries (
+            id, user_id, work_order_id, activity_type, hours_worked,
+            is_volunteer_time, hourly_rate, date_worked, recorded_by_user_id,
+            notes, created_at, updated_at, is_deleted
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+        "#,
+    )
+    .bind(&id)
+    .bind(&input.user_id)
+    .bind(&input.work_order_id)
+    .bind(&input.activity_type)
+    .bind(input.hours_worked)
+    .bind(if input.is_volunteer_time { 1 } else { 0 })
+    .bind(input.hourly_rate)
+    .bind(&input.date_worked)
+    .bind(&actor_val)
+    .bind(&input.notes)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    audit_db(&state.pool, "create_time_entry", &role_val, &actor_val).await;
+    Ok(id)
+}
+
+#[tauri::command]
+async fn list_time_entries(
+    state: State<'_, AppState>,
+    user_id: Option<String>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+) -> Result<Vec<TimeEntryRow>, String> {
+    let mut query = String::from(
+        r#"
+        SELECT
+            id, user_id, work_order_id, activity_type, hours_worked,
+            is_volunteer_time, hourly_rate, date_worked, recorded_by_user_id,
+            notes, created_at
+        FROM time_entries
+        WHERE is_deleted = 0
+        "#,
+    );
+
+    let mut conditions = Vec::new();
+
+    if let Some(user) = &user_id {
+        conditions.push(format!("user_id = '{}'", user));
+    }
+    if let Some(start) = &start_date {
+        conditions.push(format!("date_worked >= '{}'", start));
+    }
+    if let Some(end) = &end_date {
+        conditions.push(format!("date_worked <= '{}'", end));
+    }
+
+    if !conditions.is_empty() {
+        query.push_str(&format!(" AND {}", conditions.join(" AND ")));
+    }
+
+    query.push_str(" ORDER BY date_worked DESC");
+
+    let entries = sqlx::query_as::<_, TimeEntryRow>(&query)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(entries)
+}
+
+#[tauri::command]
+async fn list_budget_categories(state: State<'_, AppState>) -> Result<Vec<BudgetCategoryRow>, String> {
+    let categories = sqlx::query_as::<_, BudgetCategoryRow>(
+        r#"
+        SELECT id, name, description, annual_budget, category_type, is_active
+        FROM budget_categories
+        WHERE is_deleted = 0
+        ORDER BY name
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(categories)
+}
+
+#[tauri::command]
+async fn list_work_order_status_history(
+    state: State<'_, AppState>,
+    work_order_id: Option<String>,
+    limit: Option<i64>,
+) -> Result<Vec<WorkOrderStatusHistoryRow>, String> {
+    let limit_val = limit.unwrap_or(50);
+    let mut query = String::from(
+        r#"
+        SELECT
+            id, work_order_id, old_status, new_status,
+            changed_by_user_id, change_reason,
+            mileage_recorded, work_hours_recorded, changed_at
+        FROM work_order_status_history
+        WHERE 1=1
+        "#,
+    );
+
+    if let Some(wo_id) = work_order_id {
+        query.push_str(&format!(" AND work_order_id = '{}'", wo_id));
+    }
+
+    query.push_str(" ORDER BY changed_at DESC");
+    query.push_str(&format!(" LIMIT {}", limit_val));
+
+    let history = sqlx::query_as::<_, WorkOrderStatusHistoryRow>(&query)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(history)
 }
 
 #[tauri::command]
@@ -3640,10 +4302,11 @@ mod tests {
 fn main() -> Result<()> {
     let app = tauri::Builder::default()
         .setup(|app| {
-            let database_url = resolve_database_url();
+            let database_url = resolve_database_url(app.handle());
             tauri::async_runtime::block_on(async {
                 let pool = init_pool(&database_url).await?;
                 seed_default_logins(&pool).await?;
+                reconcile_work_orders(&pool).await?;
                 app.manage(AppState { pool });
                 Ok::<(), anyhow::Error>(())
             })?;
@@ -3663,6 +4326,7 @@ fn main() -> Result<()> {
             delete_inventory_item,
             create_work_order,
             list_work_orders,
+            reconcile_work_orders_command,
             update_work_order_assignees,
             update_work_order_schedule,
             update_work_order_status,
@@ -3686,7 +4350,16 @@ fn main() -> Result<()> {
             list_change_requests,
             resolve_change_request,
             list_audit_logs,
-            create_user
+            create_user,
+            record_wood_taken,
+            create_expense,
+            list_expenses,
+            create_donation,
+            list_donations,
+            create_time_entry,
+            list_time_entries,
+            list_budget_categories,
+            list_work_order_status_history
         ])
         .run(tauri::generate_context!())?;
 

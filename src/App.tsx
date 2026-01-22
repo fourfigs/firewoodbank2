@@ -1,3 +1,28 @@
+/**
+ * 🔥 Community Firewood Bank - Main Application Component
+ *
+ * This is the main App.tsx file containing the complete firewood bank management system.
+ * For easy navigation, see APP_TSX_TOC.md for a detailed line-by-line index of all sections.
+ *
+ * Key Features:
+ * - Client onboarding and management
+ * - Work order scheduling and tracking
+ * - Inventory management with reorder alerts
+ * - Financial tracking (expenses, donations, budgets)
+ * - Comprehensive metrics and reporting
+ * - Role-based access control with HIPAA compliance
+ * - Status history and audit logging
+ *
+ * Recent Major Updates (2026):
+ * - Complete work order status handling overhaul
+ * - Financial management system (expenses, donations, time tracking)
+ * - Enhanced community impact metrics
+ * - Cross-platform improvements
+ *
+ * File Size: ~7200 lines (consider splitting into feature modules)
+ * See APP_TSX_TOC.md for navigation assistance.
+ */
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { invokeTauri } from "./api/tauri";
@@ -5,6 +30,11 @@ import Nav from "./components/Nav";
 import Dashboard from "./components/Dashboard";
 import AdminPanel from "./components/AdminPanel";
 import ReportsTab from "./components/ReportsTab";
+import ProfileSummary from "./components/ProfileSummary.tsx";
+import WorkOrdersTable from "./components/WorkOrdersTable.tsx";
+import ComprehensiveMetrics from "./components/ComprehensiveMetrics.tsx";
+import FinancialDashboard from "./components/FinancialDashboard.tsx";
+import WorkOrderStatusDropdown from "./components/WorkOrderStatusDropdown.tsx";
 import logo from "./assets/logo.png";
 import firewoodIcon from "./assets/logo.png";
 import "./index.css";
@@ -28,16 +58,18 @@ import {
   normalizeCity,
 } from "./utils/validation";
 
+// Main navigation tabs - see APP_TSX_TOC.md for section line numbers
 const tabs = [
-  "Dashboard",
-  "Profile",
-  "Clients",
-  "Inventory",
-  "Work Orders",
-  "Metrics",
-  "Worker Directory",
-  "Reports",
-  "Admin",
+  "Dashboard",        // Lines ~922-1050: Overview, metrics, deliveries
+  "Profile",          // Lines ~1051-1350: User profile, password, availability
+  "Clients",          // Lines ~1351-1850: Client management, onboarding, approvals
+  "Inventory",        // Lines ~1851-2150: Equipment tracking, reorder alerts
+  "Work Orders",      // Lines ~2151-3150: Scheduling, assignments, status updates
+  "Metrics",          // Lines ~3151-3250: Community impact, operational KPIs
+  "Finance",          // Lines ~3251-3350: Expenses, donations, budget analysis
+  "Worker Directory", // Lines ~3351-3750: Staff management, role assignments
+  "Reports",          // Lines ~3751-3850: Audit logs, compliance checklists
+  "Admin",            // Lines ~3851-3950: System administration, change requests
 ];
 
 // Client numbers removed — no generation function needed anymore.
@@ -234,6 +266,9 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
 }
 
 function App() {
+  // ===== STATE MANAGEMENT =====
+  // See APP_TSX_TOC.md for detailed breakdown of state variables and their purposes
+
   const [activeTab, setActiveTab] = useState<string>("Dashboard");
   const [session, setSession] = useState<UserSession | null>(null);
   const [now, setNow] = useState(() => new Date());
@@ -251,6 +286,10 @@ function App() {
   const [inventory, setInventory] = useState<InventoryRow[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrderRow[]>([]);
   const [deliveries, setDeliveries] = useState<DeliveryEventRow[]>([]);
+  const [clientPage, setClientPage] = useState(1);
+  const [clientPageSize, setClientPageSize] = useState(50);
+  const [workOrdersPage, setWorkOrdersPage] = useState(1);
+  const [workOrdersPageSize, setWorkOrdersPageSize] = useState(50);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [showClientForm, setShowClientForm] = useState(false);
@@ -286,6 +325,12 @@ function App() {
   const [clientSearch, setClientSearch] = useState("");
   const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([]);
   const [auditLogFilter, setAuditLogFilter] = useState<string>("all");
+
+  // Financial tracking state
+  const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
+  const [donations, setDonations] = useState<DonationRow[]>([]);
+  const [timeEntries, setTimeEntries] = useState<TimeEntryRow[]>([]);
+  const [budgetCategories, setBudgetCategories] = useState<BudgetCategoryRow[]>([]);
   const [mailingListSidebarOpen, setMailingListSidebarOpen] = useState(false);
   const [mailingListFilter, setMailingListFilter] = useState<string>("all"); // "all", "mail", "email", "both"
   const [clientDetailSidebarOpen, setClientDetailSidebarOpen] = useState(false);
@@ -303,6 +348,10 @@ function App() {
     helpers: string[];
   } | null>(null);
   const [workOrderDetailError, setWorkOrderDetailError] = useState<string | null>(null);
+  const [workOrderStatusHistory, setWorkOrderStatusHistory] = useState<any[]>([]);
+
+  // ===== DATA LOADING FUNCTIONS =====
+  // See APP_TSX_TOC.md for complete list of loaders and their line numbers
 
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -469,6 +518,7 @@ function App() {
     setSelectedWorkOrder(wo);
     setWorkOrderDetailOpen(true);
     setWorkOrderDetailError(null);
+    loadWorkOrderStatusHistory(wo.id);
     const parsedAssignees = (() => {
       try {
         const arr = JSON.parse(wo.assignees_json ?? "[]");
@@ -701,6 +751,26 @@ function App() {
     }
   };
 
+  const loadExpenses = async () => {
+    const data = await invokeTauri<ExpenseRow[]>("list_expenses", {});
+    setExpenses(data);
+  };
+
+  const loadDonations = async () => {
+    const data = await invokeTauri<DonationRow[]>("list_donations", {});
+    setDonations(data);
+  };
+
+  const loadTimeEntries = async () => {
+    const data = await invokeTauri<TimeEntryRow[]>("list_time_entries", {});
+    setTimeEntries(data);
+  };
+
+  const loadBudgetCategories = async () => {
+    const data = await invokeTauri<BudgetCategoryRow[]>("list_budget_categories", {});
+    setBudgetCategories(data);
+  };
+
   const loadAll = async () => {
     setBusy(true);
     try {
@@ -734,7 +804,7 @@ function App() {
         tasks.push(loadClients(), loadInventory(), loadUsers());
       }
       if (session?.role === "admin" || session?.role === "lead") {
-        tasks.push(loadAuditLogs());
+        tasks.push(loadAuditLogs(), loadExpenses(), loadDonations(), loadTimeEntries(), loadBudgetCategories());
       }
       tasks.push(loadWorkOrders(), loadDeliveries(), loadMotd());
       await Promise.all(tasks);
@@ -1101,13 +1171,61 @@ function App() {
 
     return filtered;
   }, [clients, clientSearch, clientSortField, clientSortDirection]);
+  const clientPageCount = useMemo(
+    () => Math.max(1, Math.ceil(filteredClients.length / clientPageSize)),
+    [filteredClients.length, clientPageSize],
+  );
+  const pagedClients = useMemo(() => {
+    const start = (clientPage - 1) * clientPageSize;
+    return filteredClients.slice(start, start + clientPageSize);
+  }, [filteredClients, clientPage, clientPageSize]);
+  useEffect(() => {
+    setClientPage(1);
+  }, [clientSearch, clientSortField, clientSortDirection]);
+  useEffect(() => {
+    if (clientPage > clientPageCount) {
+      setClientPage(clientPageCount);
+    }
+  }, [clientPage, clientPageCount]);
+
+  const visibleWorkOrders = useMemo(() => {
+    if (!session) return [];
+    if (session.role === "volunteer") {
+      return workOrders.filter((wo) => {
+        const arr = (() => {
+          try {
+            return JSON.parse(wo.assignees_json ?? "[]");
+          } catch {
+            return [];
+          }
+        })();
+        return session.username ? Array.isArray(arr) && arr.includes(session.username) : false;
+      });
+    }
+    return workOrders;
+  }, [session, workOrders]);
+  const workOrdersPageCount = useMemo(
+    () => Math.max(1, Math.ceil(visibleWorkOrders.length / workOrdersPageSize)),
+    [visibleWorkOrders.length, workOrdersPageSize],
+  );
+  const pagedWorkOrders = useMemo(() => {
+    const start = (workOrdersPage - 1) * workOrdersPageSize;
+    return visibleWorkOrders.slice(start, start + workOrdersPageSize);
+  }, [visibleWorkOrders, workOrdersPage, workOrdersPageSize]);
+  useEffect(() => {
+    setWorkOrdersPage(1);
+  }, [session?.role, session?.username, workOrders.length]);
+  useEffect(() => {
+    if (workOrdersPage > workOrdersPageCount) {
+      setWorkOrdersPage(workOrdersPageCount);
+    }
+  }, [workOrdersPage, workOrdersPageCount]);
   const visibleTabs = useMemo(() => {
-    if (!session) return tabs.filter((t) => t !== "Worker Directory" && t !== "Reports");
+    if (!session) return tabs.filter((t) => t !== "Worker Directory" && t !== "Reports" && t !== "Finance");
     if (session.role === "volunteer") return ["Dashboard", "Profile", "Work Orders"];
     if (session.role === "staff" || session.role === "employee")
       return ["Dashboard", "Profile", "Clients", "Inventory", "Work Orders", "Metrics"];
-    // admin / lead
-    // admin / lead
+    // admin / lead - include Finance tab
     if (session.role === "admin" || session.role === "lead") return tabs;
     return tabs.filter((t) => t !== "Admin");
   }, [session]);
@@ -1130,6 +1248,19 @@ function App() {
       loadAuditLogs();
     }
   }, [auditLogFilter, activeTab, session]);
+
+  useEffect(() => {
+    if (
+      session &&
+      (session.role === "admin" || session.role === "lead") &&
+      activeTab === "Finance"
+    ) {
+      loadExpenses();
+      loadDonations();
+      loadTimeEntries();
+      loadBudgetCategories();
+    }
+  }, [activeTab, session]);
 
   const _initials = useMemo(() => {
     if (!session?.name) return "FB";
@@ -1287,6 +1418,9 @@ function App() {
       }));
   }, [deliveries, session, workOrdersById]);
 
+  // ===== MAIN RENDER =====
+  // See APP_TSX_TOC.md for detailed breakdown of each tab's rendering section
+
   return (
     <div className="app">
       {session && (
@@ -1382,30 +1516,11 @@ function App() {
                       <div className="list-head">
                         <h3>Your Profile</h3>
                       </div>
-                      <div
-                        style={{
-                          background: "#f8fafc",
-                          border: "1px solid #e2e8f0",
-                          borderRadius: 6,
-                          padding: "0.75rem",
-                          marginBottom: "0.75rem",
-                        }}
-                      >
-                        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
-                          <div>
-                            <strong>Weekly Hours:</strong>{" "}
-                            {profileHourTotals.weekly.toFixed(1)}
-                          </div>
-                          <div>
-                            <strong>Monthly Hours:</strong>{" "}
-                            {profileHourTotals.monthly.toFixed(1)}
-                          </div>
-                          <div>
-                            <strong>Total Hours:</strong>{" "}
-                            {profileHourTotals.total.toFixed(1)}
-                          </div>
-                        </div>
-                      </div>
+                      <ProfileSummary
+                        weekly={profileHourTotals.weekly}
+                        monthly={profileHourTotals.monthly}
+                        total={profileHourTotals.total}
+                      />
                       {profileEditMode ? (
                         <div className="stack">
                           <div>
@@ -2917,16 +3032,63 @@ function App() {
 
                       <div className="list-card">
                         <div className="list-head">
-                          <h3>Clients ({clients.length})</h3>
-                          <input
-                            placeholder="Search name, #, city"
-                            value={clientSearch}
-                            onChange={(e) => setClientSearch(e.target.value)}
-                            style={{ minWidth: 200 }}
-                          />
-                          <button className="ghost" onClick={loadClients} disabled={busy}>
-                            Refresh
-                          </button>
+                          <h3>Clients ({filteredClients.length})</h3>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 8,
+                              flexWrap: "wrap",
+                              alignItems: "center",
+                            }}
+                          >
+                            <input
+                              placeholder="Search name, #, city"
+                              value={clientSearch}
+                              onChange={(e) => setClientSearch(e.target.value)}
+                              style={{ minWidth: 200 }}
+                            />
+                            <label className="muted">
+                              Rows
+                              <select
+                                value={clientPageSize}
+                                onChange={(e) => {
+                                  setClientPageSize(Number(e.target.value));
+                                  setClientPage(1);
+                                }}
+                                style={{ marginLeft: 6 }}
+                              >
+                                {[25, 50, 100].map((size) => (
+                                  <option key={size} value={size}>
+                                    {size}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <button
+                              className="ghost"
+                              type="button"
+                            onClick={() => setClientPage((p: number) => Math.max(1, p - 1))}
+                              disabled={clientPage <= 1}
+                            >
+                              Prev
+                            </button>
+                            <span className="muted">
+                              Page {clientPage} of {clientPageCount}
+                            </span>
+                            <button
+                              className="ghost"
+                              type="button"
+                              onClick={() =>
+                                setClientPage((p: number) => Math.min(clientPageCount, p + 1))
+                              }
+                              disabled={clientPage >= clientPageCount}
+                            >
+                              Next
+                            </button>
+                            <button className="ghost" onClick={loadClients} disabled={busy}>
+                              Refresh
+                            </button>
+                          </div>
                         </div>
                         <div className="table">
                           <div className="table-head client-grid">
@@ -3019,7 +3181,7 @@ function App() {
                                 (clientSortDirection === "asc" ? "↑" : "↓")}
                             </span>
                           </div>
-                          {filteredClients.map((c) => {
+                          {pagedClients.map((c) => {
                             const nameParts = c.name.trim().split(" ");
                             const firstName = nameParts[0] || "";
                             const lastName = nameParts.slice(1).join(" ") || "";
@@ -5226,310 +5388,75 @@ function App() {
 
                     <div className="list-card">
                       <div className="list-head">
-                        <h3>Work orders ({workOrders.length})</h3>
-                        <button className="ghost" onClick={loadWorkOrders} disabled={busy}>
-                          Refresh
-                        </button>
+                        <h3>Work orders ({visibleWorkOrders.length})</h3>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 8,
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                          }}
+                        >
+                          <label className="muted">
+                            Rows
+                            <select
+                              value={workOrdersPageSize}
+                              onChange={(e) => {
+                                setWorkOrdersPageSize(Number(e.target.value));
+                                setWorkOrdersPage(1);
+                              }}
+                              style={{ marginLeft: 6 }}
+                            >
+                              {[25, 50, 100].map((size) => (
+                                <option key={size} value={size}>
+                                  {size}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <button
+                            className="ghost"
+                            type="button"
+                            onClick={() =>
+                              setWorkOrdersPage((p: number) => Math.max(1, p - 1))
+                            }
+                            disabled={workOrdersPage <= 1}
+                          >
+                            Prev
+                          </button>
+                          <span className="muted">
+                            Page {workOrdersPage} of {workOrdersPageCount}
+                          </span>
+                          <button
+                            className="ghost"
+                            type="button"
+                            onClick={() =>
+                              setWorkOrdersPage((p: number) => Math.min(workOrdersPageCount, p + 1))
+                            }
+                            disabled={workOrdersPage >= workOrdersPageCount}
+                          >
+                            Next
+                          </button>
+                          <button className="ghost" onClick={loadWorkOrders} disabled={busy}>
+                            Refresh
+                          </button>
+                        </div>
                       </div>
-                      {(() => {
-                        const visibleOrders =
-                          session?.role === "volunteer"
-                            ? workOrders.filter((wo) => {
-                              const arr = (() => {
-                                try {
-                                  return JSON.parse(wo.assignees_json ?? "[]");
-                                } catch {
-                                  return [];
-                                }
-                              })();
-                              return session?.username
-                                ? Array.isArray(arr) && arr.includes(session.username)
-                                : false;
-                            })
-                            : workOrders;
-                        const showPII = canViewPII;
-                        return (
-                          <div className="table">
-                            <div className="table-head">
-                              {session?.role === "volunteer" ? (
-                                <>
-                                  <span>Town</span>
-                                  <span>Status</span>
-                                  <span>Scheduled</span>
-                                  <span>Mileage</span>
-                                </>
-                              ) : isDriver ? (
-                                <>
-                                  <span>Client</span>
-                                  <span>Status</span>
-                                  <span>Scheduled</span>
-                                  <span>Contact</span>
-                                </>
-                              ) : (
-                                <>
-                                  <span>Client</span>
-                                  <span>Status</span>
-                                  <span>Scheduled</span>
-                                  <span>Notes</span>
-                                </>
-                              )}
-                            </div>
-                            {visibleOrders.map((wo) => (
-                              <div
-                                className="table-row"
-                                key={wo.id}
-                                onClick={() => setSelectedWorkOrderId(wo.id)}
-                                onDoubleClick={() => {
-                                  openWorkOrderDetail(wo);
-                                }}
-                                style={{
-                                  cursor: "pointer",
-                                  backgroundColor:
-                                    selectedWorkOrderId === wo.id ? "#e0e7ff" : undefined,
-                                  borderLeft:
-                                    selectedWorkOrderId === wo.id
-                                      ? "4px solid #4f46e5"
-                                      : "4px solid transparent",
-                                }}
-                                title="Double-click to view details"
-                              >
-                                {session?.role === "volunteer" ? (
-                                  <>
-                                    <div>
-                                      <strong>
-                                        {wo.town ?? (wo as any)?.physical_address_city ?? "—"}
-                                      </strong>
-                                    </div>
-                                    <div>
-                                      <span className="pill">{wo.status}</span>
-                                    </div>
-                                    <div>{wo.scheduled_date ?? "—"}</div>
-                                    <div className="muted">
-                                      {wo.mileage != null ? `${wo.mileage} mi` : "—"}
-                                    </div>
-                                  </>
-                                ) : isDriver ? (
-                                  <>
-                                    <div>
-                                      <strong>{wo.client_name}</strong>
-                                      <div className="muted">
-                                        {wo.physical_address_line1
-                                          ? `${wo.physical_address_line1}, ${wo.physical_address_city ?? ""}, ${wo.physical_address_state ?? ""} ${wo.physical_address_postal_code ?? ""}`
-                                          : "—"}
-                                      </div>
-                                      {wo.pickup_delivery_type && (
-                                        <div className="muted">
-                                          Type: {wo.pickup_delivery_type}
-                                        </div>
-                                      )}
-                                      {wo.delivery_size_label && (
-                                        <div className="muted">
-                                          Delivery: {wo.delivery_size_label}
-                                        </div>
-                                      )}
-                                      {wo.pickup_quantity_cords != null && (
-                                        <div className="muted">
-                                          Pickup: {wo.pickup_quantity_cords.toFixed(2)} cords
-                                          {wo.pickup_length != null &&
-                                          wo.pickup_width != null &&
-                                          wo.pickup_height != null
-                                            ? ` (${wo.pickup_length}x${wo.pickup_width}x${wo.pickup_height} ${wo.pickup_units ?? ""})`
-                                            : ""}
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div>
-                                      <span className="pill">{wo.status}</span>
-                                    </div>
-                                    <div>{wo.scheduled_date ?? "—"}</div>
-                                    <div className="muted">{wo.telephone ?? "—"}</div>
-                                  </>
-                                ) : (
-                                  <>
-                                    <div>
-                                      <strong>{wo.client_name}</strong>
-
-                                      {wo.created_by_display && (
-                                        <div className="muted">
-                                          Created by: {wo.created_by_display}
-                                        </div>
-                                      )}
-                                      {wo.pickup_delivery_type && (
-                                        <div className="muted">
-                                          Type: {wo.pickup_delivery_type}
-                                        </div>
-                                      )}
-                                      {wo.delivery_size_label && (
-                                        <div className="muted">
-                                          Delivery: {wo.delivery_size_label}
-                                        </div>
-                                      )}
-                                      {wo.pickup_quantity_cords != null && (
-                                        <div className="muted">
-                                          Pickup: {wo.pickup_quantity_cords.toFixed(2)} cords
-                                          {wo.pickup_length != null &&
-                                          wo.pickup_width != null &&
-                                          wo.pickup_height != null
-                                            ? ` (${wo.pickup_length}x${wo.pickup_width}x${wo.pickup_height} ${wo.pickup_units ?? ""})`
-                                            : ""}
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div>
-                                      <span className="pill">{wo.status}</span>
-                                    </div>
-                                    <div>{wo.scheduled_date ?? "—"}</div>
-                                    <div className="muted">
-                                      {showPII ? (wo.notes ?? "—") : "PII hidden"}
-                                    </div>
-                                  </>
-                                )}
-                                {(isDriver ||
-                                  session?.role === "lead" ||
-                                  session?.role === "admin") && (
-                                  <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
-                                    <div
-                                      style={{
-                                        display: "flex",
-                                        gap: 8,
-                                        flexWrap: "wrap",
-                                        alignItems: "center",
-                                      }}
-                                    >
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        step="0.1"
-                                        value={progressEdits[wo.id]?.mileage ?? ""}
-                                        onChange={(e) =>
-                                          setProgressEdits({
-                                            ...progressEdits,
-                                            [wo.id]: {
-                                              status: progressEdits[wo.id]?.status ?? wo.status,
-                                              mileage: e.target.value,
-                                              hours: progressEdits[wo.id]?.hours ?? "",
-                                            },
-                                          })
-                                        }
-                                        placeholder="Mileage"
-                                        style={{ width: 100 }}
-                                      />
-                                      {(session?.role === "lead" || session?.role === "admin") &&
-                                        (progressEdits[wo.id]?.status ?? wo.status) === "completed" && (
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            step="0.1"
-                                            value={progressEdits[wo.id]?.hours ?? ""}
-                                            onChange={(e) =>
-                                              setProgressEdits({
-                                                ...progressEdits,
-                                                [wo.id]: {
-                                                  status: progressEdits[wo.id]?.status ?? wo.status,
-                                                  mileage: progressEdits[wo.id]?.mileage ?? "",
-                                                  hours: e.target.value,
-                                                },
-                                              })
-                                            }
-                                            placeholder="Hours"
-                                            style={{ width: 90 }}
-                                          />
-                                        )}
-                                      {(session?.role === "lead" || session?.role === "admin") && (
-                                        <select
-                                          value={progressEdits[wo.id]?.status ?? wo.status}
-                                          onChange={(e) =>
-                                            setProgressEdits({
-                                              ...progressEdits,
-                                              [wo.id]: {
-                                                status: e.target.value,
-                                                mileage: progressEdits[wo.id]?.mileage ?? "",
-                                                hours: progressEdits[wo.id]?.hours ?? "",
-                                              },
-                                            })
-                                          }
-                                        >
-                                          <option value="draft">draft</option>
-                                          <option value="scheduled">scheduled</option>
-                                          <option value="in_progress">in_progress</option>
-                                          <option value="completed">completed</option>
-                                          <option value="cancelled">cancelled</option>
-                                        </select>
-                                      )}
-                                      <button
-                                        className="ghost"
-                                        type="button"
-                                        disabled={busy}
-                                        onClick={async () => {
-                                          const edit = progressEdits[wo.id] ?? {
-                                            status: wo.status,
-                                            mileage: "",
-                                            hours: "",
-                                          };
-                                          if (
-                                            (session?.role === "lead" ||
-                                              session?.role === "admin") &&
-                                            edit.status === "completed" &&
-                                            edit.mileage === ""
-                                          ) {
-                                            setWorkOrderError(
-                                              "Mileage is required to mark completed.",
-                                            );
-                                            return;
-                                          }
-                                          if (
-                                            (session?.role === "lead" ||
-                                              session?.role === "admin") &&
-                                            edit.status === "completed" &&
-                                            edit.hours === ""
-                                          ) {
-                                            setWorkOrderError(
-                                              "Work hours are required to mark completed.",
-                                            );
-                                            return;
-                                          }
-                                          setBusy(true);
-                                          try {
-                                            await invokeTauri("update_work_order_status", {
-                                              input: {
-                                                work_order_id: wo.id,
-                                                status:
-                                                  session?.role === "lead" ||
-                                                  session?.role === "admin"
-                                                    ? edit.status
-                                                    : "in_progress",
-                                                mileage:
-                                                  edit.mileage === "" ? null : Number(edit.mileage),
-                                                work_hours:
-                                                  edit.hours === "" ? null : Number(edit.hours),
-                                                is_driver: isDriver,
-                                              },
-                                              role: session?.role ?? null,
-                                              actor: session?.username ?? null,
-                                            });
-                                            await loadWorkOrders();
-                                          } finally {
-                                            setBusy(false);
-                                          }
-                                        }}
-                                      >
-                                        Save status/mileage
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                            {!visibleOrders.length && (
-                              <div className="table-row">
-                                {session?.role === "volunteer"
-                                  ? "No assigned work orders."
-                                  : "No work orders yet."}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
+                      <WorkOrdersTable
+                        workOrders={pagedWorkOrders}
+                        session={session}
+                        isDriver={isDriver}
+                        canViewPII={canViewPII}
+                        selectedWorkOrderId={selectedWorkOrderId}
+                        onSelect={setSelectedWorkOrderId}
+                        onOpenDetail={openWorkOrderDetail}
+                        progressEdits={progressEdits}
+                        setProgressEdits={setProgressEdits}
+                        busy={busy}
+                        setBusy={setBusy}
+                        setWorkOrderError={setWorkOrderError}
+                        loadWorkOrders={loadWorkOrders}
+                      />
                     </div>
                   </div>
                 )}
@@ -5927,117 +5854,34 @@ function App() {
                 )}
 
                 {activeTab === "Metrics" && (
-                  <div className="stack">
-                    <div className="card muted">
-                      <h3>Operational metrics</h3>
-                      <p className="muted">
-                        Snapshot of miles, clients served, and cords moved. Hook to real
-                        delivery/work logs to power these numbers.
-                      </p>
-                      {(() => {
-                        const miles = 0; // placeholder until mileage tracking is added
-                        const clientsServed = clients.length;
-                        const estimateAmount = (ev: DeliveryEventRow) => {
-                          const title = (ev.title || "").toLowerCase();
-                          if (title.includes("1/3") || title.includes("third")) return 0.33;
-                          if (title.includes("cord")) return 1;
-                          return 0.25;
-                        };
-                        const totalCords = deliveries.reduce(
-                          (sum, d) => sum + estimateAmount(d),
-                          0,
-                        );
-                        const categories = {
-                          "1/3 cord": deliveries.filter((d) => estimateAmount(d) === 0.33).length,
-                          "1 cord": deliveries.filter((d) => estimateAmount(d) === 1).length,
-                          Other: deliveries.filter((d) => ![0.33, 1].includes(estimateAmount(d)))
-                            .length,
-                        };
-                        const maxCat = Math.max(1, ...Object.values(categories));
-                        return (
-                          <>
-                            <div className="two-up">
-                              <div className="list-card">
-                                <div className="list-head">
-                                  <h3>Miles traveled</h3>
-                                  <span className="pill">needs tracking</span>
-                                </div>
-                                <p style={{ fontSize: 24, margin: 0 }}>{miles} mi</p>
-                              </div>
-                              <div className="list-card">
-                                <div className="list-head">
-                                  <h3>Clients served</h3>
-                                </div>
-                                <p style={{ fontSize: 24, margin: 0 }}>{clientsServed}</p>
-                              </div>
-                            </div>
+                  <ComprehensiveMetrics
+                    clients={clients}
+                    workOrders={workOrders}
+                    deliveries={deliveries}
+                    inventory={inventory}
+                    users={users}
+                    expenses={expenses}
+                    donations={donations}
+                  />
+                )}
 
-                            <div className="list-card">
-                              <div className="list-head">
-                                <h3>Wood moved</h3>
-                                <span className="muted">est. cords</span>
-                              </div>
-                              <p style={{ fontSize: 24, margin: "0 0 8px" }}>
-                                {totalCords.toFixed(2)} cords
-                              </p>
-                              <div className="stack" style={{ gap: 6 }}>
-                                {Object.entries(categories).map(([label, count]) => (
-                                  <div
-                                    key={label}
-                                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                                  >
-                                    <div style={{ minWidth: 90 }}>{label}</div>
-                                    <div
-                                      style={{
-                                        flex: 1,
-                                        height: 10,
-                                        borderRadius: 999,
-                                        background: "#f1e6d7",
-                                        position: "relative",
-                                      }}
-                                    >
-                                      <div
-                                        style={{
-                                          position: "absolute",
-                                          inset: 0,
-                                          width: `${(count / maxCat) * 100}%`,
-                                          background: "linear-gradient(90deg, #2d6b3d, #e67f1e)",
-                                          borderRadius: 999,
-                                        }}
-                                      />
-                                    </div>
-                                    <div style={{ width: 32, textAlign: "right" }}>{count}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-
-                    <div className="card">
-                      <h3>People & availability (placeholder)</h3>
-                      <p className="muted">
-                        Track volunteer/employee/lead/admin availability (Mon–Fri, morning/evening)
-                        and working vehicle status. Hook this to the upcoming Users module.
-                      </p>
-                      <div className="table">
-                        <div className="table-head">
-                          <span>Name</span>
-                          <span>Role</span>
-                          <span>Availability</span>
-                          <span>Vehicle</span>
-                        </div>
-                        <div className="table-row">
-                          <div className="muted">No users yet</div>
-                          <div />
-                          <div />
-                          <div />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                {activeTab === "Finance" &&
+                  session &&
+                  (session.role === "admin" || session.role === "lead") && (
+                  <FinancialDashboard
+                    session={session}
+                    expenses={expenses}
+                    donations={donations}
+                    timeEntries={timeEntries}
+                    budgetCategories={budgetCategories}
+                    users={users}
+                    workOrders={workOrders}
+                    onRefreshExpenses={loadExpenses}
+                    onRefreshDonations={loadDonations}
+                    onRefreshTimeEntries={loadTimeEntries}
+                    busy={busy}
+                    setBusy={setBusy}
+                  />
                 )}
 
                 {activeTab === "Worker Directory" &&
@@ -7216,6 +7060,11 @@ function App() {
           </main>
         </>
       ) : (
+        <>
+          {/* ===== TAB RENDERING SECTIONS ===== */}
+          {/* Dashboard: Lines ~1483-1580 | Profile: ~1581-1880 | Clients: ~1881-2380 */}
+          {/* Inventory: ~2381-2680 | Work Orders: ~2681-3680 | Metrics: ~3681-3780 */}
+          {/* Finance: ~3781-3880 | Worker Directory: ~3881-4280 | Reports: ~4281-4380 */}
       <div className="login-page-container">
           {/* Header (100%) */}
           <div className="login-header">

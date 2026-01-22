@@ -160,3 +160,67 @@ export type AuditLogRow = {
   new_value?: string | null;
   created_at: string;
 };
+
+export type ExpenseRow = {
+  id: string;
+  description: string;
+  amount: number;
+  category: string;
+  vendor?: string | null;
+  receipt_path?: string | null;
+  expense_date: string;
+  work_order_id?: string | null;
+  recorded_by_user_id: string;
+  notes?: string | null;
+  created_at: string;
+};
+
+export type DonationRow = {
+  id: string;
+  donor_name?: string | null;
+  donor_contact?: string | null;
+  donation_type: string;
+  description: string;
+  quantity?: number | null;
+  unit?: string | null;
+  monetary_value?: number | null;
+  received_date: string;
+  recorded_by_user_id: string;
+  notes?: string | null;
+  created_at: string;
+};
+
+export type TimeEntryRow = {
+  id: string;
+  user_id: string;
+  work_order_id?: string | null;
+  activity_type: string;
+  hours_worked: number;
+  is_volunteer_time: number;
+  hourly_rate?: number | null;
+  date_worked: string;
+  recorded_by_user_id: string;
+  notes?: string | null;
+  created_at: string;
+};
+
+export type BudgetCategoryRow = {
+  id: string;
+  name: string;
+  description?: string | null;
+  annual_budget?: number | null;
+  category_type: string;
+  is_active: number;
+};
+
+export type WorkOrderStatusHistoryRow = {
+  id: string;
+  work_order_id: string;
+  old_status?: string | null;
+  new_status: string;
+  changed_by_user_id?: string | null;
+  change_reason?: string | null;
+  mileage_recorded?: number | null;
+  work_hours_recorded?: number | null;
+  changed_at: string;
+};

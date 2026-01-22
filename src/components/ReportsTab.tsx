@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 import { invokeTauri } from "../api/tauri";
 import { AuditLogRow, UserSession } from "../types";
@@ -27,6 +27,27 @@ export default function ReportsTab({
   busy,
   setBusy,
 }: ReportsTabProps) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const pageCount = useMemo(
+    () => Math.max(1, Math.ceil(auditLogs.length / pageSize)),
+    [auditLogs.length, pageSize],
+  );
+  const pagedLogs = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return auditLogs.slice(start, start + pageSize);
+  }, [auditLogs, page, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [auditLogFilter, auditLogs.length]);
+
+  useEffect(() => {
+    if (page > pageCount) {
+      setPage(pageCount);
+    }
+  }, [page, pageCount]);
+
   if (
     !session ||
     activeTab !== "Reports" ||
@@ -52,9 +73,54 @@ export default function ReportsTab({
       <div className="list-card">
         <div className="list-head">
           <h3>Audit Logs ({auditLogs.length})</h3>
-          <button className="ghost" onClick={loadAuditLogs} disabled={busy}>
-            Refresh
-          </button>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            <label className="muted">
+              Rows
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                style={{ marginLeft: 6 }}
+              >
+                {[25, 50, 100].map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              className="ghost"
+              type="button"
+              onClick={() => setPage((p: number) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+            >
+              Prev
+            </button>
+            <span className="muted">
+              Page {page} of {pageCount}
+            </span>
+            <button
+              className="ghost"
+              type="button"
+              onClick={() => setPage((p: number) => Math.min(pageCount, p + 1))}
+              disabled={page >= pageCount}
+            >
+              Next
+            </button>
+            <button className="ghost" onClick={loadAuditLogs} disabled={busy}>
+              Refresh
+            </button>
+          </div>
         </div>
         <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
           {["all", "day", "7days", "month", "year"].map((filter) => (
@@ -94,7 +160,7 @@ export default function ReportsTab({
             <span>Role</span>
             <span>Actor</span>
           </div>
-          {auditLogs.map((log) => (
+          {pagedLogs.map((log) => (
             <div className="table-row" key={log.id}>
               <div className="muted">
                 {safeDate(log.created_at) + " " + new Date(log.created_at).toLocaleTimeString()}
