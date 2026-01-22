@@ -297,6 +297,23 @@ struct ClientInput {
 
     telephone: Option<String>,
     email: Option<String>,
+    opt_out_email: Option<bool>,
+
+    // Emergency contact
+    emergency_contact_name: Option<String>,
+    emergency_contact_phone: Option<String>,
+    emergency_contact_relationship: Option<String>,
+
+    // Household information
+    household_size: Option<i32>,
+    household_income_range: Option<String>,
+    household_composition: Option<String>,
+
+    // Delivery preferences
+    preferred_delivery_times: Option<String>,
+    delivery_restrictions: Option<String>,
+    preferred_driver_id: Option<String>,
+    seasonal_delivery_pattern: Option<String>,
 
     date_of_onboarding: Option<String>,
     how_did_they_hear_about_us: Option<String>,
@@ -330,6 +347,23 @@ struct ClientUpdateInput {
 
     telephone: Option<String>,
     email: Option<String>,
+    opt_out_email: Option<bool>,
+
+    // Emergency contact
+    emergency_contact_name: Option<String>,
+    emergency_contact_phone: Option<String>,
+    emergency_contact_relationship: Option<String>,
+
+    // Household information
+    household_size: Option<i32>,
+    household_income_range: Option<String>,
+    household_composition: Option<String>,
+
+    // Delivery preferences
+    preferred_delivery_times: Option<String>,
+    delivery_restrictions: Option<String>,
+    preferred_driver_id: Option<String>,
+    seasonal_delivery_pattern: Option<String>,
 
     date_of_onboarding: Option<String>,
     how_did_they_hear_about_us: Option<String>,
@@ -349,6 +383,7 @@ struct ClientRow {
     name: String,
     email: Option<String>,
     telephone: Option<String>,
+    opt_out_email: Option<i32>, // SQLite stores as INTEGER
     approval_status: String,
     date_of_onboarding: Option<String>,
     how_did_they_hear_about_us: Option<String>,
@@ -371,6 +406,25 @@ struct ClientRow {
     directions: Option<String>,
     created_at: String,
     default_mileage: Option<f64>,
+    // Emergency contact
+    emergency_contact_name: Option<String>,
+    emergency_contact_phone: Option<String>,
+    emergency_contact_relationship: Option<String>,
+    // Household information
+    household_size: Option<i32>,
+    household_income_range: Option<String>,
+    household_composition: Option<String>,
+    // Delivery preferences
+    preferred_delivery_times: Option<String>,
+    delivery_restrictions: Option<String>,
+    preferred_driver_id: Option<String>,
+    seasonal_delivery_pattern: Option<String>,
+    // Approval workflow
+    approval_date: Option<String>,
+    approved_by_user_id: Option<String>,
+    approval_expires_on: Option<String>,
+    last_reapproval_date: Option<String>,
+    requires_reapproval: Option<i32>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -380,6 +434,45 @@ struct ClientConflictRow {
     physical_address_line1: String,
     physical_address_city: String,
     physical_address_state: String,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct ClientApprovalHistoryRow {
+    id: String,
+    client_id: String,
+    old_status: Option<String>,
+    new_status: String,
+    changed_by_user_id: Option<String>,
+    reason: Option<String>,
+    notes: Option<String>,
+    created_at: String,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct ClientCommunicationRow {
+    id: String,
+    client_id: String,
+    communication_type: String,
+    direction: String,
+    subject: Option<String>,
+    message: Option<String>,
+    contacted_by_user_id: Option<String>,
+    created_at: String,
+    notes: Option<String>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+struct ClientFeedbackRow {
+    id: String,
+    client_id: String,
+    work_order_id: Option<String>,
+    feedback_type: String,
+    rating: Option<i32>,
+    comments: Option<String>,
+    responded_to: i32,
+    responded_by_user_id: Option<String>,
+    response_notes: Option<String>,
+    created_at: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -672,6 +765,8 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
         }
     }
 
+    let opt_out_email_val = input.opt_out_email.unwrap_or(false) as i32;
+
     let query = r#"
         INSERT INTO clients (
             id, client_title, name,
@@ -680,7 +775,11 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
             physical_address_state, physical_address_postal_code,
             mailing_address_line1, mailing_address_line2, mailing_address_city,
             mailing_address_state, mailing_address_postal_code,
-            telephone, email, date_of_onboarding,
+            telephone, email, opt_out_email,
+            emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+            household_size, household_income_range, household_composition,
+            preferred_delivery_times, delivery_restrictions, preferred_driver_id, seasonal_delivery_pattern,
+            date_of_onboarding,
             how_did_they_hear_about_us, referring_agency, approval_status,
             denial_reason, gate_combo, notes,
             wood_size_label, wood_size_other, directions,
@@ -694,6 +793,10 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
             ?, ?, ?,
             ?, ?,
             ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?,
@@ -719,6 +822,17 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
         .bind(&input.mailing_address_postal_code)
         .bind(&input.telephone)
         .bind(&input.email)
+        .bind(&opt_out_email_val)
+        .bind(&input.emergency_contact_name)
+        .bind(&input.emergency_contact_phone)
+        .bind(&input.emergency_contact_relationship)
+        .bind(&input.household_size)
+        .bind(&input.household_income_range)
+        .bind(&input.household_composition)
+        .bind(&input.preferred_delivery_times)
+        .bind(&input.delivery_restrictions)
+        .bind(&input.preferred_driver_id)
+        .bind(&input.seasonal_delivery_pattern)
         .bind(&input.date_of_onboarding)
         .bind(&input.how_did_they_hear_about_us)
         .bind(&input.referring_agency)
@@ -752,6 +866,7 @@ async fn list_clients(
             name,
             email,
             telephone,
+            opt_out_email,
             approval_status,
             date_of_onboarding,
             how_did_they_hear_about_us,
@@ -773,7 +888,22 @@ async fn list_clients(
             wood_size_other,
             directions,
             created_at,
-            default_mileage
+            default_mileage,
+            emergency_contact_name,
+            emergency_contact_phone,
+            emergency_contact_relationship,
+            household_size,
+            household_income_range,
+            household_composition,
+            preferred_delivery_times,
+            delivery_restrictions,
+            preferred_driver_id,
+            seasonal_delivery_pattern,
+            approval_date,
+            approved_by_user_id,
+            approval_expires_on,
+            last_reapproval_date,
+            requires_reapproval
         FROM clients
         WHERE is_deleted = 0
         ORDER BY COALESCE(date_of_onboarding, created_at) ASC
@@ -883,9 +1013,13 @@ async fn update_client(
             physical_address_state, physical_address_postal_code,
             mailing_address_line1, mailing_address_line2, mailing_address_city,
             mailing_address_state, mailing_address_postal_code,
-            telephone, email, date_of_onboarding,
+            telephone, email, opt_out_email,
+            emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+            household_size, household_income_range, household_composition,
+            preferred_delivery_times, delivery_restrictions, preferred_driver_id, seasonal_delivery_pattern,
+            date_of_onboarding,
             how_did_they_hear_about_us, referring_agency,
-            approval_status, denial_reason, gate_combo, notes,
+            approval_status, approval_date, approved_by_user_id, denial_reason, gate_combo, notes,
             wood_size_label, wood_size_other, directions
         FROM clients
         WHERE id = ? AND is_deleted = 0
@@ -895,6 +1029,25 @@ async fn update_client(
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    let opt_out_email_val = input.opt_out_email.unwrap_or(false) as i32;
+    
+    // Track approval status change for history
+    let old_status = existing.as_ref().map(|e| e.approval_status.clone());
+    let status_changed = old_status.as_ref().map(|s| s != &approval_status).unwrap_or(true);
+    
+    // Set approval_date when status changes to approved
+    let approval_date = if approval_status == "approved" && status_changed {
+        Some(format!("{}", chrono::Utc::now().format("%Y-%m-%d")))
+    } else {
+        existing.as_ref().and_then(|e| e.approval_date.clone())
+    };
+    
+    let approved_by_user_id = if approval_status == "approved" && status_changed {
+        Some(actor_val.clone())
+    } else {
+        existing.as_ref().and_then(|e| e.approved_by_user_id.clone())
+    };
 
     let query = r#"
         UPDATE clients
@@ -914,10 +1067,23 @@ async fn update_client(
             mailing_address_postal_code = ?,
             telephone = ?,
             email = ?,
+            opt_out_email = ?,
+            emergency_contact_name = ?,
+            emergency_contact_phone = ?,
+            emergency_contact_relationship = ?,
+            household_size = ?,
+            household_income_range = ?,
+            household_composition = ?,
+            preferred_delivery_times = ?,
+            delivery_restrictions = ?,
+            preferred_driver_id = ?,
+            seasonal_delivery_pattern = ?,
             date_of_onboarding = ?,
             how_did_they_hear_about_us = ?,
             referring_agency = ?,
             approval_status = ?,
+            approval_date = ?,
+            approved_by_user_id = ?,
             denial_reason = ?,
             gate_combo = ?,
             notes = ?,
@@ -945,10 +1111,23 @@ async fn update_client(
         .bind(&input.mailing_address_postal_code)
         .bind(&input.telephone)
         .bind(&input.email)
+        .bind(&opt_out_email_val)
+        .bind(&input.emergency_contact_name)
+        .bind(&input.emergency_contact_phone)
+        .bind(&input.emergency_contact_relationship)
+        .bind(&input.household_size)
+        .bind(&input.household_income_range)
+        .bind(&input.household_composition)
+        .bind(&input.preferred_delivery_times)
+        .bind(&input.delivery_restrictions)
+        .bind(&input.preferred_driver_id)
+        .bind(&input.seasonal_delivery_pattern)
         .bind(&input.date_of_onboarding)
         .bind(&input.how_did_they_hear_about_us)
         .bind(&input.referring_agency)
         .bind(&approval_status)
+        .bind(&approval_date)
+        .bind(&approved_by_user_id)
         .bind(&input.denial_reason)
         .bind(&input.gate_combo)
         .bind(&input.notes)
@@ -959,6 +1138,31 @@ async fn update_client(
         .execute(&state.pool)
         .await
         .map_err(|e| e.to_string())?;
+
+    // Log approval status change to history if it changed
+    if status_changed {
+        if let Some(old) = old_status {
+            let history_id = Uuid::new_v4().to_string();
+            let _ = sqlx::query(
+                r#"
+                INSERT INTO client_approval_history (
+                    id, client_id, old_status, new_status,
+                    changed_by_user_id, reason, notes, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                "#,
+            )
+            .bind(&history_id)
+            .bind(&input.id)
+            .bind(&old)
+            .bind(&approval_status)
+            .bind(&actor_val)
+            .bind(&input.denial_reason)
+            .bind::<Option<String>>(None)
+            .execute(&state.pool)
+            .await;
+        }
+    }
 
     if let Some(prev) = existing {
         let log_field = |field: &str, old_val: Option<String>, new_val: Option<String>| {
@@ -1005,6 +1209,17 @@ async fn update_client(
         log_field("mailing_address_postal_code", prev.mailing_address_postal_code, input.mailing_address_postal_code.clone());
         log_field("telephone", prev.telephone, input.telephone.clone());
         log_field("email", prev.email, input.email.clone());
+        log_field("opt_out_email", prev.opt_out_email.map(|v| if v == 1 { "true".to_string() } else { "false".to_string() }), input.opt_out_email.map(|v| if v { "true".to_string() } else { "false".to_string() }));
+        log_field("emergency_contact_name", prev.emergency_contact_name, input.emergency_contact_name.clone());
+        log_field("emergency_contact_phone", prev.emergency_contact_phone, input.emergency_contact_phone.clone());
+        log_field("emergency_contact_relationship", prev.emergency_contact_relationship, input.emergency_contact_relationship.clone());
+        log_field("household_size", prev.household_size.map(|v| v.to_string()), input.household_size.map(|v| v.to_string()));
+        log_field("household_income_range", prev.household_income_range, input.household_income_range.clone());
+        log_field("household_composition", prev.household_composition, input.household_composition.clone());
+        log_field("preferred_delivery_times", prev.preferred_delivery_times, input.preferred_delivery_times.clone());
+        log_field("delivery_restrictions", prev.delivery_restrictions, input.delivery_restrictions.clone());
+        log_field("preferred_driver_id", prev.preferred_driver_id, input.preferred_driver_id.clone());
+        log_field("seasonal_delivery_pattern", prev.seasonal_delivery_pattern, input.seasonal_delivery_pattern.clone());
         log_field("date_of_onboarding", prev.date_of_onboarding, input.date_of_onboarding.clone());
         log_field("how_did_they_hear_about_us", prev.how_did_they_hear_about_us, input.how_did_they_hear_about_us.clone());
         log_field("referring_agency", prev.referring_agency, input.referring_agency.clone());
@@ -1036,6 +1251,334 @@ async fn delete_client(state: State<'_, AppState>, id: String) -> Result<(), Str
     .await
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+async fn list_client_approval_history(
+    state: State<'_, AppState>,
+    client_id: String,
+) -> Result<Vec<ClientApprovalHistoryRow>, String> {
+    let rows = sqlx::query_as::<_, ClientApprovalHistoryRow>(
+        r#"
+        SELECT id, client_id, old_status, new_status, changed_by_user_id, reason, notes, created_at
+        FROM client_approval_history
+        WHERE client_id = ?
+        ORDER BY created_at DESC
+        "#,
+    )
+    .bind(&client_id)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateClientCommunicationInput {
+    client_id: String,
+    communication_type: String,
+    direction: String,
+    subject: Option<String>,
+    message: Option<String>,
+    contacted_by_user_id: Option<String>,
+    notes: Option<String>,
+}
+
+#[tauri::command]
+async fn create_client_communication(
+    state: State<'_, AppState>,
+    input: CreateClientCommunicationInput,
+    role: Option<String>,
+    actor: Option<String>,
+) -> Result<String, String> {
+    let id = Uuid::new_v4().to_string();
+    let role_val = role.unwrap_or_else(|| "unknown".to_string());
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
+    audit_db(&state.pool, "create_client_communication", &role_val, &actor_val).await;
+
+    sqlx::query(
+        r#"
+        INSERT INTO client_communications (
+            id, client_id, communication_type, direction,
+            subject, message, contacted_by_user_id, notes, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        "#,
+    )
+    .bind(&id)
+    .bind(&input.client_id)
+    .bind(&input.communication_type)
+    .bind(&input.direction)
+    .bind(&input.subject)
+    .bind(&input.message)
+    .bind(&input.contacted_by_user_id)
+    .bind(&input.notes)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(id)
+}
+
+#[tauri::command]
+async fn list_client_communications(
+    state: State<'_, AppState>,
+    client_id: Option<String>,
+    communication_type: Option<String>,
+) -> Result<Vec<ClientCommunicationRow>, String> {
+    let query = if let Some(cid) = client_id {
+        if let Some(ct) = communication_type {
+            sqlx::query_as::<_, ClientCommunicationRow>(
+                r#"
+                SELECT id, client_id, communication_type, direction, subject, message, contacted_by_user_id, created_at, notes
+                FROM client_communications
+                WHERE client_id = ? AND communication_type = ?
+                ORDER BY created_at DESC
+                "#,
+            )
+            .bind(&cid)
+            .bind(&ct)
+        } else {
+            sqlx::query_as::<_, ClientCommunicationRow>(
+                r#"
+                SELECT id, client_id, communication_type, direction, subject, message, contacted_by_user_id, created_at, notes
+                FROM client_communications
+                WHERE client_id = ?
+                ORDER BY created_at DESC
+                "#,
+            )
+            .bind(&cid)
+        }
+    } else {
+        sqlx::query_as::<_, ClientCommunicationRow>(
+            r#"
+            SELECT id, client_id, communication_type, direction, subject, message, contacted_by_user_id, created_at, notes
+            FROM client_communications
+            ORDER BY created_at DESC
+            LIMIT 100
+            "#,
+        )
+    };
+
+    let rows = query
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateClientFeedbackInput {
+    client_id: String,
+    work_order_id: Option<String>,
+    feedback_type: String,
+    rating: Option<i32>,
+    comments: Option<String>,
+}
+
+#[tauri::command]
+async fn create_client_feedback(
+    state: State<'_, AppState>,
+    input: CreateClientFeedbackInput,
+) -> Result<String, String> {
+    let id = Uuid::new_v4().to_string();
+    audit_db(&state.pool, "create_client_feedback", "unknown", "unknown").await;
+
+    sqlx::query(
+        r#"
+        INSERT INTO client_feedback (
+            id, client_id, work_order_id, feedback_type,
+            rating, comments, responded_to, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, 0, datetime('now'))
+        "#,
+    )
+    .bind(&id)
+    .bind(&input.client_id)
+    .bind(&input.work_order_id)
+    .bind(&input.feedback_type)
+    .bind(&input.rating)
+    .bind(&input.comments)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(id)
+}
+
+#[tauri::command]
+async fn list_client_feedback(
+    state: State<'_, AppState>,
+    client_id: Option<String>,
+    feedback_type: Option<String>,
+    responded_to: Option<bool>,
+) -> Result<Vec<ClientFeedbackRow>, String> {
+    let mut query_str = r#"
+        SELECT id, client_id, work_order_id, feedback_type, rating, comments,
+               responded_to, responded_by_user_id, response_notes, created_at
+        FROM client_feedback
+        WHERE 1=1
+    "#.to_string();
+
+    let mut bindings: Vec<String> = Vec::new();
+    if let Some(cid) = &client_id {
+        query_str.push_str(" AND client_id = ?");
+        bindings.push(cid.clone());
+    }
+    if let Some(ft) = &feedback_type {
+        query_str.push_str(" AND feedback_type = ?");
+        bindings.push(ft.clone());
+    }
+    if let Some(rt) = responded_to {
+        query_str.push_str(" AND responded_to = ?");
+        bindings.push(if rt { "1".to_string() } else { "0".to_string() });
+    }
+    query_str.push_str(" ORDER BY created_at DESC");
+
+    let mut query = sqlx::query_as::<_, ClientFeedbackRow>(&query_str);
+    for binding in bindings {
+        query = query.bind(binding);
+    }
+
+    let rows = query
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+#[derive(Debug, Deserialize)]
+struct RespondToFeedbackInput {
+    id: String,
+    response_notes: String,
+    responded_by_user_id: String,
+}
+
+#[tauri::command]
+async fn respond_to_client_feedback(
+    state: State<'_, AppState>,
+    input: RespondToFeedbackInput,
+) -> Result<(), String> {
+    audit_db(&state.pool, "respond_to_client_feedback", "unknown", "unknown").await;
+    sqlx::query(
+        r#"
+        UPDATE client_feedback
+        SET responded_to = 1, responded_by_user_id = ?, response_notes = ?
+        WHERE id = ?
+        "#,
+    )
+    .bind(&input.responded_by_user_id)
+    .bind(&input.response_notes)
+    .bind(&input.id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchClientsInput {
+    search_term: Option<String>,
+    approval_status: Option<String>,
+    referring_agency: Option<String>,
+    date_from: Option<String>,
+    date_to: Option<String>,
+    has_email: Option<bool>,
+    has_phone: Option<bool>,
+}
+
+#[tauri::command]
+async fn search_clients(
+    state: State<'_, AppState>,
+    input: SearchClientsInput,
+) -> Result<Vec<ClientRow>, String> {
+    let mut query_str = r#"
+        SELECT
+            id, name, email, telephone, opt_out_email, approval_status,
+            date_of_onboarding, how_did_they_hear_about_us, referring_agency,
+            denial_reason, physical_address_line1, physical_address_line2,
+            physical_address_city, physical_address_state, physical_address_postal_code,
+            mailing_address_line1, mailing_address_line2, mailing_address_city,
+            mailing_address_state, mailing_address_postal_code, gate_combo, notes,
+            wood_size_label, wood_size_other, directions, created_at, default_mileage,
+            emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+            household_size, household_income_range, household_composition,
+            preferred_delivery_times, delivery_restrictions, preferred_driver_id,
+            seasonal_delivery_pattern, approval_date, approved_by_user_id,
+            approval_expires_on, last_reapproval_date, requires_reapproval
+        FROM clients
+        WHERE is_deleted = 0
+    "#.to_string();
+
+    let mut bindings: Vec<String> = Vec::new();
+    
+    if let Some(term) = &input.search_term {
+        if !term.trim().is_empty() {
+            query_str.push_str(" AND (
+                lower(name) LIKE ? OR
+                lower(email) LIKE ? OR
+                lower(telephone) LIKE ? OR
+                lower(physical_address_line1) LIKE ? OR
+                lower(physical_address_city) LIKE ? OR
+                lower(physical_address_state) LIKE ? OR
+                lower(notes) LIKE ? OR
+                lower(mailing_address_line1) LIKE ?
+            )");
+            let search_pattern = format!("%{}%", term.to_lowercase());
+            for _ in 0..8 {
+                bindings.push(search_pattern.clone());
+            }
+        }
+    }
+    
+    if let Some(status) = &input.approval_status {
+        query_str.push_str(" AND approval_status = ?");
+        bindings.push(status.clone());
+    }
+    
+    if let Some(agency) = &input.referring_agency {
+        query_str.push_str(" AND referring_agency = ?");
+        bindings.push(agency.clone());
+    }
+    
+    if let Some(from) = &input.date_from {
+        query_str.push_str(" AND date_of_onboarding >= ?");
+        bindings.push(from.clone());
+    }
+    
+    if let Some(to) = &input.date_to {
+        query_str.push_str(" AND date_of_onboarding <= ?");
+        bindings.push(to.clone());
+    }
+    
+    if let Some(has_email) = input.has_email {
+        if has_email {
+            query_str.push_str(" AND email IS NOT NULL AND email != ''");
+        } else {
+            query_str.push_str(" AND (email IS NULL OR email = '')");
+        }
+    }
+    
+    if let Some(has_phone) = input.has_phone {
+        if has_phone {
+            query_str.push_str(" AND telephone IS NOT NULL AND telephone != ''");
+        } else {
+            query_str.push_str(" AND (telephone IS NULL OR telephone = '')");
+        }
+    }
+    
+    query_str.push_str(" ORDER BY COALESCE(date_of_onboarding, created_at) DESC");
+
+    let mut query = sqlx::query_as::<_, ClientRow>(&query_str);
+    for binding in bindings {
+        query = query.bind(binding);
+    }
+
+    let rows = query
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
 }
 
 #[tauri::command]
@@ -1313,7 +1856,7 @@ async fn apply_work_order_schedule_tx(
     tx: &mut Transaction<'_, Sqlite>,
     work_order_id: &str,
     scheduled_date: Option<String>,
-    previous_status_override: Option<String>,
+    _previous_status_override: Option<String>,
 ) -> Result<ScheduleUpdateResult, String> {
     let existing = sqlx::query_as::<_, WorkOrderScheduleRow>(
         r#"
@@ -3264,6 +3807,7 @@ fn validate_status_transition(
     Ok(())
 }
 
+#[tauri::command]
 async fn update_work_order_status(
     state: State<'_, AppState>,
     input: WorkOrderStatusInput,
@@ -4359,7 +4903,14 @@ fn main() -> Result<()> {
             create_time_entry,
             list_time_entries,
             list_budget_categories,
-            list_work_order_status_history
+            list_work_order_status_history,
+            list_client_approval_history,
+            create_client_communication,
+            list_client_communications,
+            create_client_feedback,
+            list_client_feedback,
+            respond_to_client_feedback,
+            search_clients
         ])
         .run(tauri::generate_context!())?;
 

@@ -40,15 +40,23 @@ import firewoodIcon from "./assets/logo.png";
 import "./index.css";
 import {
   AuditLogRow,
+  BudgetCategoryRow,
+  ClientApprovalHistoryRow,
+  ClientCommunicationRow,
   ClientConflictRow,
+  ClientFeedbackRow,
   ClientRow,
   DeliveryEventRow,
+  DonationRow,
+  ExpenseRow,
   InventoryRow,
   LoginResponse,
   MotdRow,
+  TimeEntryRow,
   UserRow,
   UserSession,
   WorkOrderRow,
+  WorkOrderStatusHistoryRow,
 } from "./types";
 import { initCapCity, isSameDay, normalizePhone, normalizeState, safeDate } from "./utils/format";
 import {
@@ -337,6 +345,37 @@ function App() {
   const [selectedClientForDetail, setSelectedClientForDetail] = useState<ClientRow | null>(null);
   const [clientSortField, setClientSortField] = useState<string>("first_name"); // "first_name", "last_name", "phone", "state", "approval_status"
   const [clientSortDirection, setClientSortDirection] = useState<"asc" | "desc">("asc");
+  // Advanced search state
+  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [advancedSearchFilters, setAdvancedSearchFilters] = useState({
+    search_term: "",
+    approval_status: "",
+    referring_agency: "",
+    date_from: "",
+    date_to: "",
+    has_email: undefined as boolean | undefined,
+    has_phone: undefined as boolean | undefined,
+  });
+  // Client detail tracking state
+  const [clientApprovalHistory, setClientApprovalHistory] = useState<ClientApprovalHistoryRow[]>([]);
+  const [clientCommunications, setClientCommunications] = useState<ClientCommunicationRow[]>([]);
+  const [clientFeedback, setClientFeedback] = useState<ClientFeedbackRow[]>([]);
+  // Communication and feedback form state
+  const [showCommunicationForm, setShowCommunicationForm] = useState(false);
+  const [communicationForm, setCommunicationForm] = useState({
+    communication_type: "phone",
+    direction: "outbound",
+    subject: "",
+    message: "",
+    notes: "",
+  });
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+  const [feedbackForm, setFeedbackForm] = useState({
+    feedback_type: "satisfaction",
+    rating: 5,
+    comments: "",
+    work_order_id: "",
+  });
   const [motdItems, setMotdItems] = useState<MotdRow[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrderRow | null>(null);
@@ -456,6 +495,20 @@ function App() {
     mailing_address_postal_code: "",
     telephone: "",
     email: "",
+    opt_out_email: false, // Opt out of email mailing list
+    // Emergency contact
+    emergency_contact_name: "",
+    emergency_contact_phone: "",
+    emergency_contact_relationship: "",
+    // Household information
+    household_size: "",
+    household_income_range: "",
+    household_composition: "",
+    // Delivery preferences
+    preferred_delivery_times: "",
+    delivery_restrictions: "",
+    preferred_driver_id: "",
+    seasonal_delivery_pattern: "",
     how_did_they_hear_about_us: "",
     referring_agency: "",
     approval_status: "pending",
@@ -465,7 +518,6 @@ function App() {
     wood_size_label: "",
     wood_size_other: "",
     directions: "",
-    opt_out_email: false, // Opt out of email mailing list
   });
 
   const INVENTORY_CATEGORIES = ["Wood", "Tools", "Gas", "Other"] as const;
@@ -505,6 +557,18 @@ function App() {
     }
     const parsed = new Date(trimmed);
     return Number.isNaN(parsed.getTime()) ? trimmed : formatDateTimeLocal(parsed);
+  };
+
+  const loadWorkOrderStatusHistory = async (workOrderId: string) => {
+    try {
+      const data = await invokeTauri<WorkOrderStatusHistoryRow[]>("list_work_order_status_history", {
+        work_order_id: workOrderId,
+      });
+      setWorkOrderStatusHistory(data);
+    } catch (error) {
+      console.error("Error loading work order status history:", error);
+      setWorkOrderStatusHistory([]);
+    }
   };
 
   const closeWorkOrderDetail = () => {
@@ -606,13 +670,72 @@ function App() {
   };
 
   const loadClients = async () => {
-    const data = await invokeTauri<ClientRow[]>("list_clients", {
-      role: session?.role ?? null,
-      username: session?.username ?? null,
-      hipaa_certified: session?.hipaaCertified ?? false,
-      is_driver: session?.isDriver ?? false,
-    });
-    setClients(data);
+    // Use advanced search if filters are active, otherwise use regular list
+    const hasActiveFilters = 
+      advancedSearchFilters.search_term.trim() ||
+      advancedSearchFilters.approval_status ||
+      advancedSearchFilters.referring_agency ||
+      advancedSearchFilters.date_from ||
+      advancedSearchFilters.date_to ||
+      advancedSearchFilters.has_email !== undefined ||
+      advancedSearchFilters.has_phone !== undefined;
+
+    if (hasActiveFilters) {
+      const data = await invokeTauri<ClientRow[]>("search_clients", {
+        search_term: advancedSearchFilters.search_term.trim() || null,
+        approval_status: advancedSearchFilters.approval_status || null,
+        referring_agency: advancedSearchFilters.referring_agency || null,
+        date_from: advancedSearchFilters.date_from || null,
+        date_to: advancedSearchFilters.date_to || null,
+        has_email: advancedSearchFilters.has_email,
+        has_phone: advancedSearchFilters.has_phone,
+      });
+      setClients(data);
+    } else {
+      const data = await invokeTauri<ClientRow[]>("list_clients", {
+        role: session?.role ?? null,
+        username: session?.username ?? null,
+        hipaa_certified: session?.hipaaCertified ?? false,
+        is_driver: session?.isDriver ?? false,
+      });
+      setClients(data);
+    }
+  };
+
+  const loadClientApprovalHistory = async (clientId: string) => {
+    try {
+      const data = await invokeTauri<ClientApprovalHistoryRow[]>("list_client_approval_history", {
+        client_id: clientId,
+      });
+      setClientApprovalHistory(data);
+    } catch (error) {
+      console.error("Error loading approval history:", error);
+      setClientApprovalHistory([]);
+    }
+  };
+
+  const loadClientCommunications = async (clientId: string) => {
+    try {
+      const data = await invokeTauri<ClientCommunicationRow[]>("list_client_communications", {
+        client_id: clientId,
+      });
+      setClientCommunications(data);
+    } catch (error) {
+      console.error("Error loading communications:", error);
+      setClientCommunications([]);
+    }
+  };
+
+  const loadClientFeedback = async (clientId: string) => {
+    try {
+      const data = await invokeTauri<ClientFeedbackRow[]>("list_client_feedback", {
+        client_id: clientId,
+      });
+      setClientFeedback(data);
+    } catch (error) {
+      console.error("Error loading feedback:", error);
+      setClientFeedback([]);
+    }
   };
 
   const loadInventory = async () => {
@@ -1108,6 +1231,21 @@ function App() {
   };
   const filteredClients = useMemo(() => {
     let filtered = clients.filter((c) => {
+      // If advanced search is active, clients are already filtered by backend
+      if (showAdvancedSearch) {
+        // Just apply local search term filter if any
+        if (!advancedSearchFilters.search_term.trim()) return true;
+        const term = advancedSearchFilters.search_term.toLowerCase();
+        return (
+          c.name.toLowerCase().includes(term) ||
+          c.physical_address_city.toLowerCase().includes(term) ||
+          (c.email && c.email.toLowerCase().includes(term)) ||
+          (c.telephone && c.telephone.toLowerCase().includes(term)) ||
+          (c.physical_address_line1 && c.physical_address_line1.toLowerCase().includes(term)) ||
+          (c.notes && c.notes.toLowerCase().includes(term))
+        );
+      }
+      // Simple search
       if (!clientSearch.trim()) return true;
       const term = clientSearch.toLowerCase();
       return (
@@ -1170,7 +1308,7 @@ function App() {
     });
 
     return filtered;
-  }, [clients, clientSearch, clientSortField, clientSortDirection]);
+  }, [clients, clientSearch, clientSortField, clientSortDirection, showAdvancedSearch, advancedSearchFilters]);
   const clientPageCount = useMemo(
     () => Math.max(1, Math.ceil(filteredClients.length / clientPageSize)),
     [filteredClients.length, clientPageSize],
@@ -1181,7 +1319,7 @@ function App() {
   }, [filteredClients, clientPage, clientPageSize]);
   useEffect(() => {
     setClientPage(1);
-  }, [clientSearch, clientSortField, clientSortDirection]);
+  }, [clientSearch, clientSortField, clientSortDirection, showAdvancedSearch]);
   useEffect(() => {
     if (clientPage > clientPageCount) {
       setClientPage(clientPageCount);
@@ -2487,6 +2625,20 @@ function App() {
                                     physical_address_postal_code: postalCheck.normalized,
                                     telephone: phoneCheck.normalized || null,
                                     email: finalEmail, // null if opted out, otherwise the email
+                                    opt_out_email: clientForm.opt_out_email || false,
+                                    // Emergency contact
+                                    emergency_contact_name: clientForm.emergency_contact_name?.trim() || null,
+                                    emergency_contact_phone: clientForm.emergency_contact_phone?.trim() || null,
+                                    emergency_contact_relationship: clientForm.emergency_contact_relationship?.trim() || null,
+                                    // Household information
+                                    household_size: clientForm.household_size ? parseInt(clientForm.household_size as any) || null : null,
+                                    household_income_range: clientForm.household_income_range?.trim() || null,
+                                    household_composition: clientForm.household_composition?.trim() || null,
+                                    // Delivery preferences
+                                    preferred_delivery_times: clientForm.preferred_delivery_times?.trim() || null,
+                                    delivery_restrictions: clientForm.delivery_restrictions?.trim() || null,
+                                    preferred_driver_id: clientForm.preferred_driver_id?.trim() || null,
+                                    seasonal_delivery_pattern: clientForm.seasonal_delivery_pattern?.trim() || null,
                                     gate_combo: clientForm.gate_combo || null,
                                     notes: clientForm.notes || null,
                                     how_did_they_hear_about_us:
@@ -2949,6 +3101,139 @@ function App() {
                                 />
                                 Opt out of email mailing list (client will still be on mail list)
                               </label>
+                              
+                              {/* Additional Information Section */}
+                              <div style={{ gridColumn: "1 / -1", borderTop: "1px solid #ddd", marginTop: "1rem", paddingTop: "1rem" }}>
+                                <h4 style={{ marginBottom: "0.75rem" }}>Additional Information (Optional)</h4>
+                                
+                                {/* Emergency Contact */}
+                                <div style={{ marginBottom: "1rem" }}>
+                                  <h5 style={{ fontSize: "0.9rem", marginBottom: "0.5rem", color: "#666" }}>Emergency Contact</h5>
+                                  <div className="form-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+                                    <label>
+                                      Name
+                                      <input
+                                        value={clientForm.emergency_contact_name}
+                                        onChange={(e) =>
+                                          setClientForm({ ...clientForm, emergency_contact_name: e.target.value })
+                                        }
+                                      />
+                                    </label>
+                                    <label>
+                                      Phone
+                                      <input
+                                        value={clientForm.emergency_contact_phone}
+                                        onChange={(e) =>
+                                          setClientForm({ ...clientForm, emergency_contact_phone: e.target.value })
+                                        }
+                                        onBlur={(e) =>
+                                          setClientForm((prev) => ({
+                                            ...prev,
+                                            emergency_contact_phone: normalizePhone(e.target.value),
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label>
+                                      Relationship
+                                      <input
+                                        value={clientForm.emergency_contact_relationship}
+                                        onChange={(e) =>
+                                          setClientForm({ ...clientForm, emergency_contact_relationship: e.target.value })
+                                        }
+                                        placeholder="e.g., Spouse, Parent"
+                                      />
+                                    </label>
+                                  </div>
+                                </div>
+
+                                {/* Household Information */}
+                                <div style={{ marginBottom: "1rem" }}>
+                                  <h5 style={{ fontSize: "0.9rem", marginBottom: "0.5rem", color: "#666" }}>Household Information</h5>
+                                  <div className="form-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+                                    <label>
+                                      Household Size
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={clientForm.household_size}
+                                        onChange={(e) =>
+                                          setClientForm({ ...clientForm, household_size: e.target.value })
+                                        }
+                                      />
+                                    </label>
+                                    <label>
+                                      Income Range
+                                      <select
+                                        value={clientForm.household_income_range}
+                                        onChange={(e) =>
+                                          setClientForm({ ...clientForm, household_income_range: e.target.value })
+                                        }
+                                      >
+                                        <option value="">Select range</option>
+                                        <option value="under_25k">Under $25,000</option>
+                                        <option value="25k_50k">$25,000 - $50,000</option>
+                                        <option value="50k_75k">$50,000 - $75,000</option>
+                                        <option value="75k_100k">$75,000 - $100,000</option>
+                                        <option value="over_100k">Over $100,000</option>
+                                      </select>
+                                    </label>
+                                    <label className="span-2">
+                                      Household Composition
+                                      <input
+                                        value={clientForm.household_composition}
+                                        onChange={(e) =>
+                                          setClientForm({ ...clientForm, household_composition: e.target.value })
+                                        }
+                                        placeholder="e.g., 2 adults, 1 child"
+                                      />
+                                    </label>
+                                  </div>
+                                </div>
+
+                                {/* Delivery Preferences */}
+                                <div style={{ marginBottom: "1rem" }}>
+                                  <h5 style={{ fontSize: "0.9rem", marginBottom: "0.5rem", color: "#666" }}>Delivery Preferences</h5>
+                                  <div className="form-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+                                    <label>
+                                      Preferred Delivery Times
+                                      <input
+                                        value={clientForm.preferred_delivery_times}
+                                        onChange={(e) =>
+                                          setClientForm({ ...clientForm, preferred_delivery_times: e.target.value })
+                                        }
+                                        placeholder="e.g., Weekday mornings"
+                                      />
+                                    </label>
+                                    <label>
+                                      Seasonal Pattern
+                                      <select
+                                        value={clientForm.seasonal_delivery_pattern}
+                                        onChange={(e) =>
+                                          setClientForm({ ...clientForm, seasonal_delivery_pattern: e.target.value })
+                                        }
+                                      >
+                                        <option value="">Select pattern</option>
+                                        <option value="winter_only">Winter Only</option>
+                                        <option value="year_round">Year Round</option>
+                                        <option value="summer_only">Summer Only</option>
+                                      </select>
+                                    </label>
+                                    <label className="span-2">
+                                      Delivery Restrictions
+                                      <textarea
+                                        value={clientForm.delivery_restrictions}
+                                        onChange={(e) =>
+                                          setClientForm({ ...clientForm, delivery_restrictions: e.target.value })
+                                        }
+                                        rows={2}
+                                        placeholder="Any restrictions or special instructions for delivery"
+                                      />
+                                    </label>
+                                  </div>
+                                </div>
+                              </div>
+
                               <div className="actions span-2">
                                 <button
                                   className="ping"
@@ -3043,10 +3328,51 @@ function App() {
                           >
                             <input
                               placeholder="Search name, #, city"
-                              value={clientSearch}
-                              onChange={(e) => setClientSearch(e.target.value)}
+                              value={showAdvancedSearch ? advancedSearchFilters.search_term : clientSearch}
+                              onChange={(e) => {
+                                if (showAdvancedSearch) {
+                                  setAdvancedSearchFilters({ ...advancedSearchFilters, search_term: e.target.value });
+                                } else {
+                                  setClientSearch(e.target.value);
+                                }
+                              }}
                               style={{ minWidth: 200 }}
                             />
+                            <button
+                              type="button"
+                              className="ghost"
+                              onClick={() => {
+                                setShowAdvancedSearch(!showAdvancedSearch);
+                                if (!showAdvancedSearch) {
+                                  setAdvancedSearchFilters({ ...advancedSearchFilters, search_term: clientSearch });
+                                }
+                              }}
+                              style={{ fontSize: "0.85rem", padding: "0.25rem 0.5rem" }}
+                            >
+                              {showAdvancedSearch ? "Simple" : "Advanced"} Search
+                            </button>
+                            {showAdvancedSearch && (
+                              <button
+                                type="button"
+                                className="ghost"
+                                onClick={() => {
+                                  setAdvancedSearchFilters({
+                                    search_term: "",
+                                    approval_status: "",
+                                    referring_agency: "",
+                                    date_from: "",
+                                    date_to: "",
+                                    has_email: undefined,
+                                    has_phone: undefined,
+                                  });
+                                  setClientSearch("");
+                                  loadClients();
+                                }}
+                                style={{ fontSize: "0.85rem", padding: "0.25rem 0.5rem" }}
+                              >
+                                Clear
+                              </button>
+                            )}
                             <label className="muted">
                               Rows
                               <select
@@ -3208,6 +3534,10 @@ function App() {
                                 onDoubleClick={() => {
                                   setSelectedClientForDetail(c);
                                   setClientDetailSidebarOpen(true);
+                                  // Load related data
+                                  loadClientApprovalHistory(c.id);
+                                  loadClientCommunications(c.id);
+                                  loadClientFeedback(c.id);
                                 }}
                                 style={{
                                   cursor: "pointer",
@@ -3442,6 +3772,178 @@ function App() {
                                 </div>
                               </div>
                             )}
+                            
+                            {/* Additional Information */}
+                            {(selectedClientForDetail.emergency_contact_name || 
+                              selectedClientForDetail.household_size || 
+                              selectedClientForDetail.preferred_delivery_times) && (
+                              <div style={{ marginTop: "1rem", borderTop: "1px solid #eee", paddingTop: "0.75rem" }}>
+                                <h4 style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>Additional Information</h4>
+                                {selectedClientForDetail.emergency_contact_name && (
+                                  <div style={{ marginBottom: "0.5rem" }}>
+                                    <strong>Emergency Contact:</strong> {selectedClientForDetail.emergency_contact_name}
+                                    {selectedClientForDetail.emergency_contact_phone && ` - ${selectedClientForDetail.emergency_contact_phone}`}
+                                    {selectedClientForDetail.emergency_contact_relationship && ` (${selectedClientForDetail.emergency_contact_relationship})`}
+                                  </div>
+                                )}
+                                {selectedClientForDetail.household_size && (
+                                  <div style={{ marginBottom: "0.5rem" }}>
+                                    <strong>Household Size:</strong> {selectedClientForDetail.household_size}
+                                    {selectedClientForDetail.household_income_range && ` | Income: ${selectedClientForDetail.household_income_range.replace(/_/g, " ")}`}
+                                  </div>
+                                )}
+                                {selectedClientForDetail.preferred_delivery_times && (
+                                  <div style={{ marginBottom: "0.5rem" }}>
+                                    <strong>Preferred Delivery:</strong> {selectedClientForDetail.preferred_delivery_times}
+                                    {selectedClientForDetail.seasonal_delivery_pattern && ` | ${selectedClientForDetail.seasonal_delivery_pattern.replace(/_/g, " ")}`}
+                                  </div>
+                                )}
+                                {selectedClientForDetail.delivery_restrictions && (
+                                  <div style={{ marginBottom: "0.5rem", fontSize: "0.85rem", color: "#666" }}>
+                                    <strong>Restrictions:</strong> {selectedClientForDetail.delivery_restrictions}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Approval History */}
+                            {clientApprovalHistory.length > 0 && (
+                              <div style={{ marginTop: "1rem", borderTop: "1px solid #eee", paddingTop: "0.75rem" }}>
+                                <h4 style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>Approval History</h4>
+                                <div className="table" style={{ fontSize: "0.85rem" }}>
+                                  <div className="table-head">
+                                    <span>Date</span>
+                                    <span>Status Change</span>
+                                    <span>Changed By</span>
+                                  </div>
+                                  {clientApprovalHistory.slice(0, 5).map((history) => (
+                                    <div key={history.id} className="table-row">
+                                      <div className="muted">
+                                        {new Date(history.created_at).toLocaleDateString()}
+                                      </div>
+                                      <div>
+                                        {history.old_status ? (
+                                          <>
+                                            <span style={{ textDecoration: "line-through", color: "#b3261e" }}>
+                                              {history.old_status}
+                                            </span>
+                                            {" → "}
+                                            <span style={{ fontWeight: "bold", color: "#2d6b3d" }}>
+                                              {history.new_status}
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <span style={{ fontWeight: "bold" }}>{history.new_status}</span>
+                                        )}
+                                      </div>
+                                      <div className="muted">{history.changed_by_user_id || "System"}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Communications */}
+                            <div style={{ marginTop: "1rem", borderTop: "1px solid #eee", paddingTop: "0.75rem" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                                <h4 style={{ fontSize: "0.9rem", margin: 0 }}>Communications</h4>
+                                {canManage && (
+                                  <button
+                                    className="ghost"
+                                    type="button"
+                                    style={{ fontSize: "0.75rem", padding: "0.2rem 0.4rem" }}
+                                    onClick={() => {
+                                      setCommunicationForm({
+                                        communication_type: "phone",
+                                        direction: "outbound",
+                                        subject: "",
+                                        message: "",
+                                        notes: "",
+                                      });
+                                      setShowCommunicationForm(true);
+                                    }}
+                                  >
+                                    + Add
+                                  </button>
+                                )}
+                              </div>
+                              {clientCommunications.length > 0 ? (
+                                <div className="table" style={{ fontSize: "0.85rem" }}>
+                                  <div className="table-head">
+                                    <span>Date</span>
+                                    <span>Type</span>
+                                    <span>Direction</span>
+                                  </div>
+                                  {clientCommunications.slice(0, 5).map((comm) => (
+                                    <div key={comm.id} className="table-row" title={comm.subject || comm.notes || ""}>
+                                      <div className="muted">
+                                        {new Date(comm.created_at).toLocaleDateString()}
+                                      </div>
+                                      <div>{comm.communication_type}</div>
+                                      <div className="muted">{comm.direction}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="muted" style={{ fontSize: "0.85rem" }}>No communications recorded</div>
+                              )}
+                            </div>
+
+                            {/* Feedback */}
+                            <div style={{ marginTop: "1rem", borderTop: "1px solid #eee", paddingTop: "0.75rem" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                                <h4 style={{ fontSize: "0.9rem", margin: 0 }}>Feedback</h4>
+                                {canManage && (
+                                  <button
+                                    className="ghost"
+                                    type="button"
+                                    style={{ fontSize: "0.75rem", padding: "0.2rem 0.4rem" }}
+                                    onClick={() => {
+                                      setFeedbackForm({
+                                        feedback_type: "satisfaction",
+                                        rating: 5,
+                                        comments: "",
+                                        work_order_id: "",
+                                      });
+                                      setShowFeedbackForm(true);
+                                    }}
+                                  >
+                                    + Add
+                                  </button>
+                                )}
+                              </div>
+                              {clientFeedback.length > 0 ? (
+                                <div className="table" style={{ fontSize: "0.85rem" }}>
+                                  <div className="table-head">
+                                    <span>Date</span>
+                                    <span>Type</span>
+                                    <span>Rating</span>
+                                    <span>Status</span>
+                                  </div>
+                                  {clientFeedback.slice(0, 5).map((feedback) => (
+                                    <div key={feedback.id} className="table-row" title={feedback.comments || ""}>
+                                      <div className="muted">
+                                        {new Date(feedback.created_at).toLocaleDateString()}
+                                      </div>
+                                      <div>{feedback.feedback_type}</div>
+                                      <div>
+                                        {feedback.rating ? "⭐".repeat(feedback.rating) : "—"}
+                                      </div>
+                                      <div>
+                                        {feedback.responded_to ? (
+                                          <span style={{ color: "#2d6b3d" }}>Responded</span>
+                                        ) : (
+                                          <span style={{ color: "#e67f1e" }}>Pending</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="muted" style={{ fontSize: "0.85rem" }}>No feedback recorded</div>
+                              )}
+                            </div>
+
                             <div style={{ marginTop: "0.75rem" }}>
                               <strong>Delivered Work Orders</strong>
                               {deliveredOrdersForClient.length ? (
@@ -3514,6 +4016,20 @@ function App() {
                                           selectedClientForDetail.mailing_address_postal_code ?? "",
                                         telephone: selectedClientForDetail.telephone ?? "",
                                         email: selectedClientForDetail.email ?? "",
+                                        opt_out_email: (selectedClientForDetail.opt_out_email ?? 0) === 1,
+                                        // Emergency contact
+                                        emergency_contact_name: selectedClientForDetail.emergency_contact_name ?? "",
+                                        emergency_contact_phone: selectedClientForDetail.emergency_contact_phone ?? "",
+                                        emergency_contact_relationship: selectedClientForDetail.emergency_contact_relationship ?? "",
+                                        // Household information
+                                        household_size: selectedClientForDetail.household_size?.toString() ?? "",
+                                        household_income_range: selectedClientForDetail.household_income_range ?? "",
+                                        household_composition: selectedClientForDetail.household_composition ?? "",
+                                        // Delivery preferences
+                                        preferred_delivery_times: selectedClientForDetail.preferred_delivery_times ?? "",
+                                        delivery_restrictions: selectedClientForDetail.delivery_restrictions ?? "",
+                                        preferred_driver_id: selectedClientForDetail.preferred_driver_id ?? "",
+                                        seasonal_delivery_pattern: selectedClientForDetail.seasonal_delivery_pattern ?? "",
                                         how_did_they_hear_about_us:
                                           selectedClientForDetail.how_did_they_hear_about_us ?? "",
                                         referring_agency:
@@ -3527,7 +4043,6 @@ function App() {
                                         wood_size_other:
                                           selectedClientForDetail.wood_size_other ?? "",
                                         directions: selectedClientForDetail.directions ?? "",
-                                        opt_out_email: !selectedClientForDetail.email,
                                       });
                                       setShowClientForm(true);
                                       setClientDetailSidebarOpen(false);
@@ -7203,6 +7718,239 @@ function App() {
                     setShowPasswordModal(false);
                     setPasswordForm({ current: "", next: "", confirm: "" });
                     setPasswordError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {session && showCommunicationForm && selectedClientForDetail && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h3>Record Communication - {selectedClientForDetail.name}</h3>
+            <form
+              className="stack"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setBusy(true);
+                try {
+                  await invokeTauri("create_client_communication", {
+                    input: {
+                      client_id: selectedClientForDetail.id,
+                      communication_type: communicationForm.communication_type,
+                      direction: communicationForm.direction,
+                      subject: communicationForm.subject.trim() || null,
+                      message: communicationForm.message.trim() || null,
+                      contacted_by_user_id: session.username || session.userId || null,
+                      notes: communicationForm.notes.trim() || null,
+                    },
+                    role: session.role,
+                    actor: session.username || session.userId || "",
+                  });
+                  await loadClientCommunications(selectedClientForDetail.id);
+                  setShowCommunicationForm(false);
+                  setCommunicationForm({
+                    communication_type: "phone",
+                    direction: "outbound",
+                    subject: "",
+                    message: "",
+                    notes: "",
+                  });
+                } catch (err) {
+                  console.error("Error creating communication:", err);
+                  alert(typeof err === "string" ? err : "Failed to record communication.");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <label>
+                Communication Type
+                <select
+                  value={communicationForm.communication_type}
+                  onChange={(e) =>
+                    setCommunicationForm({ ...communicationForm, communication_type: e.target.value })
+                  }
+                >
+                  <option value="email">Email</option>
+                  <option value="phone">Phone</option>
+                  <option value="mail">Mail</option>
+                  <option value="in_person">In Person</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label>
+                Direction
+                <select
+                  value={communicationForm.direction}
+                  onChange={(e) =>
+                    setCommunicationForm({ ...communicationForm, direction: e.target.value })
+                  }
+                >
+                  <option value="inbound">Inbound</option>
+                  <option value="outbound">Outbound</option>
+                </select>
+              </label>
+              <label>
+                Subject
+                <input
+                  value={communicationForm.subject}
+                  onChange={(e) =>
+                    setCommunicationForm({ ...communicationForm, subject: e.target.value })
+                  }
+                  placeholder="Brief subject or topic"
+                />
+              </label>
+              <label>
+                Message/Summary
+                <textarea
+                  value={communicationForm.message}
+                  onChange={(e) =>
+                    setCommunicationForm({ ...communicationForm, message: e.target.value })
+                  }
+                  rows={4}
+                  placeholder="Summary of the communication"
+                />
+              </label>
+              <label>
+                Notes
+                <textarea
+                  value={communicationForm.notes}
+                  onChange={(e) =>
+                    setCommunicationForm({ ...communicationForm, notes: e.target.value })
+                  }
+                  rows={2}
+                  placeholder="Additional notes"
+                />
+              </label>
+              <div className="actions">
+                <button className="ping" type="submit" disabled={busy}>
+                  {busy ? "Saving..." : "Record Communication"}
+                </button>
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={() => {
+                    setShowCommunicationForm(false);
+                    setCommunicationForm({
+                      communication_type: "phone",
+                      direction: "outbound",
+                      subject: "",
+                      message: "",
+                      notes: "",
+                    });
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {session && showFeedbackForm && selectedClientForDetail && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h3>Record Feedback - {selectedClientForDetail.name}</h3>
+            <form
+              className="stack"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setBusy(true);
+                try {
+                  await invokeTauri("create_client_feedback", {
+                    input: {
+                      client_id: selectedClientForDetail.id,
+                      work_order_id: feedbackForm.work_order_id.trim() || null,
+                      feedback_type: feedbackForm.feedback_type,
+                      rating: feedbackForm.rating || null,
+                      comments: feedbackForm.comments.trim() || null,
+                    },
+                  });
+                  await loadClientFeedback(selectedClientForDetail.id);
+                  setShowFeedbackForm(false);
+                  setFeedbackForm({
+                    feedback_type: "satisfaction",
+                    rating: 5,
+                    comments: "",
+                    work_order_id: "",
+                  });
+                } catch (err) {
+                  console.error("Error creating feedback:", err);
+                  alert(typeof err === "string" ? err : "Failed to record feedback.");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <label>
+                Feedback Type
+                <select
+                  value={feedbackForm.feedback_type}
+                  onChange={(e) =>
+                    setFeedbackForm({ ...feedbackForm, feedback_type: e.target.value })
+                  }
+                >
+                  <option value="satisfaction">Satisfaction</option>
+                  <option value="complaint">Complaint</option>
+                  <option value="suggestion">Suggestion</option>
+                  <option value="compliment">Compliment</option>
+                </select>
+              </label>
+              {feedbackForm.feedback_type === "satisfaction" && (
+                <label>
+                  Rating (1-5)
+                  <input
+                    type="number"
+                    min="1"
+                    max="5"
+                    value={feedbackForm.rating}
+                    onChange={(e) =>
+                      setFeedbackForm({ ...feedbackForm, rating: parseInt(e.target.value) || 5 })
+                    }
+                  />
+                </label>
+              )}
+              <label>
+                Work Order ID (Optional)
+                <input
+                  value={feedbackForm.work_order_id}
+                  onChange={(e) =>
+                    setFeedbackForm({ ...feedbackForm, work_order_id: e.target.value })
+                  }
+                  placeholder="If related to specific delivery"
+                />
+              </label>
+              <label>
+                Comments
+                <textarea
+                  value={feedbackForm.comments}
+                  onChange={(e) =>
+                    setFeedbackForm({ ...feedbackForm, comments: e.target.value })
+                  }
+                  rows={4}
+                  placeholder="Client feedback details"
+                  required
+                />
+              </label>
+              <div className="actions">
+                <button className="ping" type="submit" disabled={busy}>
+                  {busy ? "Saving..." : "Record Feedback"}
+                </button>
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={() => {
+                    setShowFeedbackForm(false);
+                    setFeedbackForm({
+                      feedback_type: "satisfaction",
+                      rating: 5,
+                      comments: "",
+                      work_order_id: "",
+                    });
                   }}
                 >
                   Cancel

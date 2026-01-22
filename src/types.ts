@@ -16,6 +16,7 @@ export type ClientRow = {
   name: string;
   email?: string | null;
   telephone?: string | null;
+  opt_out_email?: number | null;
   approval_status: string;
   physical_address_line1: string;
   physical_address_line2?: string | null;
@@ -38,6 +39,86 @@ export type ClientRow = {
   directions?: string | null;
   created_at?: string | null;
   default_mileage?: number | null;
+  // Emergency contact
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
+  emergency_contact_relationship?: string | null;
+  // Household information
+  household_size?: number | null;
+  household_income_range?: string | null;
+  household_composition?: string | null;
+  // Delivery preferences
+  preferred_delivery_times?: string | null;
+  delivery_restrictions?: string | null;
+  preferred_driver_id?: string | null;
+  seasonal_delivery_pattern?: string | null;
+  // Approval workflow
+  approval_date?: string | null;
+  approved_by_user_id?: string | null;
+  approval_expires_on?: string | null;
+  last_reapproval_date?: string | null;
+  requires_reapproval?: number | null;
+};
+
+export type ClientApprovalHistoryRow = {
+  id: string;
+  client_id: string;
+  old_status?: string | null;
+  new_status: string;
+  changed_by_user_id?: string | null;
+  reason?: string | null;
+  notes?: string | null;
+  created_at: string;
+};
+
+export type ClientCommunicationRow = {
+  id: string;
+  client_id: string;
+  communication_type: string;
+  direction: string;
+  subject?: string | null;
+  message?: string | null;
+  contacted_by_user_id?: string | null;
+  created_at: string;
+  notes?: string | null;
+};
+
+export type ClientFeedbackRow = {
+  id: string;
+  client_id: string;
+  work_order_id?: string | null;
+  feedback_type: string;
+  rating?: number | null;
+  comments?: string | null;
+  responded_to: number;
+  responded_by_user_id?: string | null;
+  response_notes?: string | null;
+  created_at: string;
+};
+
+// Client API Input Types
+export type CreateClientCommunicationInput = {
+  client_id: string;
+  communication_type: string;
+  direction: string;
+  subject?: string | null;
+  message?: string | null;
+  contacted_by_user_id?: string | null;
+  notes?: string | null;
+};
+
+export type CreateClientFeedbackInput = {
+  client_id: string;
+  work_order_id?: string | null;
+  feedback_type: string;
+  rating?: number | null;
+  comments?: string | null;
+};
+
+export type RespondToFeedbackInput = {
+  id: string;
+  response_notes: string;
+  responded_by_user_id: string;
 };
 
 export type ClientConflictRow = {
