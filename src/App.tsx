@@ -3454,7 +3454,7 @@ function App() {
                                     <select
                                       value={clientForm.preferred_driver_id ?? ""}
                                       onChange={(e) =>
-                                        setClientForm({ ...clientForm, preferred_driver_id: e.target.value === "" ? null : e.target.value })
+                                        setClientForm({ ...clientForm, preferred_driver_id: e.target.value })
                                       }
                                     >
                                       <option value="">No preference</option>
@@ -3472,7 +3472,7 @@ function App() {
                                     <select
                                       value={clientForm.seasonal_delivery_pattern ?? ""}
                                       onChange={(e) =>
-                                        setClientForm({ ...clientForm, seasonal_delivery_pattern: e.target.value === "" ? null : e.target.value })
+                                        setClientForm({ ...clientForm, seasonal_delivery_pattern: e.target.value })
                                       }
                                     >
                                       <option value="">Select pattern</option>
