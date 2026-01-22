@@ -85,6 +85,7 @@ async fn is_login_locked_out(pool: &SqlitePool, username: &str) -> Result<bool, 
     Ok(count >= LOGIN_MAX_FAILED_ATTEMPTS)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn audit_change(
     pool: &SqlitePool,
     event: &str,
@@ -923,11 +924,11 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
         .bind(&input.mailing_address_postal_code)
         .bind(&input.telephone)
         .bind(&input.email)
-        .bind(&opt_out_email_val)
+        .bind(opt_out_email_val)
         .bind(&input.emergency_contact_name)
         .bind(&input.emergency_contact_phone)
         .bind(&input.emergency_contact_relationship)
-        .bind(&input.household_size)
+        .bind(input.household_size)
         .bind(&input.household_income_range)
         .bind(&input.household_composition)
         .bind(&input.preferred_delivery_times)
@@ -940,7 +941,7 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
         .bind(&approval_status)
         .bind(&input.approval_expires_on)
         .bind(&input.last_reapproval_date)
-        .bind(&requires_reapproval_val)
+        .bind(requires_reapproval_val)
         .bind(&input.denial_reason)
         .bind(&input.gate_combo)
         .bind(&input.notes)
@@ -1137,6 +1138,7 @@ async fn update_client(
     .map_err(|e| e.to_string())?;
 
     let opt_out_email_val = input.opt_out_email.unwrap_or(false) as i32;
+    let requires_reapproval_val = input.requires_reapproval.unwrap_or(false) as i32;
     
     // Track approval status change for history
     let old_status = existing.as_ref().map(|e| e.approval_status.clone());
@@ -1220,11 +1222,11 @@ async fn update_client(
         .bind(&input.mailing_address_postal_code)
         .bind(&input.telephone)
         .bind(&input.email)
-        .bind(&opt_out_email_val)
+        .bind(opt_out_email_val)
         .bind(&input.emergency_contact_name)
         .bind(&input.emergency_contact_phone)
         .bind(&input.emergency_contact_relationship)
-        .bind(&input.household_size)
+        .bind(input.household_size)
         .bind(&input.household_income_range)
         .bind(&input.household_composition)
         .bind(&input.preferred_delivery_times)
@@ -1239,7 +1241,7 @@ async fn update_client(
         .bind(&approved_by_user_id)
         .bind(&input.approval_expires_on)
         .bind(&input.last_reapproval_date)
-        .bind(&requires_reapproval_val)
+        .bind(requires_reapproval_val)
         .bind(&input.denial_reason)
         .bind(&input.gate_combo)
         .bind(&input.notes)
@@ -1512,7 +1514,7 @@ async fn create_client_feedback(
     .bind(&input.client_id)
     .bind(&input.work_order_id)
     .bind(&input.feedback_type)
-    .bind(&input.rating)
+    .bind(input.rating)
     .bind(&input.comments)
     .execute(&state.pool)
     .await
@@ -2213,8 +2215,8 @@ async fn create_work_order(
         .bind(&input.email)
         .bind(&input.directions)
         .bind(&input.gate_combo)
-        .bind(&input.mileage)
-        .bind(&input.work_hours)
+        .bind(input.mileage)
+        .bind(input.work_hours)
         .bind(input.other_heat_source_gas)
         .bind(input.other_heat_source_electric)
         .bind(&input.other_heat_source_other)
@@ -2224,12 +2226,12 @@ async fn create_work_order(
         .bind(&input.wood_size_label)
         .bind(&input.wood_size_other)
         .bind(&input.delivery_size_label)
-        .bind(&input.delivery_size_cords)
+        .bind(input.delivery_size_cords)
         .bind(&input.pickup_delivery_type)
-        .bind(&input.pickup_quantity_cords)
-        .bind(&input.pickup_length)
-        .bind(&input.pickup_width)
-        .bind(&input.pickup_height)
+        .bind(input.pickup_quantity_cords)
+        .bind(input.pickup_length)
+        .bind(input.pickup_width)
+        .bind(input.pickup_height)
         .bind(&input.pickup_units)
         .bind(&assignees_store)
         .bind(&input.created_by_user_id)
@@ -4092,8 +4094,8 @@ async fn update_work_order_status(
         "#,
     )
     .bind(&next_status)
-    .bind(&input.mileage)
-    .bind(&input.work_hours)
+    .bind(input.mileage)
+    .bind(input.work_hours)
     .bind(&input.work_order_id)
     .execute(&mut *tx)
     .await
@@ -4122,8 +4124,8 @@ async fn update_work_order_status(
         .bind(&current_status)
         .bind(&next_status)
         .bind(&actor_val)
-        .bind(&input.mileage)
-        .bind(&input.work_hours)
+        .bind(input.mileage)
+        .bind(input.work_hours)
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
@@ -4646,18 +4648,15 @@ async fn list_delivery_events(
 
     if driver_capable || role_val == "volunteer" {
         let uname = username_val.to_lowercase();
-        rows = rows
-            .into_iter()
-            .filter(|ev| {
-                let assignees: Vec<String> =
-                    serde_json::from_str(ev.assigned_user_ids_json.as_deref().unwrap_or("[]"))
-                        .unwrap_or_default();
-                assignees
-                    .iter()
-                    .map(|a| a.to_lowercase())
-                    .any(|a| a == uname)
-            })
-            .collect();
+        rows.retain(|ev| {
+            let assignees: Vec<String> =
+                serde_json::from_str(ev.assigned_user_ids_json.as_deref().unwrap_or("[]"))
+                    .unwrap_or_default();
+            assignees
+                .iter()
+                .map(|a| a.to_lowercase())
+                .any(|a| a == uname)
+        });
     } else if !(role_val == "admin" || (role_val == "lead" && is_hipaa)) {
         rows.iter_mut().for_each(|ev| {
             if ev.work_order_id.is_some() {
@@ -5035,7 +5034,7 @@ mod tests {
 }
 
 fn main() -> Result<()> {
-    let app = tauri::Builder::default()
+    tauri::Builder::default()
         .setup(|app| {
             let database_url = resolve_database_url(app.handle());
             tauri::async_runtime::block_on(async {
@@ -5106,5 +5105,5 @@ fn main() -> Result<()> {
         ])
         .run(tauri::generate_context!())?;
 
-    Ok(app)
+    Ok(())
 }
