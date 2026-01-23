@@ -19,12 +19,14 @@ interface EventCreationModalProps {
     end_date?: string | null;
     color_code?: string | null;
   }) => Promise<void>;
+  slideInMode?: boolean;
 }
 
 export default function EventCreationModal({
   isOpen,
   onClose,
   onCreateEvent,
+  slideInMode = false,
 }: EventCreationModalProps) {
   const [eventForm, setEventForm] = useState({
     title: "",
@@ -38,6 +40,88 @@ export default function EventCreationModal({
   const [busy, setBusy] = useState(false);
 
   if (!isOpen) return null;
+
+  // If slide-in mode, render as inline form instead of modal
+  if (slideInMode) {
+    return (
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+          <h3 style={{ margin: 0 }}>Create Schedule Event</h3>
+          <button
+            className="ghost"
+            onClick={handleClose}
+            style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem" }}
+            type="button"
+          >
+            ✕
+          </button>
+        </div>
+        {error && (
+          <div className="pill" style={{ background: "#fbe2e2", color: "#b3261e", marginBottom: "1rem" }}>
+            {error}
+          </div>
+        )}
+        <form onSubmit={handleSubmit} className="stack">
+          <label>
+            Event Type
+            <select
+              value={eventForm.event_type}
+              onChange={(e) => handleEventTypeChange(e.target.value)}
+            >
+              <option value="delivery">Delivery</option>
+              <option value="cutting">Cutting</option>
+              <option value="splitting">Splitting</option>
+              <option value="hauling">Hauling</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label>
+            Title
+            <input
+              type="text"
+              value={eventForm.title}
+              onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
+              placeholder="Leave blank to use default"
+            />
+          </label>
+          <label>
+            Start Date & Time
+            <input
+              type="datetime-local"
+              required
+              value={eventForm.start_date}
+              onChange={(e) => setEventForm({ ...eventForm, start_date: e.target.value })}
+            />
+          </label>
+          <label>
+            End Date & Time (Optional)
+            <input
+              type="datetime-local"
+              value={eventForm.end_date}
+              onChange={(e) => setEventForm({ ...eventForm, end_date: e.target.value })}
+            />
+          </label>
+          <label>
+            Description (Optional)
+            <textarea
+              value={eventForm.description}
+              onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })}
+              rows={3}
+              placeholder="Add any notes about this event..."
+            />
+          </label>
+          <div className="actions">
+            <button className="ping" type="submit" disabled={busy}>
+              {busy ? "Creating..." : "Create Event"}
+            </button>
+            <button className="ghost" type="button" onClick={handleClose} disabled={busy}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
 
   const handleEventTypeChange = (value: string) => {
     const color = DEFAULT_EVENT_COLORS[value] ?? DEFAULT_EVENT_COLORS.other;

@@ -666,6 +666,27 @@ export default function Dashboard({
                 );
               })}
             </div>
+
+            {/* Event Creation Slide-in Panel */}
+            {showEventModal && canCreateEvents && onCreateScheduleEvent && (
+              <div
+                style={{
+                  marginTop: "1rem",
+                  padding: "1rem",
+                  background: "#f9f9f9",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px",
+                  animation: "slideDown 0.3s ease-out",
+                }}
+              >
+                <EventCreationModal
+                  isOpen={showEventModal}
+                  onClose={() => setShowEventModal(false)}
+                  onCreateEvent={onCreateScheduleEvent}
+                  slideInMode={true}
+                />
+              </div>
+            )}
           </div>
 
           {/* Open Work Orders - Single line list, color coded */}
@@ -783,7 +804,7 @@ export default function Dashboard({
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
           {/* MOTD Panel */}
           <div className="card">
-            <h3>Notes form the Team</h3>
+            <h3>Updates</h3>
             <div
               className="stack"
               style={{ maxHeight: "250px", overflowY: "auto", gap: "0.75rem", marginTop: "0.5rem" }}
@@ -897,14 +918,6 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* Event Creation Modal */}
-      {canCreateEvents && onCreateScheduleEvent && (
-        <EventCreationModal
-          isOpen={showEventModal}
-          onClose={() => setShowEventModal(false)}
-          onCreateEvent={onCreateScheduleEvent}
-        />
-      )}
     </div>
   );
 }

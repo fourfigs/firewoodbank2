@@ -70,3 +70,70 @@ Output initial Rust/SQL schema and TypeScript DTOs for these entities.
 
 Keep names and types consistent so we can map to a future Postgres backend.
 
+NEW NOTES 1/22
+DASHBOARD- when clicking the plus to add an event, have the scheduling slide in under the calendar
+    should say Notes From the Team (this is the MOTD)
+PROFILE- make the information display in a more friendly layout. have the new friendly layout with the current info on the left and work history/upcoming deliveries and user stats above that
+Clients Tab-
+    if profile details are open and you do anything else (change tabs, open another client, create a new client, etc) close the details pane. this should apply any time you open a details pane so include workorders and workers and any other details.
+
+    put the view details button on the right side of of the client , inline. put a small + button on the left side. this plus is to create a workorder.
+
+    pressing esc while any detail panes are open, will close it
+
+    pressing esc while newsletter sidebar is open 
+
+    fix the tab order to tab in a sensible order of fields
+
+    this is saved for something completely unrtelated. remind me to give this address to jessica when I have you process this file: waltonfamilyfoundation.org
+
+INVENTORY
+    needs a details pane when item is double clicked. staff/admin can edit quantity.
+
+    add up and down arrows by item quantity to add or remove stock
+
+    the tools do not have a threshold
+
+    add tabs to sort according to item type.
+
+    if a new item is type other, add a new category for the type entered (if other is selected, and I add something with type clown supplies, it would create a new tab and add clown supplies to the drop down. this is just an example. clown supplies is not a real category for this app)
+
+    any items that need restocked should appear on both the dashboard as well as the inventory page
+
+    any items with type Tool will be listed in a collapsable left sidebar like the newsletter
+
+WORKORDERS
+    schedule date should be blank until scheduled with a driver assigned
+
+    workorder details should open as a sidebar like other detail panes
+
+    if staff/admin the status should be a dropdown
+
+    the driver list should populate with all available drivers with DL and driver flags
+
+    if the client is also a worker, and they were assigned to the delivery, add those hours to the workers profile.
+
+    if a worker is created with the same details as a client, ask if they are the same and link them for tracking purposes
+
+    when a workorder is made for a client who is also a worker, track the amount of wood tracked in the worker and client profile.
+
+METRICS
+    estimated value should be calculated differently, each cord of split wood is worth $450, unsplit is ??$250?? (see if you can locate info for this number)
+
+    in the future, there will be receipts for items entered, these will be added to costs
+
+FINANCES
+    When hours are added for admin/staff/employees, ask if these are billed hours or in-kind donation hours
+
+    an volunteer hour is valued at $31, this can be its own column next to donations, with a totals column after that
+
+WORKER DIRECTORY
+    if a worker is a client or vice versa, put an icon on that worker and client account to show this
+
+    if a worker suggests a change, it should show on the dashboard of staff and admins. when the staff/admin opens it to view, it should show the old profile on left and new on right with any changes highlighted
+
+    in worker details, place the worker metrics under their name
+
+    worker onboardiung should have first, last, DOB, physical address, mailing address same checkbox (mailing address fields showing only if unchecked), DOB, and the driver/hippa information.
+
+    anyone who is a driver should have a special color, same with hipaa certified. if both, top half one and bottom the other color to show they have both
