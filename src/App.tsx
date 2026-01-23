@@ -30,7 +30,6 @@ import Nav from "./components/Nav";
 import Dashboard from "./components/Dashboard";
 import AdminPanel from "./components/AdminPanel";
 import ReportsTab from "./components/ReportsTab";
-import ProfileSummary from "./components/ProfileSummary.tsx";
 import WorkOrdersTable from "./components/WorkOrdersTable.tsx";
 import ComprehensiveMetrics from "./components/ComprehensiveMetrics.tsx";
 import FinancialDashboard from "./components/FinancialDashboard.tsx";
@@ -1105,6 +1104,69 @@ function App() {
 
     return { weekly, monthly, total };
   }, [session, workOrders]);
+
+  // Work history: Completed work orders assigned to user
+  const profileWorkHistory = useMemo(() => {
+    if (!session) return [];
+    const uname = (session.username ?? "").toLowerCase();
+    const displayName = (session.name ?? "").toLowerCase();
+    return workOrders
+      .filter((wo) => {
+        if ((wo.status ?? "").toLowerCase() !== "completed") return false;
+        let assignees: string[] = [];
+        try {
+          const parsed = JSON.parse(wo.assignees_json ?? "[]");
+          if (Array.isArray(parsed)) {
+            assignees = parsed
+              .map((x) => (typeof x === "string" ? x.toLowerCase() : ""))
+              .filter(Boolean);
+          }
+        } catch {
+          assignees = [];
+        }
+        return assignees.includes(uname) || (displayName && assignees.includes(displayName));
+      })
+      .sort((a, b) => {
+        const dateA = new Date(a.scheduled_date ?? a.created_at ?? "").getTime();
+        const dateB = new Date(b.scheduled_date ?? b.created_at ?? "").getTime();
+        return dateB - dateA; // Most recent first
+      })
+      .slice(0, 10); // Limit to 10 most recent
+  }, [session, workOrders]);
+
+  // Upcoming deliveries: Scheduled deliveries assigned to user
+  const profileUpcomingDeliveries = useMemo(() => {
+    if (!session) return [];
+    const uname = (session.username ?? "").toLowerCase();
+    const displayName = (session.name ?? "").toLowerCase();
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return deliveries
+      .filter((d) => {
+        const deliveryDate = new Date(d.start_date);
+        deliveryDate.setHours(0, 0, 0, 0);
+        if (deliveryDate < now) return false; // Only future deliveries
+        let assigned: string[] = [];
+        try {
+          const parsed = JSON.parse(d.assigned_user_ids_json ?? "[]");
+          if (Array.isArray(parsed)) {
+            assigned = parsed
+              .map((x) => (typeof x === "string" ? x.toLowerCase() : ""))
+              .filter(Boolean);
+          }
+        } catch {
+          assigned = [];
+        }
+        return assigned.includes(uname) || (displayName && assigned.includes(displayName));
+      })
+      .sort((a, b) => {
+        const dateA = new Date(a.start_date).getTime();
+        const dateB = new Date(b.start_date).getTime();
+        return dateA - dateB; // Earliest first
+      })
+      .slice(0, 10); // Limit to 10 upcoming
+  }, [session, deliveries]);
+
   const profileCalendarDays = useMemo(() => {
     const base = new Date();
     const year = base.getFullYear();
@@ -1478,6 +1540,56 @@ function App() {
     }
   }, [activeTab, session]);
 
+  // Close details panes on tab change
+  useEffect(() => {
+    setClientDetailSidebarOpen(false);
+    setSelectedClientForDetail(null);
+    setMailingListSidebarOpen(false);
+    // Also close work order and worker details if they exist
+    setSelectedWorkOrder(null);
+    setSelectedWorkOrderId(null);
+    setSelectedWorker(null);
+    setSelectedWorkerId(null);
+  }, [activeTab]);
+
+  // Close client details pane when another client is selected
+  useEffect(() => {
+    // This will trigger when selectedClientForDetail changes
+    // We only want to close if it's being set to a different client
+    // The actual opening logic handles setting it, so we don't need to close here
+  }, [selectedClientForDetail]);
+
+  // Close client details pane when creating new client
+  useEffect(() => {
+    if (showClientForm) {
+      setClientDetailSidebarOpen(false);
+      setSelectedClientForDetail(null);
+    }
+  }, [showClientForm]);
+
+  // ESC key handler to close all open panes/sidebars
+  useEffect(() => {
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setClientDetailSidebarOpen(false);
+        setSelectedClientForDetail(null);
+        setMailingListSidebarOpen(false);
+        setSelectedWorkOrder(null);
+        setSelectedWorkOrderId(null);
+        setSelectedWorker(null);
+        setSelectedWorkerId(null);
+        // Close any other open modals/forms if needed
+        setShowClientForm(false);
+        setShowInventoryForm(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleEscKey);
+    return () => {
+      window.removeEventListener("keydown", handleEscKey);
+    };
+  }, []);
+
   const _initials = useMemo(() => {
     if (!session?.name) return "FB";
     const parts = session.name.split(" ").filter(Boolean);
@@ -1814,25 +1926,75 @@ function App() {
 
                 {activeTab === "Profile" && session && (
                   <div className="stack">
+                    {/* Top Stats Row - Across Entire Width */}
                     <div className="card">
                       <div className="list-head">
                         <h3>Your Profile</h3>
                       </div>
-                      <ProfileSummary
-                        weekly={profileHourTotals.weekly}
-                        monthly={profileHourTotals.monthly}
-                        total={profileHourTotals.total}
-                      />
-                      {/* DL Expiration Warning for Profile */}
-                      {(() => {
-                        const dlExpiresOn = profileUser?.driver_license_expires_on ? new Date(profileUser.driver_license_expires_on) : null;
-                        if (!dlExpiresOn) return null;
-                        const daysUntilExpiry = Math.ceil((dlExpiresOn.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                        const isExpiringSoon = daysUntilExpiry <= 15 && daysUntilExpiry >= 0;
-                        const isExpired = daysUntilExpiry < 0;
-                        if (!isExpiringSoon && !isExpired) return null;
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                          gap: "1rem",
+                          marginBottom: "1rem",
+                        }}
+                      >
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#2d6b3d" }}>
+                            {profileHourTotals.weekly.toFixed(1)}
+                          </div>
+                          <div style={{ fontSize: "0.85rem", color: "#666" }}>Weekly Hours</div>
+                        </div>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#2d6b3d" }}>
+                            {profileHourTotals.monthly.toFixed(1)}
+                          </div>
+                          <div style={{ fontSize: "0.85rem", color: "#666" }}>Monthly Hours</div>
+                        </div>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#2d6b3d" }}>
+                            {profileHourTotals.total.toFixed(1)}
+                          </div>
+                          <div style={{ fontSize: "0.85rem", color: "#666" }}>Total Hours</div>
+                        </div>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#e67f1e" }}>
+                            {userDeliveryHours.deliveries}
+                          </div>
+                          <div style={{ fontSize: "0.85rem", color: "#666" }}>Deliveries</div>
+                        </div>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#1565c0" }}>
+                            {userDeliveryHours.woodCreditCords.toFixed(2)}
+                          </div>
+                          <div style={{ fontSize: "0.85rem", color: "#666" }}>Wood Credit (cords)</div>
+                        </div>
+                      </div>
+                    </div>
 
-                        return (
+                    {/* Two-Column Layout: Left (Profile Info), Right (Work History/Upcoming) */}
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: "1rem",
+                      }}
+                    >
+                      {/* Left Column: Profile Information */}
+                      <div className="card">
+                        <div className="list-head">
+                          <h3>Profile Information</h3>
+                        </div>
+                        {/* DL Expiration Warning for Profile */}
+                        {(() => {
+                          const dlExpiresOn = profileUser?.driver_license_expires_on ? new Date(profileUser.driver_license_expires_on) : null;
+                          if (!dlExpiresOn) return null;
+                          const daysUntilExpiry = Math.ceil((dlExpiresOn.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                          const isExpiringSoon = daysUntilExpiry <= 15 && daysUntilExpiry >= 0;
+                          const isExpired = daysUntilExpiry < 0;
+                          if (!isExpiringSoon && !isExpired) return null;
+
+                          return (
                           <div
                             className="card"
                             style={{
@@ -1856,10 +2018,10 @@ function App() {
                               </div>
                             </div>
                           </div>
-                        );
-                      })()}
-                      {profileEditMode ? (
-                        <div className="stack">
+                          );
+                        })()}
+                        {profileEditMode ? (
+                          <div className="stack">
                           <div>
                             <strong>Name:</strong> {profileUser?.name ?? session.name}
                           </div>
@@ -2292,6 +2454,77 @@ function App() {
                         )}
                       </div>
                     </div>
+
+                    {/* Right Column: Work History and Upcoming Deliveries */}
+                    <div className="stack" style={{ gap: "1rem" }}>
+                        {/* Work History */}
+                        <div className="card">
+                          <div className="list-head">
+                            <h3>Work History</h3>
+                          </div>
+                          {profileWorkHistory.length === 0 ? (
+                            <div className="muted" style={{ padding: "1rem", textAlign: "center" }}>
+                              No completed work orders yet
+                            </div>
+                          ) : (
+                            <ul className="list" style={{ maxHeight: "300px", overflowY: "auto" }}>
+                              {profileWorkHistory.map((wo) => (
+                                <li key={wo.id}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+                                    <div>
+                                      <strong>{wo.client_name}</strong>
+                                      <div style={{ fontSize: "0.85rem", color: "#666", marginTop: "0.25rem" }}>
+                                        {wo.scheduled_date
+                                          ? new Date(wo.scheduled_date).toLocaleDateString()
+                                          : new Date(wo.created_at ?? "").toLocaleDateString()}
+                                        {wo.work_hours && ` • ${wo.work_hours.toFixed(1)} hours`}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+
+                        {/* Upcoming Deliveries */}
+                        <div className="card">
+                          <div className="list-head">
+                            <h3>Upcoming Deliveries</h3>
+                          </div>
+                          {profileUpcomingDeliveries.length === 0 ? (
+                            <div className="muted" style={{ padding: "1rem", textAlign: "center" }}>
+                              No upcoming deliveries scheduled
+                            </div>
+                          ) : (
+                            <ul className="list" style={{ maxHeight: "300px", overflowY: "auto" }}>
+                              {profileUpcomingDeliveries.map((d) => {
+                                const wo = d.work_order_id ? workOrdersById.get(d.work_order_id) : undefined;
+                                return (
+                                  <li key={d.id}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+                                      <div>
+                                        <strong>{wo?.client_name ?? d.title}</strong>
+                                        <div style={{ fontSize: "0.85rem", color: "#666", marginTop: "0.25rem" }}>
+                                          {new Date(d.start_date).toLocaleDateString()}
+                                          {new Date(d.start_date).toLocaleTimeString([], {
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                          })}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {/* End of Two-Column Grid */}
+
+                    {/* Work Calendar - Full Width Below */}
                     <div className="card">
                       <div className="list-head">
                         <h3>Work Calendar</h3>
@@ -2937,7 +3170,7 @@ function App() {
                                   <label>
                                     Telephone
                                     <input
-                                      tabIndex={11}
+                                      tabIndex={8}
                                       value={clientForm.telephone}
                                       onChange={(e) =>
                                         setClientForm({ ...clientForm, telephone: e.target.value })
@@ -2967,7 +3200,7 @@ function App() {
                                     </HelpTooltip>
                                     <input
                                       required
-                                      tabIndex={9}
+                                      tabIndex={10}
                                       value={clientForm.how_did_they_hear_about_us}
                                       onChange={(e) =>
                                         setClientForm({
@@ -2980,7 +3213,7 @@ function App() {
                                   <label className="span-2">
                                     Notes
                                     <textarea
-                                      tabIndex={11}
+                                      tabIndex={12}
                                       value={clientForm.notes}
                                       onChange={(e) =>
                                         setClientForm({ ...clientForm, notes: e.target.value })
@@ -3078,7 +3311,7 @@ function App() {
                                   <label>
                                     Gate Combo
                                     <input
-                                      tabIndex={10}
+                                      tabIndex={11}
                                       value={clientForm.gate_combo}
                                       onChange={(e) =>
                                         setClientForm({ ...clientForm, gate_combo: e.target.value })
@@ -3088,7 +3321,7 @@ function App() {
                                   <label className="span-2">
                                     Directions
                                     <textarea
-                                      tabIndex={21}
+                                      tabIndex={13}
                                       value={clientForm.directions}
                                       onChange={(e) =>
                                         setClientForm({ ...clientForm, directions: e.target.value })
@@ -3101,7 +3334,7 @@ function App() {
                                     Wood Size *
                                     <select
                                       required
-                                      tabIndex={18}
+                                      tabIndex={14}
                                       value={clientForm.wood_size_label}
                                       onChange={(e) =>
                                         setClientForm({
@@ -3123,7 +3356,7 @@ function App() {
                                       <input
                                         type="number"
                                         min="1"
-                                        tabIndex={19}
+                                        tabIndex={15}
                                         value={clientForm.wood_size_other}
                                         onChange={(e) =>
                                           setClientForm({
@@ -3143,7 +3376,7 @@ function App() {
                                   <label className="checkbox span-2">
                                     <input
                                       type="checkbox"
-                                      tabIndex={8}
+                                      tabIndex={16}
                                       checked={clientForm.mailing_same_as_physical}
                                       onChange={(e) =>
                                         setClientForm({
@@ -3160,7 +3393,7 @@ function App() {
                                         Mailing Line 1 *
                                         <input
                                           required
-                                          tabIndex={12}
+                                          tabIndex={17}
                                           value={clientForm.mailing_address_line1}
                                           onChange={(e) =>
                                             setClientForm({
@@ -3173,7 +3406,7 @@ function App() {
                                       <label className="span-2">
                                         Mailing Line 2
                                         <input
-                                          tabIndex={13}
+                                          tabIndex={18}
                                           value={clientForm.mailing_address_line2}
                                           onChange={(e) =>
                                             setClientForm({
@@ -3187,7 +3420,7 @@ function App() {
                                         Mailing City *
                                         <input
                                           required
-                                          tabIndex={14}
+                                          tabIndex={19}
                                           value={clientForm.mailing_address_city}
                                           onChange={(e) =>
                                             setClientForm({
@@ -3207,7 +3440,7 @@ function App() {
                                         Mailing State *
                                         <input
                                           required
-                                          tabIndex={15}
+                                          tabIndex={20}
                                           value={clientForm.mailing_address_state}
                                           onChange={(e) =>
                                             setClientForm({
@@ -3227,7 +3460,7 @@ function App() {
                                         Mailing ZIP *
                                         <input
                                           required
-                                          tabIndex={16}
+                                          tabIndex={21}
                                           value={clientForm.mailing_address_postal_code}
                                           onChange={(e) =>
                                             setClientForm({
@@ -3925,7 +4158,59 @@ function App() {
                                       : "4px solid transparent",
                                 }}
                               >
-                                <div className="client-cell">
+                                <div className="client-cell" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                  <button
+                                    className="icon-button"
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // Create work order from this client
+                                      setEditingWorkOrderId(null);
+                                      setWorkOrderForm({
+                                        client_id: c.id,
+                                        client_name: c.name,
+                                        physical_address_line1: c.physical_address_line1 ?? "",
+                                        physical_address_line2: c.physical_address_line2 ?? "",
+                                        physical_address_city: c.physical_address_city ?? "",
+                                        physical_address_state: c.physical_address_state ?? "",
+                                        physical_address_postal_code: c.physical_address_postal_code ?? "",
+                                        mailing_address_line1: c.mailing_address_line1 ?? "",
+                                        mailing_address_line2: c.mailing_address_line2 ?? "",
+                                        mailing_address_city: c.mailing_address_city ?? "",
+                                        mailing_address_state: c.mailing_address_state ?? "",
+                                        mailing_address_postal_code: c.mailing_address_postal_code ?? "",
+                                        telephone: c.telephone ?? "",
+                                        email: c.email ?? "",
+                                        directions: c.directions ?? "",
+                                        gate_combo: c.gate_combo ?? "",
+                                        other_heat_source_gas: false,
+                                        other_heat_source_electric: false,
+                                        other_heat_source_other: "",
+                                        notes: "",
+                                        scheduled_date: "",
+                                        status: "draft",
+                                        wood_size_label: c.wood_size_label ?? "",
+                                        wood_size_other: c.wood_size_other ?? "",
+                                        delivery_size_choice: "f250",
+                                        delivery_size_other: "",
+                                        delivery_size_other_cords: "",
+                                        pickup_delivery_type: "delivery",
+                                        pickup_quantity_cords: "",
+                                        pickup_length: "",
+                                        pickup_width: "",
+                                        pickup_height: "",
+                                        pickup_units: "feet",
+                                      });
+                                      setShowWorkOrderForm(true);
+                                      setActiveTab("Work Orders");
+                                      setClientDetailSidebarOpen(false);
+                                      setSelectedClientForDetail(null);
+                                    }}
+                                    title="Create Work Order"
+                                    style={{ padding: "0.25rem", fontSize: "1rem", minWidth: "24px", height: "24px" }}
+                                  >
+                                    +
+                                  </button>
                                   <strong>{firstName}</strong>
                                 </div>
                                 <div className="client-cell">
@@ -3940,7 +4225,7 @@ function App() {
                                 <div className="client-cell hide-on-mobile">
                                   {canViewClientPII ? c.physical_address_state : "Hidden"}
                                 </div>
-                                <div className="client-cell">
+                                <div className="client-cell" style={{ display: "flex", justifyContent: "flex-end" }}>
                                   <button
                                     className="ghost"
                                     type="button"
