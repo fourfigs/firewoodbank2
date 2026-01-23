@@ -377,6 +377,10 @@ function App() {
   const [showClientForm, setShowClientForm] = useState(false);
   const [showInventoryForm, setShowInventoryForm] = useState(false);
   const [showWorkOrderForm, setShowWorkOrderForm] = useState(false);
+  const [selectedInventoryItem, setSelectedInventoryItem] = useState<InventoryRow | null>(null);
+  const [inventoryDetailPaneOpen, setInventoryDetailPaneOpen] = useState(false);
+  const [inventoryToolsSidebarOpen, setInventoryToolsSidebarOpen] = useState(false);
+  const [inventorySelectedCategory, setInventorySelectedCategory] = useState<string>("all");
   const [newWorkOrderId, setNewWorkOrderId] = useState<string>("");
   const [newWorkOrderEntryDate, setNewWorkOrderEntryDate] = useState<string>("");
   const [clientError, setClientError] = useState<string | null>(null);
@@ -1545,6 +1549,9 @@ function App() {
     setClientDetailSidebarOpen(false);
     setSelectedClientForDetail(null);
     setMailingListSidebarOpen(false);
+    setInventoryDetailPaneOpen(false);
+    setSelectedInventoryItem(null);
+    setInventoryToolsSidebarOpen(false);
     // Also close work order and worker details if they exist
     setSelectedWorkOrder(null);
     setSelectedWorkOrderId(null);
@@ -1578,6 +1585,9 @@ function App() {
         setSelectedWorkOrderId(null);
         setSelectedWorker(null);
         setSelectedWorkerId(null);
+        setInventoryDetailPaneOpen(false);
+        setSelectedInventoryItem(null);
+        setInventoryToolsSidebarOpen(false);
         // Close any other open modals/forms if needed
         setShowClientForm(false);
         setShowInventoryForm(false);
@@ -4165,41 +4175,32 @@ function App() {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       // Create work order from this client
-                                      setEditingWorkOrderId(null);
+                                      setSelectedWorkOrderId(null);
                                       setWorkOrderForm({
                                         client_id: c.id,
-                                        client_name: c.name,
-                                        physical_address_line1: c.physical_address_line1 ?? "",
-                                        physical_address_line2: c.physical_address_line2 ?? "",
-                                        physical_address_city: c.physical_address_city ?? "",
-                                        physical_address_state: c.physical_address_state ?? "",
-                                        physical_address_postal_code: c.physical_address_postal_code ?? "",
-                                        mailing_address_line1: c.mailing_address_line1 ?? "",
-                                        mailing_address_line2: c.mailing_address_line2 ?? "",
-                                        mailing_address_city: c.mailing_address_city ?? "",
-                                        mailing_address_state: c.mailing_address_state ?? "",
-                                        mailing_address_postal_code: c.mailing_address_postal_code ?? "",
-                                        telephone: c.telephone ?? "",
-                                        email: c.email ?? "",
-                                        directions: c.directions ?? "",
+                                        scheduled_date: "",
+                                        status: "draft",
                                         gate_combo: c.gate_combo ?? "",
+                                        notes: "",
                                         other_heat_source_gas: false,
                                         other_heat_source_electric: false,
                                         other_heat_source_other: "",
-                                        notes: "",
-                                        scheduled_date: "",
-                                        status: "draft",
-                                        wood_size_label: c.wood_size_label ?? "",
-                                        wood_size_other: c.wood_size_other ?? "",
+                                        mileage: "",
+                                        work_hours: "",
+                                        mailingSameAsPhysical: true,
+                                        assignees: [],
+                                        helpers: [],
                                         delivery_size_choice: "f250",
                                         delivery_size_other: "",
                                         delivery_size_other_cords: "",
                                         pickup_delivery_type: "delivery",
+                                        pickup_quantity_mode: "cords",
                                         pickup_quantity_cords: "",
                                         pickup_length: "",
                                         pickup_width: "",
                                         pickup_height: "",
-                                        pickup_units: "feet",
+                                        pickup_units: "ft",
+                                        paired_order_id: "",
                                       });
                                       setShowWorkOrderForm(true);
                                       setActiveTab("Work Orders");
@@ -4876,8 +4877,104 @@ function App() {
                 )}
 
                 {activeTab === "Inventory" && (
-                  <div className="stack">
-                    <div className="card muted">
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "1rem",
+                      position: "relative",
+                      minHeight: "400px",
+                    }}
+                  >
+                    {/* Left Sidebar - Tools */}
+                    <div
+                      style={{
+                        width: inventoryToolsSidebarOpen ? "250px" : "0",
+                        overflow: "hidden",
+                        transition: "width 0.3s ease",
+                        borderRight: inventoryToolsSidebarOpen ? "1px solid #ddd" : "none",
+                        paddingRight: inventoryToolsSidebarOpen ? "1rem" : "0",
+                      }}
+                    >
+                      {inventoryToolsSidebarOpen && (
+                        <div className="list-card">
+                          <div className="list-head">
+                            <h3>Tools</h3>
+                            <button
+                              className="ghost"
+                              type="button"
+                              onClick={() => setInventoryToolsSidebarOpen(false)}
+                              style={{ padding: "0.25rem 0.5rem" }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                          <div className="table">
+                            {inventory
+                              .filter(
+                                (item) =>
+                                  (item.category?.toLowerCase() === "tool" ||
+                                    item.category?.toLowerCase() === "tools" ||
+                                    item.name.toLowerCase().includes("tool"))
+                              )
+                              .map((item) => (
+                                <div
+                                  key={item.id}
+                                  className="table-row"
+                                  style={{ cursor: "pointer" }}
+                                  onDoubleClick={() => {
+                                    setSelectedInventoryItem(item);
+                                    setInventoryDetailPaneOpen(true);
+                                  }}
+                                >
+                                  <div>
+                                    <strong>{item.name}</strong>
+                                    <div className="muted">
+                                      {item.quantity_on_hand} {item.unit}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            {inventory.filter(
+                              (item) =>
+                                item.category?.toLowerCase() === "tool" ||
+                                item.category?.toLowerCase() === "tools" ||
+                                item.name.toLowerCase().includes("tool")
+                            ).length === 0 && (
+                              <div className="table-row muted">No tools found</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Main Content */}
+                    <div className="stack" style={{ flex: 1 }}>
+                      {/* Toggle button for tools sidebar */}
+                      {!inventoryToolsSidebarOpen && (
+                        <button
+                          type="button"
+                          onClick={() => setInventoryToolsSidebarOpen(true)}
+                          style={{
+                            position: "absolute",
+                            left: 0,
+                            top: "50%",
+                            transform: "translateY(-50%) rotate(-90deg)",
+                            transformOrigin: "left center",
+                            padding: "0.5rem 1rem",
+                            background: "#2d6b3d",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "4px 4px 0 0",
+                            cursor: "pointer",
+                            fontSize: "0.85rem",
+                            zIndex: 10,
+                          }}
+                        >
+                          Tools
+                        </button>
+                      )}
+
+                      <div className="card muted">
                       <div className="add-header">
                         <button
                           type="button"
@@ -4919,8 +5016,12 @@ function App() {
                               setInventoryError("Quantity must be a valid positive number.");
                               return;
                             }
+                            const isTool = inventoryForm.category?.toLowerCase() === "tool" || 
+                                          inventoryForm.category?.toLowerCase() === "tools" ||
+                                          inventoryForm.name.toLowerCase().includes("tool");
                             const threshold = Number(inventoryForm.reorder_threshold);
-                            if (!Number.isFinite(threshold) || threshold < 0) {
+                            // Tools don't require threshold
+                            if (!isTool && (!Number.isFinite(threshold) || threshold < 0)) {
                               setInventoryError("Threshold must be a valid positive number.");
                               return;
                             }
@@ -4938,7 +5039,7 @@ function App() {
                                 category: resolvedCategory,
                                 quantity_on_hand: qty,
                                 unit: inventoryForm.unit,
-                                reorder_threshold: threshold,
+                                reorder_threshold: isTool ? null : threshold, // Tools don't have threshold
                                 reorder_amount:
                                   inventoryForm.reorder_amount === null ||
                                   inventoryForm.reorder_amount === undefined
@@ -4947,6 +5048,12 @@ function App() {
                                 notes: inventoryForm.notes,
                                 created_by_user_id: null,
                               };
+                              
+                              // Auto-create category if "Other" was used with custom category
+                              if (inventoryForm.category === "Other" && inventoryForm.customCategory) {
+                                // Category will be saved as the custom category name
+                                // The category tabs will automatically pick it up on next render
+                              }
                               if (editingInventoryId) {
                                 await invokeTauri("update_inventory_item", {
                                   input: {
@@ -5074,16 +5181,30 @@ function App() {
                           </label>
                           <label>
                             Reorder threshold
-                            <input
-                              type="number"
-                              value={inventoryForm.reorder_threshold}
-                              onChange={(e) =>
-                                setInventoryForm({
-                                  ...inventoryForm,
-                                  reorder_threshold: Number(e.target.value),
-                                })
-                              }
-                            />
+                            {(() => {
+                              const isTool = inventoryForm.category?.toLowerCase() === "tool" || 
+                                            inventoryForm.category?.toLowerCase() === "tools" ||
+                                            inventoryForm.name.toLowerCase().includes("tool");
+                              return (
+                                <>
+                                  {isTool && (
+                                    <div className="muted" style={{ fontSize: "0.8rem", marginBottom: "0.25rem" }}>
+                                      (Optional for tools)
+                                    </div>
+                                  )}
+                                  <input
+                                    type="number"
+                                    value={inventoryForm.reorder_threshold}
+                                    onChange={(e) =>
+                                      setInventoryForm({
+                                        ...inventoryForm,
+                                        reorder_threshold: Number(e.target.value) || 0,
+                                      })
+                                    }
+                                  />
+                                </>
+                              );
+                            })()}
                           </label>
                           <label>
                             Reorder amount
@@ -5127,7 +5248,7 @@ function App() {
                     </div>
                     <div className="list-card">
                       <div className="list-head">
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                           <h3>Inventory ({inventory.length})</h3>
                           <div
                             className="pill"
@@ -5148,6 +5269,38 @@ function App() {
                           Refresh
                         </button>
                       </div>
+                      {/* Category Tabs */}
+                      {(() => {
+                        const allCategories = Array.from(
+                          new Set(inventory.map((item) => item.category || "Uncategorized").filter(Boolean))
+                        ).sort();
+                        return (
+                          <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+                            <button
+                              className={inventorySelectedCategory === "all" ? "ping" : "ghost"}
+                              type="button"
+                              onClick={() => setInventorySelectedCategory("all")}
+                              style={{ padding: "0.4rem 0.75rem", fontSize: "0.85rem" }}
+                            >
+                              All ({inventory.length})
+                            </button>
+                            {allCategories.map((cat) => {
+                              const count = inventory.filter((item) => (item.category || "Uncategorized") === cat).length;
+                              return (
+                                <button
+                                  key={cat}
+                                  className={inventorySelectedCategory === cat ? "ping" : "ghost"}
+                                  type="button"
+                                  onClick={() => setInventorySelectedCategory(cat)}
+                                  style={{ padding: "0.4rem 0.75rem", fontSize: "0.85rem" }}
+                                >
+                                  {cat} ({count})
+                                </button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                       <div className="table">
                         <div className="table-head">
                           <span>Item</span>
@@ -5157,11 +5310,26 @@ function App() {
                           {canManage && <span>Actions</span>}
                         </div>
                         {(() => {
-                          const items = showNeedsRestock
-                            ? inventory.filter(
-                                (item) => item.quantity_on_hand <= item.reorder_threshold,
+                          let items = inventory;
+                          // Filter by category
+                          if (inventorySelectedCategory !== "all") {
+                            items = items.filter(
+                              (item) => (item.category || "Uncategorized") === inventorySelectedCategory
+                            );
+                          }
+                          // Filter tools out (they're in sidebar)
+                          items = items.filter(
+                            (item) =>
+                              !(
+                                item.category?.toLowerCase() === "tool" ||
+                                item.category?.toLowerCase() === "tools" ||
+                                item.name.toLowerCase().includes("tool")
                               )
-                            : inventory;
+                          );
+                          // Filter by needs restock if selected
+                          if (showNeedsRestock) {
+                            items = items.filter((item) => item.quantity_on_hand <= item.reorder_threshold);
+                          }
                           if (!items.length) {
                             return (
                               <div className="table-row">
@@ -5170,7 +5338,8 @@ function App() {
                             );
                           }
                           return items.map((item) => {
-                            const low = item.quantity_on_hand <= item.reorder_threshold;
+                            const isTool = item.category?.toLowerCase() === "tool" || item.category?.toLowerCase() === "tools" || item.name.toLowerCase().includes("tool");
+                            const low = !isTool && item.quantity_on_hand <= item.reorder_threshold;
                             const orderAmount =
                               item.reorder_amount != null && item.reorder_amount > 0
                                 ? item.reorder_amount
@@ -5179,20 +5348,104 @@ function App() {
                                     item.reorder_threshold,
                                   );
                             return (
-                              <div className={`table-row ${low ? "warn" : ""}`} key={item.id}>
+                              <div
+                                className={`table-row ${low ? "warn" : ""}`}
+                                key={item.id}
+                                onDoubleClick={() => {
+                                  setSelectedInventoryItem(item);
+                                  setInventoryDetailPaneOpen(true);
+                                }}
+                                style={{ cursor: "pointer" }}
+                              >
                                 <div>
                                   <strong>{item.name}</strong>
                                   <div className="muted">{item.category ?? "—"}</div>
                                 </div>
-                                <div>
-                                  {item.quantity_on_hand} {item.unit}
+                                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                  <span>
+                                    {item.quantity_on_hand} {item.unit}
+                                  </span>
+                                  {canManage && (
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                                      <button
+                                        className="icon-button"
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setBusy(true);
+                                          invokeTauri("update_inventory_item", {
+                                            input: {
+                                              id: item.id,
+                                              name: item.name,
+                                              category: item.category,
+                                              quantity_on_hand: item.quantity_on_hand + 1,
+                                              unit: item.unit,
+                                              reorder_threshold: item.reorder_threshold,
+                                              reorder_amount: item.reorder_amount,
+                                              notes: item.notes,
+                                            },
+                                            role: session?.role ?? null,
+                                            actor: session?.username ?? null,
+                                          })
+                                            .then(() => {
+                                              loadInventory();
+                                              showToast("Quantity updated");
+                                            })
+                                            .catch((err) => {
+                                              showToast(err instanceof Error ? err.message : "Failed to update", "error");
+                                            })
+                                            .finally(() => setBusy(false));
+                                        }}
+                                        style={{ padding: "0.1rem 0.3rem", fontSize: "0.75rem", minWidth: "20px", height: "20px" }}
+                                        title="Increase quantity"
+                                      >
+                                        ↑
+                                      </button>
+                                      <button
+                                        className="icon-button"
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (item.quantity_on_hand > 0) {
+                                            setBusy(true);
+                                            invokeTauri("update_inventory_item", {
+                                              input: {
+                                                id: item.id,
+                                                name: item.name,
+                                                category: item.category,
+                                                quantity_on_hand: Math.max(0, item.quantity_on_hand - 1),
+                                                unit: item.unit,
+                                                reorder_threshold: item.reorder_threshold,
+                                                reorder_amount: item.reorder_amount,
+                                                notes: item.notes,
+                                              },
+                                              role: session?.role ?? null,
+                                              actor: session?.username ?? null,
+                                            })
+                                              .then(() => {
+                                                loadInventory();
+                                                showToast("Quantity updated");
+                                              })
+                                              .catch((err) => {
+                                                showToast(err instanceof Error ? err.message : "Failed to update", "error");
+                                              })
+                                              .finally(() => setBusy(false));
+                                          }
+                                        }}
+                                        style={{ padding: "0.1rem 0.3rem", fontSize: "0.75rem", minWidth: "20px", height: "20px" }}
+                                        title="Decrease quantity"
+                                      >
+                                        ↓
+                                      </button>
+                                    </div>
+                                  )}
                                   {item.reserved_quantity > 0 && (
-                                    <div className="muted">
+                                    <div className="muted" style={{ fontSize: "0.8rem" }}>
                                       Reserved: {item.reserved_quantity} {item.unit}
                                     </div>
                                   )}
                                 </div>
-                                <div>{item.reorder_threshold}</div>
+                                <div>{isTool ? "—" : item.reorder_threshold}</div>
                                 <div className="muted">
                                   {item.notes ?? "—"}
                                   {low && (
@@ -5267,6 +5520,123 @@ function App() {
                           });
                         })()}
                       </div>
+                    </div>
+
+                    {/* Right Sidebar - Inventory Detail */}
+                    <div
+                      style={{
+                        width: inventoryDetailPaneOpen ? "400px" : "0",
+                        overflow: "hidden",
+                        transition: "width 0.3s ease",
+                        borderLeft: inventoryDetailPaneOpen ? "1px solid #ddd" : "none",
+                        paddingLeft: inventoryDetailPaneOpen ? "1rem" : "0",
+                      }}
+                    >
+                      {inventoryDetailPaneOpen && selectedInventoryItem && (
+                        <div className="list-card">
+                          <div className="list-head">
+                            <h3>{selectedInventoryItem.name}</h3>
+                            <button
+                              className="ghost"
+                              type="button"
+                              onClick={() => {
+                                setInventoryDetailPaneOpen(false);
+                                setSelectedInventoryItem(null);
+                              }}
+                              style={{ padding: "0.25rem 0.5rem" }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                          <div className="stack" style={{ marginTop: "1rem" }}>
+                            <div>
+                              <strong>Category:</strong> {selectedInventoryItem.category ?? "—"}
+                            </div>
+                            <div>
+                              <strong>Quantity on Hand:</strong> {selectedInventoryItem.quantity_on_hand} {selectedInventoryItem.unit}
+                            </div>
+                            {selectedInventoryItem.reserved_quantity > 0 && (
+                              <div>
+                                <strong>Reserved:</strong> {selectedInventoryItem.reserved_quantity} {selectedInventoryItem.unit}
+                              </div>
+                            )}
+                            {selectedInventoryItem.reorder_threshold != null && (
+                              <div>
+                                <strong>Reorder Threshold:</strong> {selectedInventoryItem.reorder_threshold} {selectedInventoryItem.unit}
+                              </div>
+                            )}
+                            {selectedInventoryItem.reorder_amount != null && (
+                              <div>
+                                <strong>Reorder Amount:</strong> {selectedInventoryItem.reorder_amount} {selectedInventoryItem.unit}
+                              </div>
+                            )}
+                            <div>
+                              <strong>Notes:</strong> {selectedInventoryItem.notes ?? "—"}
+                            </div>
+                            {canManage && (
+                              <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem" }}>
+                                <label>
+                                  Edit Quantity
+                                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.25rem" }}>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={selectedInventoryItem.quantity_on_hand}
+                                      onChange={(e) => {
+                                        const newQty = Number(e.target.value);
+                                        if (!isNaN(newQty) && newQty >= 0) {
+                                          setSelectedInventoryItem({
+                                            ...selectedInventoryItem,
+                                            quantity_on_hand: newQty,
+                                          });
+                                        }
+                                      }}
+                                      style={{ width: "100px" }}
+                                    />
+                                    <button
+                                      className="ping"
+                                      type="button"
+                                      onClick={async () => {
+                                        setBusy(true);
+                                        try {
+                                          await invokeTauri("update_inventory_item", {
+                                            input: {
+                                              id: selectedInventoryItem.id,
+                                              name: selectedInventoryItem.name,
+                                              category: selectedInventoryItem.category,
+                                              quantity_on_hand: selectedInventoryItem.quantity_on_hand,
+                                              unit: selectedInventoryItem.unit,
+                                              reorder_threshold: selectedInventoryItem.reorder_threshold,
+                                              reorder_amount: selectedInventoryItem.reorder_amount,
+                                              notes: selectedInventoryItem.notes,
+                                            },
+                                            role: session?.role ?? null,
+                                            actor: session?.username ?? null,
+                                          });
+                                          await loadInventory();
+                                          showToast("Quantity updated successfully");
+                                          setInventoryDetailPaneOpen(false);
+                                          setSelectedInventoryItem(null);
+                                        } catch (error) {
+                                          showToast(
+                                            error instanceof Error ? error.message : "Failed to update quantity",
+                                            "error"
+                                          );
+                                        } finally {
+                                          setBusy(false);
+                                        }
+                                      }}
+                                      disabled={busy}
+                                    >
+                                      Save
+                                    </button>
+                                  </div>
+                                </label>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
