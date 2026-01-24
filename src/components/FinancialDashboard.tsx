@@ -18,6 +18,7 @@ interface FinancialDashboardProps {
   onRefreshExpenses: () => Promise<void>;
   onRefreshDonations: () => Promise<void>;
   onRefreshTimeEntries: () => Promise<void>;
+  onRefreshBudgetCategories: () => Promise<void>;
   busy: boolean;
   setBusy: (busy: boolean) => void;
 }
@@ -33,12 +34,18 @@ export default function FinancialDashboard({
   onRefreshExpenses,
   onRefreshDonations,
   onRefreshTimeEntries,
+  onRefreshBudgetCategories,
   busy,
   setBusy,
 }: FinancialDashboardProps) {
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [showDonationForm, setShowDonationForm] = useState(false);
   const [showTimeEntryForm, setShowTimeEntryForm] = useState(false);
+  const [editingBudgets, setEditingBudgets] = useState<Record<string, string>>({});
+  const [budgetError, setBudgetError] = useState<string | null>(null);
+
+  const canEditBudgets =
+    session.role === "admin" || session.role === "lead" || session.role === "staff";
   const financialMetrics = useMemo(() => {
     // Expense metrics
     const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
@@ -113,7 +120,7 @@ export default function FinancialDashboard({
         paidHours: totalPaidHours,
         totalHours: totalVolunteerHours + totalPaidHours,
         laborCost: totalLaborCost,
-        volunteerValue: totalVolunteerHours * 25, // Estimated $25/hour value
+        volunteerValue: totalVolunteerHours * 31, // Volunteer hours valued at $31/hour
       },
       budget: {
         categories: expenseBudgets,
@@ -126,6 +133,40 @@ export default function FinancialDashboard({
   const formatCurrency = (amount: number) => `$${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const formatNumber = (num: number, decimals = 1) =>
     num.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+
+  const handleBudgetChange = (id: string, value: string) => {
+    setEditingBudgets((prev) => ({ ...prev, [id]: value }));
+  };
+
+  const handleSaveBudget = async (id: string) => {
+    if (!canEditBudgets) return;
+    const raw = editingBudgets[id] ?? "";
+    const trimmed = raw.trim();
+    const parsed = trimmed === "" ? null : Number(trimmed);
+    if (trimmed !== "" && (Number.isNaN(parsed) || parsed < 0)) {
+      setBudgetError("Budget must be a non-negative number or blank.");
+      return;
+    }
+    setBudgetError(null);
+    setBusy(true);
+    try {
+      await invokeTauri("update_budget_category", {
+        input: {
+          id,
+          annual_budget: parsed,
+        },
+        role: session.role,
+        actor: session.username,
+      });
+      await onRefreshBudgetCategories();
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to update budget category.";
+      setBudgetError(msg);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="stack">
@@ -313,30 +354,110 @@ export default function FinancialDashboard({
               <h4>Budget Categories</h4>
             </div>
             <div className="stack" style={{ gap: "0.5rem" }}>
-              {financialMetrics.budget.categories.map((cat) => (
-                <div key={cat.category} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ flex: 1 }}>{cat.name}</span>
-                  <span style={{ width: 80, textAlign: "right" }}>
-                    {formatNumber(cat.percentUsed)}%
-                  </span>
-                  <div style={{
-                    width: 60,
-                    height: 6,
-                    background: "#f1e6d7",
-                    borderRadius: 3,
-                    marginLeft: 8,
-                    position: "relative"
-                  }}>
-                    <div style={{
-                      position: "absolute",
-                      inset: 0,
-                      width: `${Math.min(cat.percentUsed, 100)}%`,
-                      background: cat.percentUsed > 90 ? "#b3261e" : cat.percentUsed > 75 ? "#e67f1e" : "#2d6b3d",
-                      borderRadius: 3,
-                    }} />
-                  </div>
+              {budgetError && (
+                <div
+                  className="pill"
+                  style={{ background: "#fbe2e2", color: "#b3261e" }}
+                >
+                  {budgetError}
                 </div>
-              ))}
+              )}
+              {budgetCategories
+                .filter((cat) => cat.category_type === "expense")
+                .map((cat) => {
+                  const metrics = financialMetrics.budget.categories.find(
+                    (m) => m.category === cat.id,
+                  );
+                  const displayBudget =
+                    editingBudgets[cat.id] ??
+                    (cat.annual_budget != null ? String(cat.annual_budget) : "");
+                  const percentUsed = metrics?.percentUsed ?? 0;
+                  return (
+                    <div
+                      key={cat.id}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: canEditBudgets
+                          ? "2fr 1.2fr 1fr auto"
+                          : "2fr 1.2fr 1fr",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                      }}
+                    >
+                      <span>{cat.name}</span>
+                      <div>
+                        <span className="muted">Budget: </span>
+                        {canEditBudgets ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={displayBudget}
+                            onChange={(e) =>
+                              handleBudgetChange(cat.id, e.target.value)
+                            }
+                            style={{
+                              width: "110px",
+                              padding: "4px 6px",
+                              borderRadius: 6,
+                              border: "1px solid #d7c6b6",
+                              fontSize: "0.85rem",
+                            }}
+                            disabled={busy}
+                          />
+                        ) : (
+                          <strong>
+                            {cat.annual_budget != null
+                              ? formatCurrency(cat.annual_budget)
+                              : "—"}
+                          </strong>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ width: 60, textAlign: "right" }}>
+                          {formatNumber(percentUsed)}%
+                        </span>
+                        <div
+                          style={{
+                            width: 60,
+                            height: 6,
+                            background: "#f1e6d7",
+                            borderRadius: 3,
+                            position: "relative",
+                          }}
+                        >
+                          <div
+                            style={{
+                              position: "absolute",
+                              inset: 0,
+                              width: `${Math.min(percentUsed, 100)}%`,
+                              background:
+                                percentUsed > 90
+                                  ? "#b3261e"
+                                  : percentUsed > 75
+                                  ? "#e67f1e"
+                                  : "#2d6b3d",
+                              borderRadius: 3,
+                            }}
+                          />
+                        </div>
+                      </div>
+                      {canEditBudgets && (
+                        <button
+                          type="button"
+                          className="ghost"
+                          onClick={() => handleSaveBudget(cat.id)}
+                          disabled={busy}
+                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem" }}
+                        >
+                          Save
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              {budgetCategories.filter((c) => c.category_type === "expense").length ===
+                0 && <p className="muted">No expense budget categories configured.</p>}
             </div>
           </div>
         </div>

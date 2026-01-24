@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import EventCreationModal from "./EventCreationModal";
+import UpdateCreationModal from "./UpdateCreationModal";
 
 // Types mirrored from App.tsx (ideally these should be in a shared types file)
 type InventoryRow = {
@@ -78,6 +79,9 @@ interface DashboardProps {
     end_date?: string | null;
     color_code?: string | null;
   }) => Promise<void>;
+  onRefreshMotd?: () => Promise<void>;
+  busy?: boolean;
+  setBusy?: (busy: boolean) => void;
 }
 
 // Helper to check if a date is today
@@ -142,10 +146,14 @@ export default function Dashboard({
   onWorkerSelect,
   onOpenOrderSelect,
   onCreateScheduleEvent,
+  onRefreshMotd,
+  busy = false,
+  setBusy,
 }: DashboardProps) {
   const [calendarView, setCalendarView] = useState<"2weeks" | "month">("2weeks");
   const [currentDate] = useState(new Date());
   const [showEventModal, setShowEventModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
 
   // --- Wood Summary Logic ---
   const woodSummary = useMemo(() => {
@@ -804,7 +812,20 @@ export default function Dashboard({
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
           {/* MOTD Panel */}
           <div className="card">
-            <h3>Updates</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ margin: 0 }}>Updates</h3>
+              {(session.role === "admin" || session.role === "staff" || session.role === "lead") && (
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={() => setShowUpdateModal(true)}
+                  style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem" }}
+                  title="Create Update"
+                >
+                  +
+                </button>
+              )}
+            </div>
             <div
               className="stack"
               style={{ maxHeight: "250px", overflowY: "auto", gap: "0.75rem", marginTop: "0.5rem" }}
@@ -918,6 +939,17 @@ export default function Dashboard({
         </div>
       </div>
 
+      {/* Update Creation Modal */}
+      {showUpdateModal && onRefreshMotd && setBusy && (
+        <UpdateCreationModal
+          isOpen={showUpdateModal}
+          onClose={() => setShowUpdateModal(false)}
+          onUpdateCreated={onRefreshMotd}
+          session={session}
+          busy={busy}
+          setBusy={setBusy}
+        />
+      )}
     </div>
   );
 }

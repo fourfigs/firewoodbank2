@@ -16,6 +16,45 @@ type ReportsTabProps = {
   setBusy: (value: boolean) => void;
 };
 
+// Map technical event names to user-friendly names
+const getEventDisplayName = (event: string): string => {
+  const eventMap: Record<string, string> = {
+    "create_client": "Client Created",
+    "update_client": "Client Updated",
+    "delete_client": "Client Deleted",
+    "create_work_order": "Work Order Created",
+    "update_work_order": "Work Order Updated",
+    "update_work_order_status": "Work Order Status Updated",
+    "delete_work_order": "Work Order Deleted",
+    "create_inventory_item": "Inventory Item Created",
+    "update_inventory_item": "Inventory Item Updated",
+    "delete_inventory_item": "Inventory Item Deleted",
+    "create_user": "User Created",
+    "update_user": "User Updated",
+    "delete_user": "User Deleted",
+    "create_delivery_event": "Delivery Event Created",
+    "update_delivery_event": "Delivery Event Updated",
+    "delete_delivery_event": "Delivery Event Deleted",
+    "create_expense": "Expense Recorded",
+    "update_expense": "Expense Updated",
+    "delete_expense": "Expense Deleted",
+    "create_donation": "Donation Recorded",
+    "update_donation": "Donation Updated",
+    "delete_donation": "Donation Deleted",
+    "create_time_entry": "Time Entry Recorded",
+    "update_time_entry": "Time Entry Updated",
+    "delete_time_entry": "Time Entry Deleted",
+    "create_motd": "Message of the Day Created",
+    "update_motd": "Message of the Day Updated",
+    "delete_motd": "Message of the Day Deleted",
+    "create_change_request": "Change Request Created",
+    "update_change_request": "Change Request Updated",
+    "approve_change_request": "Change Request Approved",
+    "reject_change_request": "Change Request Rejected",
+  };
+  return eventMap[event] || event.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+};
+
 export default function ReportsTab({
   activeTab,
   session,
@@ -166,7 +205,7 @@ export default function ReportsTab({
                 {safeDate(log.created_at) + " " + new Date(log.created_at).toLocaleTimeString()}
               </div>
               <div>
-                <strong>{log.event}</strong>
+                <strong>{getEventDisplayName(log.event)}</strong>
                 {log.entity && log.field && (
                   <div className="muted">
                     {log.entity} · {log.field}: {log.old_value ?? "—"} →{" "}

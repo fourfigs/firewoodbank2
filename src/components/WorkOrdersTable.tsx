@@ -86,7 +86,26 @@ function WorkOrdersTable({
                 <strong>{wo.town ?? (wo as any)?.physical_address_city ?? "—"}</strong>
               </div>
               <div>
-                <span className="pill">{wo.status}</span>
+                <select
+                  className="pill"
+                  value={progressEdits[wo.id]?.status ?? wo.status}
+                  onChange={(e) =>
+                    setProgressEdits({
+                      ...progressEdits,
+                      [wo.id]: {
+                        status: e.target.value,
+                        mileage: progressEdits[wo.id]?.mileage ?? "",
+                        hours: progressEdits[wo.id]?.hours ?? "",
+                      },
+                    })
+                  }
+                >
+                  <option value="draft">draft</option>
+                  <option value="scheduled">scheduled</option>
+                  <option value="in_progress">in_progress</option>
+                  <option value="completed">completed</option>
+                  <option value="cancelled">cancelled</option>
+                </select>
               </div>
               <div>{wo.scheduled_date ?? "—"}</div>
               <div className="muted">{wo.mileage != null ? `${wo.mileage} mi` : "—"}</div>
@@ -131,7 +150,26 @@ function WorkOrdersTable({
                 )}
               </div>
               <div>
-                <span className="pill">{wo.status}</span>
+                <select
+                  className="pill"
+                  value={progressEdits[wo.id]?.status ?? wo.status}
+                  onChange={(e) =>
+                    setProgressEdits({
+                      ...progressEdits,
+                      [wo.id]: {
+                        status: e.target.value,
+                        mileage: progressEdits[wo.id]?.mileage ?? "",
+                        hours: progressEdits[wo.id]?.hours ?? "",
+                      },
+                    })
+                  }
+                >
+                  <option value="draft">draft</option>
+                  <option value="scheduled">scheduled</option>
+                  <option value="in_progress">in_progress</option>
+                  <option value="completed">completed</option>
+                  <option value="cancelled">cancelled</option>
+                </select>
               </div>
               <div>{wo.scheduled_date ?? "—"}</div>
               <div className="muted">{wo.telephone ?? "—"}</div>
@@ -174,7 +212,26 @@ function WorkOrdersTable({
                 )}
               </div>
               <div>
-                <span className="pill">{wo.status}</span>
+                <select
+                  className="pill"
+                  value={progressEdits[wo.id]?.status ?? wo.status}
+                  onChange={(e) =>
+                    setProgressEdits({
+                      ...progressEdits,
+                      [wo.id]: {
+                        status: e.target.value,
+                        mileage: progressEdits[wo.id]?.mileage ?? "",
+                        hours: progressEdits[wo.id]?.hours ?? "",
+                      },
+                    })
+                  }
+                >
+                  <option value="draft">draft</option>
+                  <option value="scheduled">scheduled</option>
+                  <option value="in_progress">in_progress</option>
+                  <option value="completed">completed</option>
+                  <option value="cancelled">cancelled</option>
+                </select>
               </div>
               <div>{wo.scheduled_date ?? "—"}</div>
               <div className="muted">{showPII ? (wo.notes ?? "—") : "PII hidden"}</div>
@@ -192,130 +249,6 @@ function WorkOrdersTable({
                 </button>
               </div>
             </>
-          )}
-          {(isDriver || session.role === "lead" || session.role === "admin") && (
-            <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                }}
-              >
-                <input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={progressEdits[wo.id]?.mileage ?? ""}
-                  onChange={(e) =>
-                    setProgressEdits({
-                      ...progressEdits,
-                      [wo.id]: {
-                        status: progressEdits[wo.id]?.status ?? wo.status,
-                        mileage: e.target.value,
-                        hours: progressEdits[wo.id]?.hours ?? "",
-                      },
-                    })
-                  }
-                  placeholder="Mileage"
-                  style={{ width: 100 }}
-                />
-                {(session.role === "lead" || session.role === "admin") &&
-                  (progressEdits[wo.id]?.status ?? wo.status) === "completed" && (
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.1"
-                      value={progressEdits[wo.id]?.hours ?? ""}
-                      onChange={(e) =>
-                        setProgressEdits({
-                          ...progressEdits,
-                          [wo.id]: {
-                            status: progressEdits[wo.id]?.status ?? wo.status,
-                            mileage: progressEdits[wo.id]?.mileage ?? "",
-                            hours: e.target.value,
-                          },
-                        })
-                      }
-                      placeholder="Hours"
-                      style={{ width: 90 }}
-                    />
-                  )}
-                {(session.role === "lead" || session.role === "admin") && (
-                  <select
-                    value={progressEdits[wo.id]?.status ?? wo.status}
-                    onChange={(e) =>
-                      setProgressEdits({
-                        ...progressEdits,
-                        [wo.id]: {
-                          status: e.target.value,
-                          mileage: progressEdits[wo.id]?.mileage ?? "",
-                          hours: progressEdits[wo.id]?.hours ?? "",
-                        },
-                      })
-                    }
-                  >
-                    <option value="draft">draft</option>
-                    <option value="scheduled">scheduled</option>
-                    <option value="in_progress">in_progress</option>
-                    <option value="completed">completed</option>
-                    <option value="cancelled">cancelled</option>
-                  </select>
-                )}
-                <button
-                  className="ghost"
-                  type="button"
-                  disabled={busy}
-                  onClick={async () => {
-                    const edit = progressEdits[wo.id] ?? {
-                      status: wo.status,
-                      mileage: "",
-                      hours: "",
-                    };
-                    if (
-                      (session.role === "lead" || session.role === "admin") &&
-                      edit.status === "completed" &&
-                      edit.mileage === ""
-                    ) {
-                      setWorkOrderError("Mileage is required to mark completed.");
-                      return;
-                    }
-                    if (
-                      (session.role === "lead" || session.role === "admin") &&
-                      edit.status === "completed" &&
-                      edit.hours === ""
-                    ) {
-                      setWorkOrderError("Work hours are required to mark completed.");
-                      return;
-                    }
-                    setBusy(true);
-                    try {
-                      await invokeTauri("update_work_order_status", {
-                        input: {
-                          work_order_id: wo.id,
-                          status:
-                            session.role === "lead" || session.role === "admin"
-                              ? edit.status
-                              : "in_progress",
-                          mileage: edit.mileage === "" ? null : Number(edit.mileage),
-                          work_hours: edit.hours === "" ? null : Number(edit.hours),
-                          is_driver: isDriver,
-                        },
-                        role: session.role ?? null,
-                        actor: session.username ?? null,
-                      });
-                      // Note: Success notification would need to be passed as prop or use context
-                      await loadWorkOrders();
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                >
-                  Save status/mileage
-                </button>
-              </div>
-            </div>
           )}
         </div>
       ))}

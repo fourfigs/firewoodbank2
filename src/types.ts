@@ -58,6 +58,13 @@ export type ClientRow = {
   approval_expires_on?: string | null;
   last_reapproval_date?: string | null;
   requires_reapproval?: number | null;
+  // Household and DOB fields
+  household_id?: string | null;
+  date_of_birth?: string | null;
+  is_minor?: number | null;
+  parent_name?: string | null;
+  parent_phone?: string | null;
+  parent_email?: string | null;
 };
 
 export type ClientApprovalHistoryRow = {
@@ -143,6 +150,7 @@ export type InventoryRow = {
 
 export type WorkOrderRow = {
   id: string;
+  work_order_number?: string | null;
   client_name: string;
   status: string;
   scheduled_date?: string | null;
@@ -197,6 +205,9 @@ export type UserRow = {
   vehicle?: string | null;
   is_driver?: boolean | null;
   hipaa_certified?: number;
+  dl_copy_on_file?: number;
+  notes?: string | null;
+  deleted_at?: string | null;
 };
 
 export type LoginResponse = {

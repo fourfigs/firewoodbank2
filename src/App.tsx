@@ -30,6 +30,7 @@ import Nav from "./components/Nav";
 import Dashboard from "./components/Dashboard";
 import AdminPanel from "./components/AdminPanel";
 import ReportsTab from "./components/ReportsTab";
+import StaffTab from "./components/StaffTab";
 import WorkOrdersTable from "./components/WorkOrdersTable.tsx";
 import ComprehensiveMetrics from "./components/ComprehensiveMetrics.tsx";
 import FinancialDashboard from "./components/FinancialDashboard.tsx";
@@ -37,6 +38,8 @@ import WorkOrderStatusDropdown from "./components/WorkOrderStatusDropdown.tsx";
 import ToastNotification, { Toast } from "./components/ToastNotification.tsx";
 import ConfirmationModal from "./components/ConfirmationModal.tsx";
 import LoadingSpinner from "./components/LoadingSpinner.tsx";
+import UpdateCreationModal from "./components/UpdateCreationModal.tsx";
+import HouseholdSelectionModal from "./components/HouseholdSelectionModal.tsx";
 import logo from "./assets/logo.png";
 import firewoodIcon from "./assets/logo.png";
 import "./index.css";
@@ -72,17 +75,18 @@ import FormSection from "./components/FormSection";
 import HelpTooltip from "./components/HelpTooltip";
 
 // Main navigation tabs - see APP_TSX_TOC.md for section line numbers
-const tabs = [
-  "Dashboard",        // Lines ~922-1050: Overview, metrics, deliveries
-  "Profile",          // Lines ~1051-1350: User profile, password, availability
-  "Clients",          // Lines ~1351-1850: Client management, onboarding, approvals
-  "Inventory",        // Lines ~1851-2150: Equipment tracking, reorder alerts
-  "Work Orders",      // Lines ~2151-3150: Scheduling, assignments, status updates
-  "Metrics",          // Lines ~3151-3250: Community impact, operational KPIs
-  "Finance",          // Lines ~3251-3350: Expenses, donations, budget analysis
+const tabs: TabId[] = [
+  "Dashboard", // Lines ~922-1050: Overview, metrics, deliveries
+  "Profile", // Lines ~1051-1350: User profile, availability
+  "Clients", // Lines ~1351-1850: Client management, onboarding, approvals
+  "Inventory", // Lines ~1851-2150: Equipment tracking, reorder alerts
+  "Work Orders", // Lines ~2151-3150: Scheduling, assignments, status updates
+  "Metrics", // Lines ~3151-3250: Community impact, operational KPIs
+  "Finance", // Lines ~3251-3350: Expenses, donations, budget analysis
   "Worker Directory", // Lines ~3351-3750: Staff management, role assignments
-  "Reports",          // Lines ~3751-3850: Audit logs, compliance checklists
-  "Admin",            // Lines ~3851-3950: System administration, change requests
+  "Reports", // Lines ~3751-3850: Audit logs, compliance checklists
+  "Staff", // Lines ~3851-3950: Staff tasks, change requests, approvals
+  "Admin", // Lines ~3951-4050: System administration
 ];
 
 // Client numbers removed — no generation function needed anymore.
@@ -335,11 +339,24 @@ function LoginCard({ onLogin }: { onLogin: (session: UserSession) => void }) {
   );
 }
 
+type TabId =
+  | "Dashboard"
+  | "Admin"
+  | "Staff"
+  | "Profile"
+  | "Clients"
+  | "Inventory"
+  | "Work Orders"
+  | "Metrics"
+  | "Finance"
+  | "Worker Directory"
+  | "Reports";
+
 function App() {
   // ===== STATE MANAGEMENT =====
   // See APP_TSX_TOC.md for detailed breakdown of state variables and their purposes
 
-  const [activeTab, setActiveTab] = useState<string>("Dashboard");
+  const [activeTab, setActiveTab] = useState<TabId>("Dashboard");
   const [session, setSession] = useState<UserSession | null>(null);
   const [now, setNow] = useState(() => new Date());
 
@@ -375,6 +392,7 @@ function App() {
     setToast({ id: Date.now().toString(), message, type });
   };
   const [showClientForm, setShowClientForm] = useState(false);
+  const [showHouseholdSelectionModal, setShowHouseholdSelectionModal] = useState(false);
   const [showInventoryForm, setShowInventoryForm] = useState(false);
   const [showWorkOrderForm, setShowWorkOrderForm] = useState(false);
   const [selectedInventoryItem, setSelectedInventoryItem] = useState<InventoryRow | null>(null);
@@ -455,6 +473,7 @@ function App() {
     work_order_id: "",
   });
   const [motdItems, setMotdItems] = useState<MotdRow[]>([]);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrderRow | null>(null);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
@@ -510,6 +529,13 @@ function App() {
   // Worker form state (for adding new workers in Worker Directory tab)
   const [showWorkerForm, setShowWorkerForm] = useState(false);
   const [workerPasswordReset, setWorkerPasswordReset] = useState("");
+  const [showDriverLicenseModal, setShowDriverLicenseModal] = useState(false);
+  const [driverLicenseForm, setDriverLicenseForm] = useState({
+    dlNumber: "",
+    expiresOn: "",
+    copyOnFile: false,
+  });
+  const [dlReminderDrivers, setDlReminderDrivers] = useState<{ id: string; name: string }[] | null>(null);
   const [workerForm, setWorkerForm] = useState<{
     name: string;
     email: string;
@@ -599,6 +625,14 @@ function App() {
     wood_size_label: "",
     wood_size_other: "",
     directions: "",
+    // Household and DOB fields
+    household_id: "",
+    date_of_birth: "",
+    is_minor: false,
+    parent_name: "",
+    parent_phone: "",
+    parent_email: "",
+    add_to_existing_household: false,
   });
 
   const INVENTORY_CATEGORIES = ["Wood", "Tools", "Gas", "Other"] as const;
@@ -869,12 +903,12 @@ function App() {
     await loadDeliveries();
   };
 
-  const loadUsers = async () => {
-    const data = await invokeTauri<UserRow[]>("list_users");
+  const loadUsers = async (includeDeleted?: boolean) => {
+    const inc = includeDeleted ?? showDeletedWorkers;
+    const data = await invokeTauri<UserRow[]>("list_users", { include_deleted: inc });
     const mapped = data.map((u) => ({
       ...u,
       is_driver: !!u.is_driver,
-      // hipaa_certified is already a number (0 or 1) from backend
     }));
     setUsers(mapped);
   };
@@ -907,6 +941,7 @@ function App() {
       driver_license_expires_on: u.driver_license_expires_on ?? "",
       is_driver: !!u.is_driver,
       hipaa_certified: u.hipaa_certified,
+      notes: u.notes ?? "",
     });
     if (u.availability_schedule) {
       try {
@@ -1502,11 +1537,14 @@ function App() {
       setWorkOrdersPage(workOrdersPageCount);
     }
   }, [workOrdersPage, workOrdersPageCount]);
-  const visibleTabs = useMemo(() => {
-    if (!session) return tabs.filter((t) => t !== "Worker Directory" && t !== "Reports" && t !== "Finance");
+  const visibleTabs = useMemo<TabId[]>(() => {
+    if (!session)
+      return tabs.filter(
+        (t) => t !== "Worker Directory" && t !== "Reports" && t !== "Finance"
+      );
     if (session.role === "volunteer") return ["Dashboard", "Profile", "Work Orders"];
     if (session.role === "staff" || session.role === "employee")
-      return ["Dashboard", "Profile", "Clients", "Inventory", "Work Orders", "Metrics"];
+      return ["Dashboard", "Profile", "Clients", "Inventory", "Work Orders", "Metrics", "Staff"];
     // admin / lead - include Finance tab
     if (session.role === "admin" || session.role === "lead") return tabs;
     return tabs.filter((t) => t !== "Admin");
@@ -1520,6 +1558,22 @@ function App() {
       loadMotd();
     }
   }, [session]);
+
+  useEffect(() => {
+    if (activeTab !== "Worker Directory" || !canManage) return;
+    let ok = true;
+    (async () => {
+      try {
+        const list = await invokeTauri<{ id: string; name: string }[]>("check_driver_dl_reminder");
+        if (ok && list.length > 0) setDlReminderDrivers(list);
+      } catch {
+        if (ok) setDlReminderDrivers(null);
+      }
+    })();
+    return () => {
+      ok = false;
+    };
+  }, [activeTab, canManage]);
 
   useEffect(() => {
     if (
@@ -1552,6 +1606,8 @@ function App() {
     setInventoryDetailPaneOpen(false);
     setSelectedInventoryItem(null);
     setInventoryToolsSidebarOpen(false);
+    setWorkOrderDetailOpen(false);
+    setSelectedWorkOrder(null);
     // Also close work order and worker details if they exist
     setSelectedWorkOrder(null);
     setSelectedWorkOrderId(null);
@@ -1581,6 +1637,7 @@ function App() {
         setClientDetailSidebarOpen(false);
         setSelectedClientForDetail(null);
         setMailingListSidebarOpen(false);
+        setWorkOrderDetailOpen(false);
         setSelectedWorkOrder(null);
         setSelectedWorkOrderId(null);
         setSelectedWorker(null);
@@ -1614,6 +1671,9 @@ function App() {
     hipaa: "all" | "certified" | "not_certified";
     dlStatus: "all" | "valid" | "expiring" | "expired";
   }>({ hipaa: "all", dlStatus: "all" });
+  const [showDeletedWorkers, setShowDeletedWorkers] = useState(false);
+  const [show7YearRetentionModal, setShow7YearRetentionModal] = useState(false);
+  const [dismissed7YearRetentionModal, setDismissed7YearRetentionModal] = useState(false);
 
   const workerDirectoryUsers = useMemo(() => {
     let base = [...users];
@@ -1652,6 +1712,9 @@ function App() {
           vehicle: null,
           is_driver: session.isDriver ?? false,
           hipaa_certified: session.hipaaCertified ? 1 : 0,
+          dl_copy_on_file: 0,
+          notes: null,
+          deleted_at: null,
         });
       }
     }
@@ -1679,6 +1742,28 @@ function App() {
 
     return base;
   }, [session, users, workerDirectoryFilter]);
+
+  const workersDeletedOver7Years = useMemo(() => {
+    if (!showDeletedWorkers) return [];
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - 7);
+    return users.filter((u) => {
+      const d = u.deleted_at;
+      if (!d) return false;
+      const deleted = new Date(d);
+      return deleted.getTime() <= cutoff.getTime();
+    });
+  }, [users, showDeletedWorkers]);
+
+  useEffect(() => {
+    if (!showDeletedWorkers) {
+      setDismissed7YearRetentionModal(false);
+      return;
+    }
+    if (workersDeletedOver7Years.length > 0 && !dismissed7YearRetentionModal) {
+      setShow7YearRetentionModal(true);
+    }
+  }, [showDeletedWorkers, workersDeletedOver7Years, dismissed7YearRetentionModal]);
 
   // Calculate hours for a specific worker
   const calculateWorkerHours = (workerName: string) => {
@@ -1931,6 +2016,8 @@ function App() {
                     }}
                   />
                 )}
+
+                {activeTab === "Staff" && session && <StaffTab session={session} />}
 
                 {activeTab === "Admin" && session && <AdminPanel session={session} />}
 
@@ -2887,7 +2974,6 @@ function App() {
                               </div>
                             </div>
                             <form
-                              className="form-grid"
                               onSubmit={async (e) => {
                                 e.preventDefault();
                                 setClientError(null);
@@ -2964,6 +3050,19 @@ function App() {
                                     );
                                     setBusy(false);
                                     return;
+                                  }
+                                  // Validate parent fields if is_minor is true
+                                  if (clientForm.is_minor) {
+                                    if (!clientForm.parent_name?.trim()) {
+                                      setClientError("Parent/Guardian name is required for minors.");
+                                      setBusy(false);
+                                      return;
+                                    }
+                                    if (!clientForm.parent_phone?.trim()) {
+                                      setClientError("Parent/Guardian phone is required for minors.");
+                                      setBusy(false);
+                                      return;
+                                    }
                                   }
                                   // Validate mailing address: either checkbox is checked OR full mailing address is provided (without line 2)
                                   if (!clientForm.mailing_same_as_physical) {
@@ -3081,6 +3180,13 @@ function App() {
                                     delivery_restrictions: clientForm.delivery_restrictions?.trim() || null,
                                     preferred_driver_id: clientForm.preferred_driver_id?.trim() || null,
                                     seasonal_delivery_pattern: clientForm.seasonal_delivery_pattern?.trim() || null,
+                                    // Household and DOB fields
+                                    household_id: clientForm.household_id?.trim() || null,
+                                    date_of_birth: clientForm.date_of_birth?.trim() || null,
+                                    is_minor: clientForm.is_minor || false,
+                                    parent_name: clientForm.parent_name?.trim() || null,
+                                    parent_phone: clientForm.parent_phone?.trim() || null,
+                                    parent_email: clientForm.parent_email?.trim() || null,
                                     gate_combo: clientForm.gate_combo || null,
                                     notes: clientForm.notes || null,
                                     how_did_they_hear_about_us:
@@ -3159,7 +3265,6 @@ function App() {
                                     First Name *
                                     <input
                                       required
-                                      tabIndex={1}
                                       value={clientForm.first_name}
                                       onChange={(e) =>
                                         setClientForm({ ...clientForm, first_name: e.target.value })
@@ -3170,7 +3275,6 @@ function App() {
                                     Last Name *
                                     <input
                                       required
-                                      tabIndex={2}
                                       value={clientForm.last_name}
                                       onChange={(e) =>
                                         setClientForm({ ...clientForm, last_name: e.target.value })
@@ -3178,9 +3282,104 @@ function App() {
                                     />
                                   </label>
                                   <label>
+                                    Date of Birth
+                                    <input
+                                      type="date"
+                                      value={clientForm.date_of_birth}
+                                      onChange={(e) => {
+                                        const dob = e.target.value;
+                                        // Calculate is_minor from DOB (age < 18)
+                                        let isMinor = false;
+                                        if (dob) {
+                                          const birthDate = new Date(dob);
+                                          const today = new Date();
+                                          let age = today.getFullYear() - birthDate.getFullYear();
+                                          const monthDiff = today.getMonth() - birthDate.getMonth();
+                                          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                                            age--;
+                                          }
+                                          isMinor = age < 18;
+                                        }
+                                        setClientForm({
+                                          ...clientForm,
+                                          date_of_birth: dob,
+                                          is_minor: isMinor,
+                                        });
+                                      }}
+                                    />
+                                  </label>
+                                  <label className="checkbox">
+                                    <input
+                                      type="checkbox"
+                                      checked={clientForm.is_minor}
+                                      onChange={(e) =>
+                                        setClientForm({
+                                          ...clientForm,
+                                          is_minor: e.target.checked,
+                                        })
+                                      }
+                                    />
+                                    Is Minor
+                                  </label>
+                                  <label className="span-2">
+                                    <div style={{ marginBottom: "0.5rem" }}>
+                                      <label className="checkbox" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                        <input
+                                          type="checkbox"
+                                          checked={clientForm.add_to_existing_household}
+                                          onChange={(e) =>
+                                            setClientForm({
+                                              ...clientForm,
+                                              add_to_existing_household: e.target.checked,
+                                              household_id: e.target.checked ? clientForm.household_id : "",
+                                            })
+                                          }
+                                        />
+                                        <span>Add to existing household</span>
+                                      </label>
+                                    </div>
+                                    {clientForm.add_to_existing_household && (
+                                      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                                        <input
+                                          type="text"
+                                          placeholder="Select household member..."
+                                          value={
+                                            clientForm.household_id
+                                              ? clients.find((c) => c.id === clientForm.household_id)?.name || ""
+                                              : ""
+                                          }
+                                          readOnly
+                                          style={{ flex: 1 }}
+                                          onClick={() => setShowHouseholdSelectionModal(true)}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => setShowHouseholdSelectionModal(true)}
+                                          style={{ padding: "0.5rem 1rem" }}
+                                        >
+                                          Select
+                                        </button>
+                                        {clientForm.household_id && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setClientForm({
+                                                ...clientForm,
+                                                household_id: "",
+                                                add_to_existing_household: false,
+                                              })
+                                            }
+                                            style={{ padding: "0.5rem 1rem" }}
+                                          >
+                                            Clear
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </label>
+                                  <label>
                                     Telephone
                                     <input
-                                      tabIndex={8}
                                       value={clientForm.telephone}
                                       onChange={(e) =>
                                         setClientForm({ ...clientForm, telephone: e.target.value })
@@ -3197,7 +3396,6 @@ function App() {
                                     Email
                                     <input
                                       type="email"
-                                      tabIndex={12}
                                       value={clientForm.email}
                                       onChange={(e) =>
                                         setClientForm({ ...clientForm, email: e.target.value })
@@ -3210,7 +3408,6 @@ function App() {
                                     </HelpTooltip>
                                     <input
                                       required
-                                      tabIndex={10}
                                       value={clientForm.how_did_they_hear_about_us}
                                       onChange={(e) =>
                                         setClientForm({
@@ -3223,7 +3420,6 @@ function App() {
                                   <label className="span-2">
                                     Notes
                                     <textarea
-                                      tabIndex={12}
                                       value={clientForm.notes}
                                       onChange={(e) =>
                                         setClientForm({ ...clientForm, notes: e.target.value })
@@ -3234,6 +3430,50 @@ function App() {
                                 </div>
                               </FormSection>
 
+                              {/* Parent Information Section - Only visible if is_minor */}
+                              {clientForm.is_minor && (
+                                <FormSection title="Parent/Guardian Information" required defaultOpen={true}>
+                                  <div className="form-grid">
+                                    <label className="span-2">
+                                      Parent/Guardian Name *
+                                      <input
+                                        required={clientForm.is_minor}
+                                        value={clientForm.parent_name}
+                                        onChange={(e) =>
+                                          setClientForm({ ...clientForm, parent_name: e.target.value })
+                                        }
+                                      />
+                                    </label>
+                                    <label>
+                                      Parent/Guardian Phone *
+                                      <input
+                                        required={clientForm.is_minor}
+                                        value={clientForm.parent_phone}
+                                        onChange={(e) =>
+                                          setClientForm({ ...clientForm, parent_phone: e.target.value })
+                                        }
+                                        onBlur={(e) =>
+                                          setClientForm((prev) => ({
+                                            ...prev,
+                                            parent_phone: normalizePhone(e.target.value),
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label>
+                                      Parent/Guardian Email
+                                      <input
+                                        type="email"
+                                        value={clientForm.parent_email}
+                                        onChange={(e) =>
+                                          setClientForm({ ...clientForm, parent_email: e.target.value })
+                                        }
+                                      />
+                                    </label>
+                                  </div>
+                                </FormSection>
+                              )}
+
                               {/* Physical Address Section */}
                               <FormSection title="Physical Address" required defaultOpen={true}>
                                 <div className="form-grid">
@@ -3241,7 +3481,6 @@ function App() {
                                     Address Line 1 *
                                     <input
                                       required
-                                      tabIndex={3}
                                       value={clientForm.physical_address_line1}
                                       onChange={(e) =>
                                         setClientForm({
@@ -3254,7 +3493,6 @@ function App() {
                                   <label className="span-2">
                                     Address Line 2
                                     <input
-                                      tabIndex={4}
                                       value={clientForm.physical_address_line2}
                                       onChange={(e) =>
                                         setClientForm({
@@ -3268,7 +3506,6 @@ function App() {
                                     City *
                                     <input
                                       required
-                                      tabIndex={5}
                                       value={clientForm.physical_address_city}
                                       onChange={(e) =>
                                         setClientForm({
@@ -3288,7 +3525,6 @@ function App() {
                                     State *
                                     <input
                                       required
-                                      tabIndex={6}
                                       value={clientForm.physical_address_state}
                                       onChange={(e) =>
                                         setClientForm({
@@ -3308,7 +3544,6 @@ function App() {
                                     ZIP *
                                     <input
                                       required
-                                      tabIndex={7}
                                       value={clientForm.physical_address_postal_code}
                                       onChange={(e) =>
                                         setClientForm({
@@ -3321,7 +3556,6 @@ function App() {
                                   <label>
                                     Gate Combo
                                     <input
-                                      tabIndex={11}
                                       value={clientForm.gate_combo}
                                       onChange={(e) =>
                                         setClientForm({ ...clientForm, gate_combo: e.target.value })
@@ -3331,7 +3565,6 @@ function App() {
                                   <label className="span-2">
                                     Directions
                                     <textarea
-                                      tabIndex={13}
                                       value={clientForm.directions}
                                       onChange={(e) =>
                                         setClientForm({ ...clientForm, directions: e.target.value })
@@ -3344,7 +3577,6 @@ function App() {
                                     Wood Size *
                                     <select
                                       required
-                                      tabIndex={14}
                                       value={clientForm.wood_size_label}
                                       onChange={(e) =>
                                         setClientForm({
@@ -3366,7 +3598,6 @@ function App() {
                                       <input
                                         type="number"
                                         min="1"
-                                        tabIndex={15}
                                         value={clientForm.wood_size_other}
                                         onChange={(e) =>
                                           setClientForm({
@@ -3386,7 +3617,6 @@ function App() {
                                   <label className="checkbox span-2">
                                     <input
                                       type="checkbox"
-                                      tabIndex={16}
                                       checked={clientForm.mailing_same_as_physical}
                                       onChange={(e) =>
                                         setClientForm({
@@ -3403,7 +3633,6 @@ function App() {
                                         Mailing Line 1 *
                                         <input
                                           required
-                                          tabIndex={17}
                                           value={clientForm.mailing_address_line1}
                                           onChange={(e) =>
                                             setClientForm({
@@ -3416,7 +3645,6 @@ function App() {
                                       <label className="span-2">
                                         Mailing Line 2
                                         <input
-                                          tabIndex={18}
                                           value={clientForm.mailing_address_line2}
                                           onChange={(e) =>
                                             setClientForm({
@@ -3430,7 +3658,6 @@ function App() {
                                         Mailing City *
                                         <input
                                           required
-                                          tabIndex={19}
                                           value={clientForm.mailing_address_city}
                                           onChange={(e) =>
                                             setClientForm({
@@ -3450,7 +3677,6 @@ function App() {
                                         Mailing State *
                                         <input
                                           required
-                                          tabIndex={20}
                                           value={clientForm.mailing_address_state}
                                           onChange={(e) =>
                                             setClientForm({
@@ -3470,7 +3696,6 @@ function App() {
                                         Mailing ZIP *
                                         <input
                                           required
-                                          tabIndex={21}
                                           value={clientForm.mailing_address_postal_code}
                                           onChange={(e) =>
                                             setClientForm({
@@ -3491,7 +3716,6 @@ function App() {
                                   <label className="span-2">
                                     Referring Agency
                                     <input
-                                      tabIndex={22}
                                       value={clientForm.referring_agency}
                                       onChange={(e) =>
                                         setClientForm({
@@ -3506,7 +3730,6 @@ function App() {
                                       Approval Status
                                     </HelpTooltip>
                                     <select
-                                      tabIndex={23}
                                       value={clientForm.approval_status}
                                       onChange={(e) =>
                                         setClientForm({
@@ -3526,7 +3749,6 @@ function App() {
                                     Approval Expires On
                                     <input
                                       type="date"
-                                      tabIndex={24}
                                       value={clientForm.approval_expires_on}
                                       onChange={(e) =>
                                         setClientForm({
@@ -3553,7 +3775,6 @@ function App() {
                                     Last Re-Approval Date
                                     <input
                                       type="date"
-                                      tabIndex={25}
                                       value={clientForm.last_reapproval_date}
                                       onChange={(e) =>
                                         setClientForm({
@@ -3566,7 +3787,6 @@ function App() {
                                   <label className="span-2">
                                     Reason Qualified Or Not
                                     <textarea
-                                      tabIndex={26}
                                       value={clientForm.denial_reason || ""}
                                       onChange={(e) =>
                                         setClientForm({ ...clientForm, denial_reason: e.target.value })
@@ -5247,7 +5467,7 @@ function App() {
                       )}
                     </div>
                     <div className="list-card">
-                      <div className="list-head">
+                      <div className="list-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                           <h3>Inventory ({inventory.length})</h3>
                           <div
@@ -5265,6 +5485,13 @@ function App() {
                             {showNeedsRestock ? "Needs restock ✓" : "Needs restock"}
                           </div>
                         </div>
+                        <button
+                          className="ghost"
+                          type="button"
+                          onClick={() => window.print()}
+                        >
+                          Print inventory
+                        </button>
                         <button className="ghost" onClick={loadInventory} disabled={busy}>
                           Refresh
                         </button>
@@ -5639,10 +5866,13 @@ function App() {
                       )}
                     </div>
                   </div>
+                </div>
                 )}
 
                 {activeTab === "Work Orders" && (
-                  <div className="stack">
+                  <div style={{ display: "flex", gap: "1rem" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="stack">
                     {isDriver && (
                       <div className="card muted">
                         <div className="list-head">
@@ -5670,86 +5900,67 @@ function App() {
                                 </div>
                                 <div className="muted">Phone: {workOrder?.telephone ?? "—"}</div>
                               </div>
-                              <div className="pill">{workOrder?.status ?? "scheduled"}</div>
-                            </div>
-                            <div
-                              style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}
-                            >
                               <select
+                                className="pill"
                                 value={
                                   progressEdits[workOrder?.id ?? ""]?.status ??
                                   workOrder?.status ??
                                   "in_progress"
                                 }
-                                onChange={(e) => {
+                                onChange={async (e) => {
                                   if (!workOrder?.id) return;
+                                  const newStatus = e.target.value;
                                   setProgressEdits({
                                     ...progressEdits,
                                     [workOrder.id]: {
-                                      status: e.target.value,
+                                      status: newStatus,
                                       mileage: progressEdits[workOrder.id]?.mileage ?? "",
                                       hours: progressEdits[workOrder.id]?.hours ?? "",
                                     },
                                   });
-                                }}
-                              >
-                                <option value="in_progress">en route</option>
-                                <option value="delivered">delivered</option>
-                                <option value="issue">issue</option>
-                              </select>
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.1"
-                                placeholder="Mileage"
-                                value={
-                                  workOrder?.id ? (progressEdits[workOrder.id]?.mileage ?? "") : ""
-                                }
-                                onChange={(e) => {
-                                  if (!workOrder?.id) return;
-                                  setProgressEdits({
-                                    ...progressEdits,
-                                    [workOrder.id]: {
-                                      status:
-                                        progressEdits[workOrder.id]?.status ?? workOrder.status,
-                                      mileage: e.target.value,
-                                      hours: progressEdits[workOrder.id]?.hours ?? "",
-                                    },
-                                  });
-                                }}
-                                style={{ width: 120 }}
-                              />
-                              <button
-                                className="ping"
-                                type="button"
-                                        disabled={!workOrder?.id || busy || false}
-                                onClick={async () => {
-                                  if (!workOrder?.id) return;
-                                  const edit = progressEdits[workOrder.id] ?? {
-                                    status: "in_progress",
-                                    mileage: "",
-                                    hours: "",
-                                  };
                                   setBusy(true);
                                   try {
                                     await invokeTauri("update_work_order_status", {
                                       input: {
                                         work_order_id: workOrder.id,
-                                        status: edit.status,
-                                        mileage: edit.mileage === "" ? null : Number(edit.mileage),
+                                        status: newStatus,
+                                        mileage:
+                                          progressEdits[workOrder.id]?.mileage === ""
+                                            ? null
+                                            : Number(progressEdits[workOrder.id]?.mileage ?? 0),
                                         is_driver: true,
                                       },
                                       role: session?.role ?? null,
                                       actor: session?.username ?? null,
                                     });
                                     await loadWorkOrders();
+                                    if (newStatus === "delivered" || newStatus === "completed") {
+                                      let assignees: string[] = [];
+                                      try {
+                                        const p = JSON.parse(workOrder.assignees_json ?? "[]");
+                                        if (Array.isArray(p)) assignees = p.filter((x): x is string => typeof x === "string");
+                                      } catch {}
+                                      for (const name of assignees) {
+                                        const u = users.find((x) => x.name.toLowerCase() === name.toLowerCase());
+                                        if (!u) continue;
+                                        try {
+                                          const ok = await invokeTauri<boolean>("revoke_driver_if_no_copy", { user_id: u.id });
+                                          if (ok) {
+                                            showToast(`${name}: driver flag removed (no DL copy on file after 3+ deliveries).`, "error");
+                                          }
+                                        } catch {}
+                                      }
+                                      await loadUsers(showDeletedWorkers);
+                                    }
                                   } finally {
                                     setBusy(false);
                                   }
                                 }}
                               >
-                                Update status
-                              </button>
+                                <option value="in_progress">en route</option>
+                                <option value="delivered">delivered</option>
+                                <option value="issue">issue</option>
+                              </select>
                             </div>
                           </div>
                         ))}
@@ -6830,20 +7041,35 @@ function App() {
                             />
 
                             <div className="form-grid">
-                            <label>
-                              Scheduled date/time
-                              <input
-                                type="datetime-local"
-                                value={workOrderForm.scheduled_date}
-                                  onChange={(e) =>
-                                    setWorkOrderForm({
-                                      ...workOrderForm,
-                                      scheduled_date: e.target.value,
-                                    })
-                                  }
-                                disabled={isStaffLike}
-                              />
-                            </label>
+                            {(() => {
+                              // Check if any assigned users are drivers
+                              const driverNames = new Set(
+                                users.filter((u) => !!u.driver_license_status || u.is_driver).map((u) => u.name),
+                              );
+                              const hasDriver = workOrderForm.assignees.some((name) => driverNames.has(name));
+                              
+                              // Only show scheduled_date field if at least one driver is assigned
+                              if (!hasDriver) {
+                                return null;
+                              }
+                              
+                              return (
+                                <label>
+                                  Scheduled date/time
+                                  <input
+                                    type="datetime-local"
+                                    value={workOrderForm.scheduled_date}
+                                    onChange={(e) =>
+                                      setWorkOrderForm({
+                                        ...workOrderForm,
+                                        scheduled_date: e.target.value,
+                                      })
+                                    }
+                                    disabled={isStaffLike}
+                                  />
+                                </label>
+                              );
+                            })()}
                             <label>
                               Status
                               <select
@@ -7070,6 +7296,13 @@ function App() {
                           <button className="ghost" onClick={loadWorkOrders} disabled={busy}>
                             Refresh
                           </button>
+                          <button
+                            className="ghost"
+                            type="button"
+                            onClick={() => window.print()}
+                          >
+                            Print list
+                          </button>
                         </div>
                       </div>
                       <WorkOrdersTable
@@ -7088,48 +7321,44 @@ function App() {
                         loadWorkOrders={loadWorkOrders}
                       />
                     </div>
-                  </div>
-                )}
+                    </div>
 
-                {/* Work Order Detail Modal */}
-                {workOrderDetailOpen && selectedWorkOrder && (
-                  <div
-                    style={{
-                      position: "fixed",
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      backgroundColor: "rgba(0, 0, 0, 0.5)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      zIndex: 1000,
-                    }}
-                    onClick={closeWorkOrderDetail}
-                  >
+                    {/* Right Sidebar - Work Order Detail */}
                     <div
-                      className="card"
                       style={{
-                        minWidth: "500px",
-                        maxWidth: "700px",
-                        maxHeight: "80vh",
-                        overflow: "auto",
-                        backgroundColor: "white",
+                        width: workOrderDetailOpen ? "400px" : "0",
+                        overflow: "hidden",
+                        transition: "width 0.3s ease",
+                        borderLeft: workOrderDetailOpen ? "1px solid #ddd" : "none",
+                        paddingLeft: workOrderDetailOpen ? "1rem" : "0",
                       }}
-                      onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="list-head" style={{ marginBottom: "1rem" }}>
-                        <h3>Work Order Details</h3>
-                        <button
-                          className="ghost"
-                          type="button"
-                          onClick={closeWorkOrderDetail}
-                          style={{ padding: "0.25rem 0.5rem" }}
-                        >
-                          ×
-                        </button>
-                      </div>
+                      {workOrderDetailOpen && selectedWorkOrder && (
+                        <div className="card">
+                          <div className="list-head">
+                            <h3>Work Order Details</h3>
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <button
+                                className="ghost"
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.print();
+                                }}
+                                style={{ padding: "0.25rem 0.5rem" }}
+                              >
+                                Print
+                              </button>
+                              <button
+                                className="ghost"
+                                type="button"
+                                onClick={closeWorkOrderDetail}
+                                style={{ padding: "0.25rem 0.5rem" }}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          </div>
 
                       <div className="stack" style={{ gap: "0.75rem" }}>
                         <div
@@ -7147,21 +7376,43 @@ function App() {
                               Order ID: {selectedWorkOrder.id.slice(0, 8).toUpperCase()}
                             </div>
                           </div>
-                          <span
+                          <select
                             className="pill"
+                            value={
+                              progressEdits[selectedWorkOrder.id]?.status ??
+                              selectedWorkOrder.status ??
+                              "in_progress"
+                            }
+                            onChange={(e) =>
+                              setProgressEdits((prev) => ({
+                                ...prev,
+                                [selectedWorkOrder.id]: {
+                                  status: e.target.value,
+                                  mileage: prev[selectedWorkOrder.id]?.mileage ?? "",
+                                  hours: prev[selectedWorkOrder.id]?.hours ?? "",
+                                },
+                              }))
+                            }
                             style={{
                               background:
-                                selectedWorkOrder.status === "completed"
+                                (progressEdits[selectedWorkOrder.id]?.status ??
+                                  selectedWorkOrder.status) === "completed"
                                   ? "#c8e6c9"
-                                  : selectedWorkOrder.status === "cancelled"
+                                  : (progressEdits[selectedWorkOrder.id]?.status ??
+                                      selectedWorkOrder.status) === "cancelled"
                                     ? "#ffcdd2"
-                                    : selectedWorkOrder.status === "scheduled"
+                                    : (progressEdits[selectedWorkOrder.id]?.status ??
+                                        selectedWorkOrder.status) === "scheduled"
                                       ? "#bbdefb"
                                       : "#fff3e0",
                             }}
                           >
-                            {selectedWorkOrder.status}
-                          </span>
+                            <option value="draft">draft</option>
+                            <option value="scheduled">scheduled</option>
+                            <option value="in_progress">in_progress</option>
+                            <option value="completed">completed</option>
+                            <option value="cancelled">cancelled</option>
+                          </select>
                         </div>
 
                         <div
@@ -7287,7 +7538,7 @@ function App() {
                           <>
                             <hr style={{ border: "none", borderTop: "1px solid #eee" }} />
                             <div className="stack" style={{ gap: "0.75rem" }}>
-                              <strong>Scheduling & assignments</strong>
+                              <strong>Scheduling, assignments & completion</strong>
                               <label>
                                 Scheduled date
                                 <input
@@ -7464,6 +7715,195 @@ function App() {
                                   Save assignments/schedule
                                 </button>
                               </div>
+
+                              {/* Completion controls */}
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 8,
+                                  flexWrap: "wrap",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                  <span className="muted">Mileage</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.1"
+                                    value={progressEdits[selectedWorkOrder.id]?.mileage ?? ""}
+                                    onChange={(e) =>
+                                      setProgressEdits((prev) => ({
+                                        ...prev,
+                                        [selectedWorkOrder.id]: {
+                                          status:
+                                            prev[selectedWorkOrder.id]?.status ??
+                                            selectedWorkOrder.status ??
+                                            "in_progress",
+                                          mileage: e.target.value,
+                                          hours: prev[selectedWorkOrder.id]?.hours ?? "",
+                                        },
+                                      }))
+                                    }
+                                    style={{ width: 120 }}
+                                  />
+                                </label>
+                                {(isAdmin || isLead || isStaffLike) && (
+                                  <label
+                                    style={{ display: "flex", flexDirection: "column", gap: 4 }}
+                                  >
+                                    <span className="muted">Status</span>
+                                    <select
+                                      value={
+                                        progressEdits[selectedWorkOrder.id]?.status ??
+                                        selectedWorkOrder.status
+                                      }
+                                      onChange={(e) =>
+                                        setProgressEdits((prev) => ({
+                                          ...prev,
+                                          [selectedWorkOrder.id]: {
+                                            status: e.target.value,
+                                            mileage:
+                                              prev[selectedWorkOrder.id]?.mileage ??
+                                              (selectedWorkOrder.mileage != null
+                                                ? String(selectedWorkOrder.mileage)
+                                                : ""),
+                                            hours: prev[selectedWorkOrder.id]?.hours ?? "",
+                                          },
+                                        }))
+                                      }
+                                    >
+                                      <option value="draft">draft</option>
+                                      <option value="scheduled">scheduled</option>
+                                      <option value="in_progress">in_progress</option>
+                                      <option value="completed">completed</option>
+                                      <option value="cancelled">cancelled</option>
+                                    </select>
+                                  </label>
+                                )}
+                                {(isAdmin || isLead || isStaffLike) &&
+                                  (progressEdits[selectedWorkOrder.id]?.status ??
+                                    selectedWorkOrder.status) === "completed" && (
+                                    <label
+                                      style={{
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: 4,
+                                      }}
+                                    >
+                                      <span className="muted">Work hours</span>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.1"
+                                        value={progressEdits[selectedWorkOrder.id]?.hours ?? ""}
+                                        onChange={(e) =>
+                                          setProgressEdits((prev) => ({
+                                            ...prev,
+                                            [selectedWorkOrder.id]: {
+                                              status:
+                                                prev[selectedWorkOrder.id]?.status ??
+                                                selectedWorkOrder.status ??
+                                                "in_progress",
+                                              mileage:
+                                                prev[selectedWorkOrder.id]?.mileage ??
+                                                (selectedWorkOrder.mileage != null
+                                                  ? String(selectedWorkOrder.mileage)
+                                                  : ""),
+                                              hours: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                        style={{ width: 120 }}
+                                      />
+                                    </label>
+                                  )}
+                                <button
+                                  className="ping"
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={async () => {
+                                    const edit = progressEdits[selectedWorkOrder.id] ?? {
+                                      status: selectedWorkOrder.status ?? "in_progress",
+                                      mileage: "",
+                                      hours: "",
+                                    };
+                                    if (
+                                      (isAdmin || isLead || isStaffLike) &&
+                                      edit.status === "completed" &&
+                                      edit.mileage === ""
+                                    ) {
+                                      setWorkOrderDetailError(
+                                        "Mileage is required to mark completed.",
+                                      );
+                                      return;
+                                    }
+                                    if (
+                                      (isAdmin || isLead || isStaffLike) &&
+                                      edit.status === "completed" &&
+                                      edit.hours === ""
+                                    ) {
+                                      setWorkOrderDetailError(
+                                        "Work hours are required to mark completed.",
+                                      );
+                                      return;
+                                    }
+                                    setBusy(true);
+                                    try {
+                                      await invokeTauri("update_work_order_status", {
+                                        input: {
+                                          work_order_id: selectedWorkOrder.id,
+                                          status: edit.status,
+                                          mileage:
+                                            edit.mileage === "" ? null : Number(edit.mileage),
+                                          work_hours:
+                                            edit.hours === "" ? null : Number(edit.hours),
+                                          is_driver: false,
+                                        },
+                                        role: session?.role ?? null,
+                                        actor: session?.username ?? null,
+                                      });
+                                      showToast("Work order status updated.");
+                                      await loadWorkOrders();
+                                      if (edit.status === "delivered" || edit.status === "completed") {
+                                        let assignees: string[] = [];
+                                        try {
+                                          const p = JSON.parse(selectedWorkOrder.assignees_json ?? "[]");
+                                          if (Array.isArray(p)) assignees = p.filter((x): x is string => typeof x === "string");
+                                        } catch {}
+                                        for (const name of assignees) {
+                                          const u = users.find((x) => x.name.toLowerCase() === name.toLowerCase());
+                                          if (!u) continue;
+                                          try {
+                                            const ok = await invokeTauri<boolean>("revoke_driver_if_no_copy", { user_id: u.id });
+                                            if (ok) {
+                                              showToast(`${name}: driver flag removed (no DL copy on file after 3+ deliveries).`, "error");
+                                            }
+                                          } catch {}
+                                        }
+                                        await loadUsers(showDeletedWorkers);
+                                      }
+                                      closeWorkOrderDetail();
+                                    } finally {
+                                      setBusy(false);
+                                    }
+                                  }}
+                                >
+                                  Save status
+                                </button>
+                                {workOrderDetailError && (
+                                  <div
+                                    className="pill"
+                                    style={{
+                                      background: "#fbe2e2",
+                                      color: "#b3261e",
+                                      marginTop: "0.25rem",
+                                    }}
+                                  >
+                                    {workOrderDetailError}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </>
                         )}
@@ -7485,19 +7925,32 @@ function App() {
                         </button>
                       </div>
                     </div>
+                    )}
                   </div>
                 )}
 
                 {activeTab === "Metrics" && (
-                  <ComprehensiveMetrics
-                    clients={clients}
-                    workOrders={workOrders}
-                    deliveries={deliveries}
-                    inventory={inventory}
-                    users={users}
-                    expenses={expenses}
-                    donations={donations}
-                  />
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                      <h2 style={{ margin: 0 }}>Community Impact Metrics</h2>
+                      <button
+                        className="ghost"
+                        type="button"
+                        onClick={() => window.print()}
+                      >
+                        Print Report
+                      </button>
+                    </div>
+                    <ComprehensiveMetrics
+                      clients={clients}
+                      workOrders={workOrders}
+                      deliveries={deliveries}
+                      inventory={inventory}
+                      users={users}
+                      expenses={expenses}
+                      donations={donations}
+                    />
+                  </div>
                 )}
 
                 {activeTab === "Finance" &&
@@ -7514,6 +7967,7 @@ function App() {
                     onRefreshExpenses={loadExpenses}
                     onRefreshDonations={loadDonations}
                     onRefreshTimeEntries={loadTimeEntries}
+                  onRefreshBudgetCategories={loadBudgetCategories}
                     busy={busy}
                     setBusy={setBusy}
                   />
@@ -7550,7 +8004,7 @@ function App() {
                           >
                             <h3>Workers & Drivers ({users.length})</h3>
                             <div style={{ display: "flex", gap: "0.5rem" }}>
-                              <button className="ghost" onClick={loadUsers} disabled={busy}>
+                              <button className="ghost" onClick={() => loadUsers()} disabled={busy}>
                                 Refresh
                               </button>
                             </div>
@@ -8035,6 +8489,35 @@ function App() {
                         >
                           Clear Filters
                         </button>
+                        {canManage && workersDeletedOver7Years.length > 0 && (
+                          <button
+                            className="ghost"
+                            type="button"
+                            onClick={() => setShow7YearRetentionModal(true)}
+                            style={{
+                              padding: "0.25rem 0.5rem",
+                              fontSize: "0.85rem",
+                              background: "#fff8e6",
+                              border: "1px solid #e6c84a",
+                            }}
+                          >
+                            7-year retention ({workersDeletedOver7Years.length})
+                          </button>
+                        )}
+                        {canManage && (
+                          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                            <input
+                              type="checkbox"
+                              checked={showDeletedWorkers}
+                              onChange={() => {
+                                const next = !showDeletedWorkers;
+                                setShowDeletedWorkers(next);
+                                loadUsers(next);
+                              }}
+                            />
+                            <span>Show deleted employees</span>
+                          </label>
+                        )}
                       </div>
                       <div className="table">
                         <div className="table-head">
@@ -8051,7 +8534,7 @@ function App() {
                             const daysUntilExpiry = dlExpiresOn ? Math.ceil((dlExpiresOn.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null;
                             const dlExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 15 && daysUntilExpiry >= 0;
                             const dlExpired = daysUntilExpiry !== null && daysUntilExpiry < 0;
-                            
+                            const isDeleted = !!u.deleted_at;
                             return (
                           <div
                             className="table-row"
@@ -8063,14 +8546,29 @@ function App() {
                             style={{
                               cursor: "pointer",
                               backgroundColor:
-                                selectedWorkerId === u.id ? "#e0e7ff" : undefined,
+                                selectedWorkerId === u.id ? "#e0e7ff" : isDeleted ? "#f5f5f5" : undefined,
                               borderLeft:
                                 selectedWorkerId === u.id ? "4px solid #4f46e5" : "4px solid transparent",
+                              opacity: isDeleted ? 0.85 : 1,
                             }}
                           >
                             <div>
                               <strong>{u.name}</strong>
-                              <div className="muted">{u.role}</div>
+                              <div className="muted" style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                                {u.role}
+                                {isDeleted && (
+                                  <>
+                                    <span className="badge" style={{ background: "#6b7280", color: "white", fontSize: "0.7rem" }}>
+                                      DELETED
+                                    </span>
+                                    {u.deleted_at && (
+                                      <span style={{ fontSize: "0.8rem" }}>
+                                        {new Date(u.deleted_at).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+                              </div>
                             </div>
                             <div className="muted">{u.telephone ?? "—"}</div>
                             <div className="muted">{u.availability_notes ?? "—"}</div>
@@ -8150,6 +8648,53 @@ function App() {
                               ×
                             </button>
                           </div>
+                          {/* Worker Metrics Under Name */}
+                          {(() => {
+                            const workerHours = (isAdmin || isStaffLike) ? calculateWorkerHours(selectedWorker.name) : null;
+                            const workerDeliveries = workOrders.filter(wo => {
+                              try {
+                                const assignees = JSON.parse(wo.assignees_json ?? "[]");
+                                return Array.isArray(assignees) && assignees.some((name: string) => name.toLowerCase() === selectedWorker.name.toLowerCase());
+                              } catch {
+                                return false;
+                              }
+                            }).length;
+                            const completedDeliveries = workOrders.filter(wo => {
+                              try {
+                                const assignees = JSON.parse(wo.assignees_json ?? "[]");
+                                return wo.status?.toLowerCase() === "completed" && Array.isArray(assignees) && assignees.some((name: string) => name.toLowerCase() === selectedWorker.name.toLowerCase());
+                              } catch {
+                                return false;
+                              }
+                            }).length;
+                            
+                            return (
+                              <div style={{ 
+                                background: "#fff9f0", 
+                                padding: "0.75rem", 
+                                borderRadius: "6px",
+                                marginBottom: "0.5rem",
+                                marginTop: "0.5rem"
+                              }}>
+                                {workerHours && (
+                                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem" }}>
+                                    <strong>Total Hours:</strong>
+                                    <span>{workerHours.totalHours.toFixed(1)}h</span>
+                                  </div>
+                                )}
+                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem" }}>
+                                  <strong>Deliveries:</strong>
+                                  <span>{completedDeliveries} completed / {workerDeliveries} total</span>
+                                </div>
+                                {workerHours && (
+                                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                    <strong>Weekly Hours:</strong>
+                                    <span>{workerHours.weeklyHours.toFixed(1)}h</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                           {workerError && (
                             <div
                               className="pill"
@@ -8399,55 +8944,24 @@ function App() {
                                   }
                                 />
                               </label>
-                              <label>
-                                Driver license status
-                                <input
-                                  value={workerEdit?.driver_license_status ?? ""}
-                                  onChange={(e) =>
-                                    setWorkerEdit((prev) => ({
-                                      ...prev,
-                                      driver_license_status: e.target.value,
-                                    }))
-                                  }
-                                />
-                              </label>
-                              <label>
-                                Driver license number
-                                <input
-                                  value={workerEdit?.driver_license_number ?? ""}
-                                  onChange={(e) =>
-                                    setWorkerEdit((prev) => ({
-                                      ...prev,
-                                      driver_license_number: e.target.value,
-                                    }))
-                                  }
-                                />
-                              </label>
-                              <label>
-                                Driver license expiration
-                                <input
-                                  type="date"
-                                  value={workerEdit?.driver_license_expires_on?.slice(0, 10) ?? ""}
-                                  onChange={(e) =>
-                                    setWorkerEdit((prev) => ({
-                                      ...prev,
-                                      driver_license_expires_on: e.target.value,
-                                    }))
-                                  }
-                                />
-                              </label>
                               <label className="checkbox">
                                 <input
                                   type="checkbox"
                                   checked={!!workerEdit?.is_driver}
-                                  onChange={(e) =>
-                                    setWorkerEdit((prev) => ({
-                                      ...prev,
-                                      is_driver: e.target.checked,
-                                    }))
-                                  }
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setDriverLicenseForm({
+                                        dlNumber: workerEdit?.driver_license_number ?? "",
+                                        expiresOn: workerEdit?.driver_license_expires_on?.slice(0, 10) ?? "",
+                                        copyOnFile: !!(selectedWorker?.dl_copy_on_file),
+                                      });
+                                      setShowDriverLicenseModal(true);
+                                    } else {
+                                      setWorkerEdit((prev) => ({ ...prev, is_driver: false }));
+                                    }
+                                  }}
                                 />
-                                Driver flag (requires DL status + expiration)
+                                Is Driver (opens modal for DL info)
                               </label>
                               <label className="checkbox">
                                 <input
@@ -8461,6 +8975,17 @@ function App() {
                                   }
                                 />
                                 HIPAA certified
+                              </label>
+                              <label>
+                                Notes
+                                <textarea
+                                  value={workerEdit?.notes ?? ""}
+                                  onChange={(e) =>
+                                    setWorkerEdit((prev) => ({ ...prev, notes: e.target.value }))
+                                  }
+                                  rows={3}
+                                  placeholder="General notes about this worker"
+                                />
                               </label>
                               {canManage && (
                                 <div style={{ display: "flex", gap: 8 }}>
@@ -8579,6 +9104,8 @@ function App() {
                                                 : null,
                                             hipaa_certified: !!workerEdit?.hipaa_certified,
                                             is_driver: wantsDriver,
+                                            dl_copy_on_file: !!(workerEdit as { dl_copy_on_file?: number })?.dl_copy_on_file,
+                                            notes: (workerEdit?.notes as string)?.trim() || null,
                                           },
                                           role: session?.role ?? null,
                                         });
@@ -8706,6 +9233,10 @@ function App() {
                                 <strong>HIPAA certified:</strong>{" "}
                                 {workerDetailValues?.hipaa_certified ? "Yes" : "No"}
                               </div>
+                              <div>
+                                <strong>Notes:</strong>{" "}
+                                {workerDetailValues?.notes ?? "—"}
+                              </div>
                               {canManage ? (
                                 <div
                                   style={{
@@ -8792,6 +9323,516 @@ function App() {
               </div>
             </section>
           </main>
+
+          {showPasswordModal && (
+            <div className="modal-overlay">
+              <div className="modal">
+                <h3>Change Password</h3>
+                {passwordError && (
+                  <div className="pill" style={{ background: "#fbe2e2", color: "#b3261e" }}>
+                    {passwordError}
+                  </div>
+                )}
+                <form
+                  className="stack"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setPasswordError(null);
+                    if (!passwordForm.current || !passwordForm.next) {
+                      setPasswordError("Current and new password are required.");
+                      return;
+                    }
+                    if (passwordForm.next !== passwordForm.confirm) {
+                      setPasswordError("New password and confirmation do not match.");
+                      return;
+                    }
+                    setBusy(true);
+                    try {
+                      await invokeTauri("change_password", {
+                        input: {
+                          username: session.username,
+                          current_password: passwordForm.current,
+                          new_password: passwordForm.next,
+                        },
+                      });
+                      setPasswordForm({ current: "", next: "", confirm: "" });
+                      setShowPasswordModal(false);
+                    } catch (err) {
+                      setPasswordError(typeof err === "string" ? err : "Failed to change password.");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  <label>
+                    Current Password
+                    <input
+                      type="password"
+                      value={passwordForm.current}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    New Password
+                    <input
+                      type="password"
+                      value={passwordForm.next}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Confirm New Password
+                    <input
+                      type="password"
+                      value={passwordForm.confirm}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
+                    />
+                  </label>
+                  <div className="actions">
+                    <button className="ping" type="submit" disabled={busy}>
+                      {busy ? "Saving..." : "Update Password"}
+                    </button>
+                    <button
+                      className="ghost"
+                      type="button"
+                      onClick={() => {
+                        setShowPasswordModal(false);
+                        setPasswordForm({ current: "", next: "", confirm: "" });
+                        setPasswordError(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {showCommunicationForm && selectedClientForDetail && (
+            <div className="modal-overlay">
+              <div className="modal">
+                <h3>Record Communication - {selectedClientForDetail.name}</h3>
+                <form
+                  className="stack"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setBusy(true);
+                    try {
+                      await invokeTauri("create_client_communication", {
+                        input: {
+                          client_id: selectedClientForDetail.id,
+                          communication_type: communicationForm.communication_type,
+                          direction: communicationForm.direction,
+                          subject: communicationForm.subject.trim() || null,
+                          message: communicationForm.message.trim() || null,
+                          contacted_by_user_id: session.username || session.userId || null,
+                          notes: communicationForm.notes.trim() || null,
+                        },
+                        role: session.role,
+                        actor: session.username || session.userId || "",
+                      });
+                      await loadClientCommunications(selectedClientForDetail.id);
+                      setShowCommunicationForm(false);
+                      setCommunicationForm({
+                        communication_type: "phone",
+                        direction: "outbound",
+                        subject: "",
+                        message: "",
+                        notes: "",
+                      });
+                    } catch (err) {
+                      alert(typeof err === "string" ? err : "Failed to record communication.");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  <label>
+                    Communication Type
+                    <select
+                      value={communicationForm.communication_type}
+                      onChange={(e) =>
+                        setCommunicationForm({ ...communicationForm, communication_type: e.target.value })
+                      }
+                    >
+                      <option value="email">Email</option>
+                      <option value="phone">Phone</option>
+                      <option value="mail">Mail</option>
+                      <option value="in_person">In Person</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
+                  <label>
+                    Direction
+                    <select
+                      value={communicationForm.direction}
+                      onChange={(e) =>
+                        setCommunicationForm({ ...communicationForm, direction: e.target.value })
+                      }
+                    >
+                      <option value="inbound">Inbound</option>
+                      <option value="outbound">Outbound</option>
+                    </select>
+                  </label>
+                  <label>
+                    Subject
+                    <input
+                      value={communicationForm.subject}
+                      onChange={(e) =>
+                        setCommunicationForm({ ...communicationForm, subject: e.target.value })
+                      }
+                      placeholder="Brief subject or topic"
+                    />
+                  </label>
+                  <label>
+                    Message/Summary
+                    <textarea
+                      value={communicationForm.message}
+                      onChange={(e) =>
+                        setCommunicationForm({ ...communicationForm, message: e.target.value })
+                      }
+                      rows={4}
+                      placeholder="Summary of the communication"
+                    />
+                  </label>
+                  <label>
+                    Notes
+                    <textarea
+                      value={communicationForm.notes}
+                      onChange={(e) =>
+                        setCommunicationForm({ ...communicationForm, notes: e.target.value })
+                      }
+                      rows={2}
+                      placeholder="Additional notes"
+                    />
+                  </label>
+                  <div className="actions">
+                    <button className="ping" type="submit" disabled={busy}>
+                      {busy ? "Saving..." : "Record Communication"}
+                    </button>
+                    <button
+                      className="ghost"
+                      type="button"
+                      onClick={() => {
+                        setShowCommunicationForm(false);
+                        setCommunicationForm({
+                          communication_type: "phone",
+                          direction: "outbound",
+                          subject: "",
+                          message: "",
+                          notes: "",
+                        });
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {showFeedbackForm && selectedClientForDetail && (
+            <div className="modal-overlay">
+              <div className="modal">
+                <h3>Record Feedback - {selectedClientForDetail.name}</h3>
+                <form
+                  className="stack"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setBusy(true);
+                    try {
+                      await invokeTauri("create_client_feedback", {
+                        input: {
+                          client_id: selectedClientForDetail.id,
+                          work_order_id: feedbackForm.work_order_id.trim() || null,
+                          feedback_type: feedbackForm.feedback_type,
+                          rating: feedbackForm.rating || null,
+                          comments: feedbackForm.comments.trim() || null,
+                        },
+                      });
+                      await loadClientFeedback(selectedClientForDetail.id);
+                      setShowFeedbackForm(false);
+                      setFeedbackForm({
+                        feedback_type: "satisfaction",
+                        rating: 5,
+                        comments: "",
+                        work_order_id: "",
+                      });
+                    } catch (err) {
+                      alert(typeof err === "string" ? err : "Failed to record feedback.");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  <label>
+                    Feedback Type
+                    <select
+                      value={feedbackForm.feedback_type}
+                      onChange={(e) =>
+                        setFeedbackForm({ ...feedbackForm, feedback_type: e.target.value })
+                      }
+                    >
+                      <option value="satisfaction">Satisfaction</option>
+                      <option value="complaint">Complaint</option>
+                      <option value="suggestion">Suggestion</option>
+                      <option value="compliment">Compliment</option>
+                    </select>
+                  </label>
+                  {feedbackForm.feedback_type === "satisfaction" && (
+                    <label>
+                      Rating (1-5)
+                      <input
+                        type="number"
+                        min="1"
+                        max="5"
+                        value={feedbackForm.rating}
+                        onChange={(e) =>
+                          setFeedbackForm({ ...feedbackForm, rating: parseInt(e.target.value) || 5 })
+                        }
+                      />
+                    </label>
+                  )}
+                  <label>
+                    Work Order ID (Optional)
+                    <input
+                      value={feedbackForm.work_order_id}
+                      onChange={(e) =>
+                        setFeedbackForm({ ...feedbackForm, work_order_id: e.target.value })
+                      }
+                      placeholder="If related to specific delivery"
+                    />
+                  </label>
+                  <label>
+                    Comments
+                    <textarea
+                      value={feedbackForm.comments}
+                      onChange={(e) =>
+                        setFeedbackForm({ ...feedbackForm, comments: e.target.value })
+                      }
+                      rows={4}
+                      placeholder="Client feedback details"
+                      required
+                    />
+                  </label>
+                  <div className="actions">
+                    <button className="ping" type="submit" disabled={busy}>
+                      {busy ? "Saving..." : "Record Feedback"}
+                    </button>
+                    <button
+                      className="ghost"
+                      type="button"
+                      onClick={() => {
+                        setShowFeedbackForm(false);
+                        setFeedbackForm({
+                          feedback_type: "satisfaction",
+                          rating: 5,
+                          comments: "",
+                          work_order_id: "",
+                        });
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Toast Notification */}
+          <ToastNotification toast={toast} onClose={() => setToast(null)} />
+
+          {/* Confirmation Modal */}
+          <ConfirmationModal
+            isOpen={confirmationModal.isOpen}
+            title={confirmationModal.title}
+            message={confirmationModal.message}
+            confirmLabel={confirmationModal.confirmLabel}
+            onConfirm={confirmationModal.onConfirm}
+            onCancel={() => setConfirmationModal({ ...confirmationModal, isOpen: false })}
+            confirmButtonStyle={{ background: "#b3261e", color: "white" }}
+          />
+
+          {showDriverLicenseModal && (
+            <div className="modal-overlay">
+              <div className="modal">
+                <h3>Driver license information</h3>
+                <p className="muted">Required to set this worker as a driver.</p>
+                <label>
+                  Driver license number *
+                  <input
+                    value={driverLicenseForm.dlNumber}
+                    onChange={(e) =>
+                      setDriverLicenseForm((prev) => ({ ...prev, dlNumber: e.target.value }))
+                    }
+                    placeholder="e.g. 123456789"
+                  />
+                </label>
+                <label>
+                  Expiration date *
+                  <input
+                    type="date"
+                    value={driverLicenseForm.expiresOn}
+                    onChange={(e) =>
+                      setDriverLicenseForm((prev) => ({ ...prev, expiresOn: e.target.value }))
+                    }
+                  />
+                </label>
+                <label className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={driverLicenseForm.copyOnFile}
+                    onChange={(e) =>
+                      setDriverLicenseForm((prev) => ({ ...prev, copyOnFile: e.target.checked }))
+                    }
+                  />
+                  Is there a copy on file?
+                </label>
+                <div className="actions">
+                  <button
+                    className="ping"
+                    type="button"
+                    disabled={
+                      !driverLicenseForm.dlNumber.trim() || !driverLicenseForm.expiresOn.trim()
+                    }
+                    onClick={() => {
+                      setWorkerEdit((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              driver_license_number: driverLicenseForm.dlNumber.trim(),
+                              driver_license_expires_on: driverLicenseForm.expiresOn,
+                              driver_license_status: "valid",
+                              is_driver: true,
+                              dl_copy_on_file: driverLicenseForm.copyOnFile ? 1 : 0,
+                            }
+                          : prev,
+                      );
+                      setShowDriverLicenseModal(false);
+                    }}
+                  >
+                    Save
+                  </button>
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => {
+                      setWorkerEdit((prev) =>
+                        prev ? { ...prev, is_driver: false } : prev,
+                      );
+                      setShowDriverLicenseModal(false);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {dlReminderDrivers != null && dlReminderDrivers.length > 0 && (
+            <div className="modal-overlay">
+              <div className="modal">
+                <h3>Driver license copy reminder</h3>
+                <p className="muted">
+                  The following drivers have completed 3+ deliveries but do not have a DL copy on file. Please collect their DL copy.
+                </p>
+                <ul style={{ marginBottom: "1rem" }}>
+                  {dlReminderDrivers.map((d) => (
+                    <li key={d.id}>{d.name}</li>
+                  ))}
+                </ul>
+                <div className="actions">
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => setDlReminderDrivers(null)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {show7YearRetentionModal && workersDeletedOver7Years.length > 0 && (
+            <div className="modal-overlay">
+              <div className="modal">
+                <h3>7-year retention warning</h3>
+                <p className="muted">
+                  The following workers were deleted over 7 years ago and can be permanently removed from the database. This action cannot be undone.
+                </p>
+                <ul style={{ marginBottom: "1rem" }}>
+                  {workersDeletedOver7Years.map((u) => (
+                    <li key={u.id}>{u.name}</li>
+                  ))}
+                </ul>
+                <div className="actions">
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => {
+                      setShow7YearRetentionModal(false);
+                      setDismissed7YearRetentionModal(true);
+                    }}
+                  >
+                    Dismiss
+                  </button>
+                  <button
+                    className="ghost"
+                    type="button"
+                    style={{ color: "#b3261e" }}
+                    onClick={() => {
+                      setConfirmationModal({
+                        isOpen: true,
+                        title: "Permanently delete these workers?",
+                        message: `Permanently remove ${workersDeletedOver7Years.length} worker(s)? This cannot be undone.`,
+                        confirmLabel: "Permanently delete all",
+                        onConfirm: async () => {
+                          setConfirmationModal((m) => ({ ...m, isOpen: false }));
+                          setShow7YearRetentionModal(false);
+                          setDismissed7YearRetentionModal(true);
+                          setBusy(true);
+                          try {
+                            for (const u of workersDeletedOver7Years) {
+                              await invokeTauri("permanently_delete_user", {
+                                id: u.id,
+                                role: session?.role ?? null,
+                                actor: session?.username ?? null,
+                              });
+                            }
+                            await loadUsers(true);
+                            showToast("Workers permanently removed.");
+                          } catch (e) {
+                            showToast(
+                              e instanceof Error ? e.message : "Failed to permanently delete",
+                              "error",
+                            );
+                          } finally {
+                            setBusy(false);
+                          }
+                        },
+                      });
+                    }}
+                  >
+                    Permanently delete all ({workersDeletedOver7Years.length})
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <HouseholdSelectionModal
+            isOpen={showHouseholdSelectionModal}
+            onClose={() => setShowHouseholdSelectionModal(false)}
+            onSelect={(clientId) => {
+              setClientForm({ ...clientForm, household_id: clientId });
+              setShowHouseholdSelectionModal(false);
+            }}
+          />
         </>
       ) : (
         <>
@@ -8811,7 +9852,7 @@ function App() {
              </div>
           </div>
 
-          <div className="login-content">
+        <div className="login-content">
              {/* Left Column (60%) */}
              <div className="login-left-panel">
                 <div className="intro-section">
@@ -8823,7 +9864,7 @@ function App() {
                 </div>
                 
                 <div className="motd-section">
-                    <h3>Updates & Announcements</h3>
+                    <h3>Updates &amp; Announcements</h3>
                     <div className="motd-scroll-container">
                        {motdItems.length === 0 ? (
                          <p className="muted">No recent announcements.</p>
@@ -8863,338 +9904,6 @@ function App() {
         </div>
         </>
       )}
-      {session && showPasswordModal && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <h3>Change Password</h3>
-            {passwordError && (
-              <div className="pill" style={{ background: "#fbe2e2", color: "#b3261e" }}>
-                {passwordError}
-              </div>
-            )}
-            <form
-              className="stack"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                setPasswordError(null);
-                if (!passwordForm.current || !passwordForm.next) {
-                  setPasswordError("Current and new password are required.");
-                  return;
-                }
-                if (passwordForm.next !== passwordForm.confirm) {
-                  setPasswordError("New password and confirmation do not match.");
-                  return;
-                }
-                setBusy(true);
-                try {
-                  await invokeTauri("change_password", {
-                    input: {
-                      username: session.username,
-                      current_password: passwordForm.current,
-                      new_password: passwordForm.next,
-                    },
-                  });
-                  setPasswordForm({ current: "", next: "", confirm: "" });
-                  setShowPasswordModal(false);
-                } catch (err) {
-                  setPasswordError(typeof err === "string" ? err : "Failed to change password.");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <label>
-                Current Password
-                <input
-                  type="password"
-                  value={passwordForm.current}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
-                />
-              </label>
-              <label>
-                New Password
-                <input
-                  type="password"
-                  value={passwordForm.next}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
-                />
-              </label>
-              <label>
-                Confirm New Password
-                <input
-                  type="password"
-                  value={passwordForm.confirm}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
-                />
-              </label>
-              <div className="actions">
-                <button className="ping" type="submit" disabled={busy}>
-                  {busy ? "Saving..." : "Update Password"}
-                </button>
-                <button
-                  className="ghost"
-                  type="button"
-                  onClick={() => {
-                    setShowPasswordModal(false);
-                    setPasswordForm({ current: "", next: "", confirm: "" });
-                    setPasswordError(null);
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-      {session && showCommunicationForm && selectedClientForDetail && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <h3>Record Communication - {selectedClientForDetail.name}</h3>
-            <form
-              className="stack"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                setBusy(true);
-                try {
-                  await invokeTauri("create_client_communication", {
-                    input: {
-                      client_id: selectedClientForDetail.id,
-                      communication_type: communicationForm.communication_type,
-                      direction: communicationForm.direction,
-                      subject: communicationForm.subject.trim() || null,
-                      message: communicationForm.message.trim() || null,
-                      contacted_by_user_id: session.username || session.userId || null,
-                      notes: communicationForm.notes.trim() || null,
-                    },
-                    role: session.role,
-                    actor: session.username || session.userId || "",
-                  });
-                  await loadClientCommunications(selectedClientForDetail.id);
-                  setShowCommunicationForm(false);
-                  setCommunicationForm({
-                    communication_type: "phone",
-                    direction: "outbound",
-                    subject: "",
-                    message: "",
-                    notes: "",
-                  });
-                } catch (err) {
-                  alert(typeof err === "string" ? err : "Failed to record communication.");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <label>
-                Communication Type
-                <select
-                  value={communicationForm.communication_type}
-                  onChange={(e) =>
-                    setCommunicationForm({ ...communicationForm, communication_type: e.target.value })
-                  }
-                >
-                  <option value="email">Email</option>
-                  <option value="phone">Phone</option>
-                  <option value="mail">Mail</option>
-                  <option value="in_person">In Person</option>
-                  <option value="other">Other</option>
-                </select>
-              </label>
-              <label>
-                Direction
-                <select
-                  value={communicationForm.direction}
-                  onChange={(e) =>
-                    setCommunicationForm({ ...communicationForm, direction: e.target.value })
-                  }
-                >
-                  <option value="inbound">Inbound</option>
-                  <option value="outbound">Outbound</option>
-                </select>
-              </label>
-              <label>
-                Subject
-                <input
-                  value={communicationForm.subject}
-                  onChange={(e) =>
-                    setCommunicationForm({ ...communicationForm, subject: e.target.value })
-                  }
-                  placeholder="Brief subject or topic"
-                />
-              </label>
-              <label>
-                Message/Summary
-                <textarea
-                  value={communicationForm.message}
-                  onChange={(e) =>
-                    setCommunicationForm({ ...communicationForm, message: e.target.value })
-                  }
-                  rows={4}
-                  placeholder="Summary of the communication"
-                />
-              </label>
-              <label>
-                Notes
-                <textarea
-                  value={communicationForm.notes}
-                  onChange={(e) =>
-                    setCommunicationForm({ ...communicationForm, notes: e.target.value })
-                  }
-                  rows={2}
-                  placeholder="Additional notes"
-                />
-              </label>
-              <div className="actions">
-                <button className="ping" type="submit" disabled={busy}>
-                  {busy ? "Saving..." : "Record Communication"}
-                </button>
-                <button
-                  className="ghost"
-                  type="button"
-                  onClick={() => {
-                    setShowCommunicationForm(false);
-                    setCommunicationForm({
-                      communication_type: "phone",
-                      direction: "outbound",
-                      subject: "",
-                      message: "",
-                      notes: "",
-                    });
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-      {session && showFeedbackForm && selectedClientForDetail && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <h3>Record Feedback - {selectedClientForDetail.name}</h3>
-            <form
-              className="stack"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                setBusy(true);
-                try {
-                  await invokeTauri("create_client_feedback", {
-                    input: {
-                      client_id: selectedClientForDetail.id,
-                      work_order_id: feedbackForm.work_order_id.trim() || null,
-                      feedback_type: feedbackForm.feedback_type,
-                      rating: feedbackForm.rating || null,
-                      comments: feedbackForm.comments.trim() || null,
-                    },
-                  });
-                  await loadClientFeedback(selectedClientForDetail.id);
-                  setShowFeedbackForm(false);
-                  setFeedbackForm({
-                    feedback_type: "satisfaction",
-                    rating: 5,
-                    comments: "",
-                    work_order_id: "",
-                  });
-                } catch (err) {
-                  alert(typeof err === "string" ? err : "Failed to record feedback.");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <label>
-                Feedback Type
-                <select
-                  value={feedbackForm.feedback_type}
-                  onChange={(e) =>
-                    setFeedbackForm({ ...feedbackForm, feedback_type: e.target.value })
-                  }
-                >
-                  <option value="satisfaction">Satisfaction</option>
-                  <option value="complaint">Complaint</option>
-                  <option value="suggestion">Suggestion</option>
-                  <option value="compliment">Compliment</option>
-                </select>
-              </label>
-              {feedbackForm.feedback_type === "satisfaction" && (
-                <label>
-                  Rating (1-5)
-                  <input
-                    type="number"
-                    min="1"
-                    max="5"
-                    value={feedbackForm.rating}
-                    onChange={(e) =>
-                      setFeedbackForm({ ...feedbackForm, rating: parseInt(e.target.value) || 5 })
-                    }
-                  />
-                </label>
-              )}
-              <label>
-                Work Order ID (Optional)
-                <input
-                  value={feedbackForm.work_order_id}
-                  onChange={(e) =>
-                    setFeedbackForm({ ...feedbackForm, work_order_id: e.target.value })
-                  }
-                  placeholder="If related to specific delivery"
-                />
-              </label>
-              <label>
-                Comments
-                <textarea
-                  value={feedbackForm.comments}
-                  onChange={(e) =>
-                    setFeedbackForm({ ...feedbackForm, comments: e.target.value })
-                  }
-                  rows={4}
-                  placeholder="Client feedback details"
-                  required
-                />
-              </label>
-              <div className="actions">
-                <button className="ping" type="submit" disabled={busy}>
-                  {busy ? "Saving..." : "Record Feedback"}
-                </button>
-                <button
-                  className="ghost"
-                  type="button"
-                  onClick={() => {
-                    setShowFeedbackForm(false);
-                    setFeedbackForm({
-                      feedback_type: "satisfaction",
-                      rating: 5,
-                      comments: "",
-                      work_order_id: "",
-                    });
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Toast Notification */}
-      <ToastNotification
-        toast={toast}
-        onClose={() => setToast(null)}
-      />
-
-      {/* Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={confirmationModal.isOpen}
-        title={confirmationModal.title}
-        message={confirmationModal.message}
-        confirmLabel={confirmationModal.confirmLabel}
-        onConfirm={confirmationModal.onConfirm}
-        onCancel={() => setConfirmationModal({ ...confirmationModal, isOpen: false })}
-        confirmButtonStyle={{ background: "#b3261e", color: "white" }}
-      />
     </div>
   );
 }

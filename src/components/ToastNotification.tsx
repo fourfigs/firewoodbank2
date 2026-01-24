@@ -17,7 +17,7 @@ interface ToastNotificationProps {
 export default function ToastNotification({
   toast,
   onClose,
-  duration = 4000,
+  duration = 10000,
 }: ToastNotificationProps) {
   useEffect(() => {
     if (toast) {

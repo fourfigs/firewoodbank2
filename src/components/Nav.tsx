@@ -1,7 +1,9 @@
+import type { TabId } from "../App";
+
 type NavProps = {
-  tabs: string[];
-  activeTab: string;
-  onSelect: (tab: string) => void;
+  tabs: TabId[];
+  activeTab: TabId;
+  onSelect: (tab: TabId) => void;
 };
 
 export function Nav({ tabs, activeTab, onSelect }: NavProps) {

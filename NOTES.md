@@ -72,7 +72,9 @@ Keep names and types consistent so we can map to a future Postgres backend.
 
 NEW NOTES 1/22
 DASHBOARD- when clicking the plus to add an event, have the scheduling slide in under the calendar
-    should say Notes From the Team (this is the MOTD)
+
+    change notes from the team to Updates
+
 PROFILE- make the information display in a more friendly layout. have the new friendly layout with the current info on the left and work history/upcoming deliveries and user stats above that
 Clients Tab-
     if profile details are open and you do anything else (change tabs, open another client, create a new client, etc) close the details pane. this should apply any time you open a details pane so include workorders and workers and any other details.
@@ -117,6 +119,8 @@ WORKORDERS
 
     when a workorder is made for a client who is also a worker, track the amount of wood tracked in the worker and client profile.
 
+    make the workorder number convention be Month 3 letter abbreviation (example Dec)last 2 of year (example 25) then the number of the order sequential as 2 integers (example 01 for the first order 34 for the 34th order) so it is mmmyy##
+
 METRICS
     estimated value should be calculated differently, each cord of split wood is worth $450, unsplit is ??$250?? (see if you can locate info for this number)
 
@@ -137,3 +141,34 @@ WORKER DIRECTORY
     worker onboardiung should have first, last, DOB, physical address, mailing address same checkbox (mailing address fields showing only if unchecked), DOB, and the driver/hippa information.
 
     anyone who is a driver should have a special color, same with hipaa certified. if both, top half one and bottom the other color to show they have both
+
+    each worker should be displayed like the first 2 lines :
+        -Name Bold, phone, credentials, schedule, hours, view details
+    
+    in the details sidebar, include a work history at the bottom.
+
+    admin and staff should see an add hours button on everyone aside from admins
+
+    each volunteer hour can be counted as $31 in kind donation, tracked in metrics as in-kind volunteer hours. These are seperate from any in-kind hours from admin, staff, employees. a checkbox on add hours to declare inkind if checked
+
+    profiles should have a dispute hours
+
+    profiles can build a wood credit if they are a client and a volunteer. 10 hours is equal to a cord of wood (for now). Track this as a volunteer wood credit and convert the hours to cords to the hundredths
+REPORTS
+    clean up the reports. it only needs to track changes, not when pages are listed.
+
+    rename the reports with clear names for people to understand
+
+    only visible to staff/admin
+
+ADMIN
+    MOTD is now updates, and can be added from dashboard if staff or admin. Only add Updates from a + on the Notes from the Team
+
+    change requests should be in a staff tab only visible for staff/admin.
+
+    make the admin tab contain admin duties
+
+STAFF
+    Make a staff page with staff things
+
+always remember to commit each section, and push with each section (staff, admin, workers....etc) completion.

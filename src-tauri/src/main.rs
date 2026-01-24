@@ -4,6 +4,7 @@ mod db;
 mod sync;
 
 use anyhow::Result;
+use chrono::Datelike;
 use db::init_pool;
 use sync::{SyncRecord, SyncService};
 use bcrypt::{hash, verify, DEFAULT_COST};
@@ -376,6 +377,13 @@ struct ClientInput {
     wood_size_other: Option<String>,
     directions: Option<String>,
     created_by_user_id: Option<String>,
+    // Household and DOB fields
+    household_id: Option<String>,
+    date_of_birth: Option<String>,
+    is_minor: Option<bool>,
+    parent_name: Option<String>,
+    parent_phone: Option<String>,
+    parent_email: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -428,6 +436,13 @@ struct ClientUpdateInput {
     wood_size_label: Option<String>,
     wood_size_other: Option<String>,
     directions: Option<String>,
+    // Household and DOB fields
+    household_id: Option<String>,
+    date_of_birth: Option<String>,
+    is_minor: Option<bool>,
+    parent_name: Option<String>,
+    parent_phone: Option<String>,
+    parent_email: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -478,6 +493,13 @@ struct ClientRow {
     approval_expires_on: Option<String>,
     last_reapproval_date: Option<String>,
     requires_reapproval: Option<i32>,
+    // Household and DOB fields
+    household_id: Option<String>,
+    date_of_birth: Option<String>,
+    is_minor: Option<i32>, // SQLite stores as INTEGER
+    parent_name: Option<String>,
+    parent_phone: Option<String>,
+    parent_email: Option<String>,
 }
 
 #[derive(Debug, FromRow)]
@@ -657,6 +679,7 @@ struct WorkOrderInput {
 #[derive(Debug, Serialize, FromRow)]
 struct WorkOrderRow {
     id: String,
+    work_order_number: Option<String>,
     client_name: String,
     status: String,
     scheduled_date: Option<String>,
@@ -726,6 +749,9 @@ struct UserRow {
     vehicle: Option<String>,
     hipaa_certified: i64,
     is_driver: i64,
+    dl_copy_on_file: i64,
+    notes: Option<String>,
+    deleted_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -867,6 +893,54 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
     let opt_out_email_val = input.opt_out_email.unwrap_or(false) as i32;
     let requires_reapproval_val = input.requires_reapproval.unwrap_or(false) as i32;
 
+    // Validate household_id exists if provided
+    if let Some(ref household_id) = input.household_id {
+        if !household_id.is_empty() {
+            let household_exists = sqlx::query_scalar::<_, i32>(
+                "SELECT COUNT(*) FROM clients WHERE id = ? AND is_deleted = 0"
+            )
+            .bind(household_id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(|e| e.to_string())?;
+            
+            if household_exists == 0 {
+                return Err(format!("Household ID '{}' does not exist.", household_id));
+            }
+        }
+    }
+
+    // Calculate is_minor from date_of_birth if provided
+    let mut is_minor = input.is_minor.unwrap_or(false);
+    if let Some(ref dob_str) = input.date_of_birth {
+        if !dob_str.is_empty() {
+            // Parse date of birth (format: YYYY-MM-DD)
+            if let Ok(dob) = chrono::NaiveDate::parse_from_str(dob_str, "%Y-%m-%d") {
+                let today = chrono::Utc::now().date_naive();
+                let age = today.year() - dob.year();
+                let age_adjusted = if today.month() < dob.month() || 
+                    (today.month() == dob.month() && today.day() < dob.day()) {
+                    age - 1
+                } else {
+                    age
+                };
+                is_minor = age_adjusted < 18;
+            }
+        }
+    }
+
+    // Require parent fields if is_minor is true
+    if is_minor {
+        if input.parent_name.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+            return Err("Parent name is required for minors.".to_string());
+        }
+        if input.parent_phone.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+            return Err("Parent phone is required for minors.".to_string());
+        }
+    }
+
+    let is_minor_val = is_minor as i32;
+
     let query = r#"
         INSERT INTO clients (
             id, client_title, name,
@@ -884,6 +958,8 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
             approval_expires_on, last_reapproval_date, requires_reapproval,
             denial_reason, gate_combo, notes,
             wood_size_label, wood_size_other, directions,
+            household_id, date_of_birth, is_minor,
+            parent_name, parent_phone, parent_email,
             created_by_user_id
         )
         VALUES (
@@ -898,6 +974,8 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
             ?, ?, ?,
             ?, ?, ?, ?,
             ?,
+            ?, ?, ?,
+            ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?,
@@ -948,6 +1026,12 @@ async fn create_client(state: State<'_, AppState>, input: ClientInput) -> Result
         .bind(&input.wood_size_label)
         .bind(&input.wood_size_other)
         .bind(&input.directions)
+        .bind(&input.household_id)
+        .bind(&input.date_of_birth)
+        .bind(is_minor_val)
+        .bind(&input.parent_name)
+        .bind(&input.parent_phone)
+        .bind(&input.parent_email)
         .bind(&input.created_by_user_id)
         .execute(&state.pool)
         .await
@@ -1008,7 +1092,13 @@ async fn list_clients(
             approved_by_user_id,
             approval_expires_on,
             last_reapproval_date,
-            requires_reapproval
+            requires_reapproval,
+            household_id,
+            date_of_birth,
+            is_minor,
+            parent_name,
+            parent_phone,
+            parent_email
         FROM clients
         WHERE is_deleted = 0
         ORDER BY COALESCE(date_of_onboarding, created_at) ASC
@@ -1081,6 +1171,100 @@ async fn list_clients(
 }
 
 #[tauri::command]
+async fn list_clients_for_household(
+    state: State<'_, AppState>,
+    search: Option<String>,
+) -> Result<Vec<ClientRow>, String> {
+    let search_term = search.unwrap_or_default();
+    let search_lower = search_term.to_lowercase();
+    
+    let mut query = r#"
+        SELECT
+            id,
+            name,
+            email,
+            telephone,
+            opt_out_email,
+            approval_status,
+            date_of_onboarding,
+            how_did_they_hear_about_us,
+            referring_agency,
+            denial_reason,
+            physical_address_line1,
+            physical_address_line2,
+            physical_address_city,
+            physical_address_state,
+            physical_address_postal_code,
+            mailing_address_line1,
+            mailing_address_line2,
+            mailing_address_city,
+            mailing_address_state,
+            mailing_address_postal_code,
+            gate_combo,
+            notes,
+            wood_size_label,
+            wood_size_other,
+            directions,
+            created_at,
+            default_mileage,
+            emergency_contact_name,
+            emergency_contact_phone,
+            emergency_contact_relationship,
+            household_size,
+            household_income_range,
+            household_composition,
+            preferred_delivery_times,
+            delivery_restrictions,
+            preferred_driver_id,
+            seasonal_delivery_pattern,
+            approval_date,
+            approved_by_user_id,
+            approval_expires_on,
+            last_reapproval_date,
+            requires_reapproval,
+            household_id,
+            date_of_birth,
+            is_minor,
+            parent_name,
+            parent_phone,
+            parent_email
+        FROM clients
+        WHERE is_deleted = 0
+    "#.to_string();
+    
+    if !search_lower.is_empty() {
+        query.push_str(
+            r#"
+            AND (
+                lower(name) LIKE '%' || ? || '%'
+                OR lower(physical_address_line1) LIKE '%' || ? || '%'
+                OR lower(physical_address_city) LIKE '%' || ? || '%'
+                OR lower(physical_address_state) LIKE '%' || ? || '%'
+            )
+        "#
+        );
+    }
+    
+    query.push_str(" ORDER BY name ASC LIMIT 50");
+    
+    let mut query_builder = sqlx::query_as::<_, ClientRow>(&query);
+    if !search_lower.is_empty() {
+        query_builder = query_builder
+            .bind(&search_lower)
+            .bind(&search_lower)
+            .bind(&search_lower)
+            .bind(&search_lower);
+    }
+    
+    let rows = query_builder
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    Ok(rows)
+}
+
+#[tauri::command]
 async fn update_client(
     state: State<'_, AppState>,
     input: ClientUpdateInput,
@@ -1139,6 +1323,54 @@ async fn update_client(
 
     let opt_out_email_val = input.opt_out_email.unwrap_or(false) as i32;
     let requires_reapproval_val = input.requires_reapproval.unwrap_or(false) as i32;
+
+    // Validate household_id exists if provided
+    if let Some(ref household_id) = input.household_id {
+        if !household_id.is_empty() && household_id != &input.id {
+            let household_exists = sqlx::query_scalar::<_, i32>(
+                "SELECT COUNT(*) FROM clients WHERE id = ? AND is_deleted = 0"
+            )
+            .bind(household_id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(|e| e.to_string())?;
+            
+            if household_exists == 0 {
+                return Err(format!("Household ID '{}' does not exist.", household_id));
+            }
+        }
+    }
+
+    // Calculate is_minor from date_of_birth if provided
+    let mut is_minor = input.is_minor.unwrap_or(false);
+    if let Some(ref dob_str) = input.date_of_birth {
+        if !dob_str.is_empty() {
+            // Parse date of birth (format: YYYY-MM-DD)
+            if let Ok(dob) = chrono::NaiveDate::parse_from_str(dob_str, "%Y-%m-%d") {
+                let today = chrono::Utc::now().date_naive();
+                let age = today.year() - dob.year();
+                let age_adjusted = if today.month() < dob.month() || 
+                    (today.month() == dob.month() && today.day() < dob.day()) {
+                    age - 1
+                } else {
+                    age
+                };
+                is_minor = age_adjusted < 18;
+            }
+        }
+    }
+
+    // Require parent fields if is_minor is true
+    if is_minor {
+        if input.parent_name.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+            return Err("Parent name is required for minors.".to_string());
+        }
+        if input.parent_phone.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+            return Err("Parent phone is required for minors.".to_string());
+        }
+    }
+
+    let is_minor_val = is_minor as i32;
     
     // Track approval status change for history
     let old_status = existing.as_ref().map(|e| e.approval_status.clone());
@@ -1201,6 +1433,12 @@ async fn update_client(
             wood_size_label = ?,
             wood_size_other = ?,
             directions = ?,
+            household_id = ?,
+            date_of_birth = ?,
+            is_minor = ?,
+            parent_name = ?,
+            parent_phone = ?,
+            parent_email = ?,
             updated_at = datetime('now')
         WHERE id = ?
     "#;
@@ -1248,6 +1486,12 @@ async fn update_client(
         .bind(&input.wood_size_label)
         .bind(&input.wood_size_other)
         .bind(&input.directions)
+        .bind(&input.household_id)
+        .bind(&input.date_of_birth)
+        .bind(is_minor_val)
+        .bind(&input.parent_name)
+        .bind(&input.parent_phone)
+        .bind(&input.parent_email)
         .bind(&input.id)
         .execute(&state.pool)
         .await
@@ -1715,6 +1959,7 @@ async fn delete_user(
         r#"
         UPDATE users
         SET is_deleted = 1,
+            deleted_at = datetime('now'),
             updated_at = datetime('now')
         WHERE id = ?
         "#,
@@ -1737,6 +1982,64 @@ async fn delete_user(
     .await
     .map_err(|e| e.to_string())?;
 
+    Ok(())
+}
+
+#[tauri::command]
+async fn permanently_delete_user(
+    state: State<'_, AppState>,
+    id: String,
+    role: Option<String>,
+    actor: Option<String>,
+) -> Result<(), String> {
+    let role_val = role.unwrap_or_else(|| "admin".to_string()).to_lowercase();
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
+    if role_val != "admin" && role_val != "lead" {
+        return Err("Only admins or leads can permanently delete users".to_string());
+    }
+
+    #[derive(Debug, sqlx::FromRow)]
+    struct DeletedCheck {
+        is_deleted: i32,
+        deleted_at: Option<String>,
+    }
+    let r = sqlx::query_as::<_, DeletedCheck>("SELECT is_deleted, deleted_at FROM users WHERE id = ?")
+        .bind(&id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("User not found")?;
+
+    if r.is_deleted != 1 {
+        return Err("User is not deleted; soft-delete first".to_string());
+    }
+    let deleted_at = r
+        .deleted_at
+        .as_deref()
+        .ok_or("User has no deleted_at; cannot permanently delete")?;
+    let deleted = chrono::NaiveDateTime::parse_from_str(&deleted_at, "%Y-%m-%d %H:%M:%S")
+        .or_else(|_| chrono::NaiveDateTime::parse_from_str(&deleted_at, "%Y-%m-%dT%H:%M:%S"))
+        .or_else(|_| {
+            chrono::NaiveDate::parse_from_str(&deleted_at, "%Y-%m-%d")
+                .map(|d| d.and_hms_opt(0, 0, 0).expect("valid time"))
+        })
+        .map_err(|_| "Invalid deleted_at format".to_string())?;
+    let cutoff = chrono::Utc::now().naive_utc() - chrono::Duration::days(7 * 365);
+    if deleted > cutoff {
+        return Err("User was deleted less than 7 years ago; cannot permanently delete yet".to_string());
+    }
+
+    audit_db(&state.pool, "permanently_delete_user", &role_val, &actor_val).await;
+    sqlx::query("DELETE FROM auth_users WHERE user_id = ?")
+        .bind(&id)
+        .execute(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(&id)
+        .execute(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -2129,6 +2432,51 @@ async fn apply_work_order_schedule_tx(
     })
 }
 
+// Generate work order number in format mmmyy## (e.g., Dec2501)
+async fn generate_work_order_number(pool: &SqlitePool, created_at: &str) -> Result<String, String> {
+    use chrono::Datelike;
+    
+    // Parse the created_at date (SQLite datetime format)
+    let date = chrono::NaiveDateTime::parse_from_str(created_at, "%Y-%m-%d %H:%M:%S")
+        .or_else(|_| {
+            chrono::NaiveDate::parse_from_str(created_at, "%Y-%m-%d")
+                .map(|d| d.and_hms_opt(0, 0, 0).unwrap())
+        })
+        .map_err(|_| "Invalid date format".to_string())?;
+    
+    let month_abbr = match date.month() {
+        1 => "Jan", 2 => "Feb", 3 => "Mar", 4 => "Apr", 5 => "May", 6 => "Jun",
+        7 => "Jul", 8 => "Aug", 9 => "Sep", 10 => "Oct", 11 => "Nov", 12 => "Dec",
+        _ => return Err("Invalid month".to_string()),
+    };
+    
+    let year_short = format!("{:02}", date.year() % 100);
+    
+    // Count work orders created in the same month
+    let month_start = format!("{}-{:02}-01 00:00:00", date.year(), date.month());
+    let month_end = if date.month() == 12 {
+        format!("{}-01-01 00:00:00", date.year() + 1)
+    } else {
+        format!("{}-{:02}-01 00:00:00", date.year(), date.month() + 1)
+    };
+    
+    let count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*) 
+        FROM work_orders 
+        WHERE created_at >= ? AND created_at < ? AND is_deleted = 0
+        "#
+    )
+    .bind(&month_start)
+    .bind(&month_end)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    
+    let sequence = format!("{:02}", count + 1);
+    Ok(format!("{}{}{}", month_abbr, year_short, sequence))
+}
+
 #[tauri::command]
 async fn create_work_order(
     state: State<'_, AppState>,
@@ -2136,6 +2484,8 @@ async fn create_work_order(
     role: Option<String>,
 ) -> Result<String, String> {
     let id = Uuid::new_v4().to_string();
+    let created_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let work_order_number = generate_work_order_number(&state.pool, &created_at).await?;
     let mut status = input.status.unwrap_or_else(|| "draft".to_string());
     if input.scheduled_date.is_some() {
         let status_lower = status.to_lowercase();
@@ -2156,7 +2506,7 @@ async fn create_work_order(
 
     let query = r#"
         INSERT INTO work_orders (
-            id, client_id, client_title, client_name,
+            id, work_order_number, client_id, client_title, client_name,
             physical_address_line1, physical_address_line2, physical_address_city,
             physical_address_state, physical_address_postal_code,
             mailing_address_line1, mailing_address_line2, mailing_address_city,
@@ -2173,7 +2523,7 @@ async fn create_work_order(
             paired_order_id
         )
         VALUES (
-            ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
             ?, ?, ?,
             ?, ?,
             ?, ?, ?,
@@ -2198,6 +2548,7 @@ async fn create_work_order(
 
     sqlx::query(query)
         .bind(&id)
+        .bind(&work_order_number)
         .bind(&input.client_id)
         .bind(&input.client_title)
         .bind(&input.client_name)
@@ -2360,6 +2711,7 @@ async fn list_work_orders(
         r#"
         SELECT
             id,
+            work_order_number,
             client_name,
             status,
             scheduled_date,
@@ -2588,8 +2940,17 @@ async fn create_delivery_event(
 }
 
 #[tauri::command]
-async fn list_users(state: State<'_, AppState>) -> Result<Vec<UserRow>, String> {
-    let rows = sqlx::query_as::<_, UserRow>(
+async fn list_users(
+    state: State<'_, AppState>,
+    include_deleted: Option<bool>,
+) -> Result<Vec<UserRow>, String> {
+    let show_deleted = include_deleted.unwrap_or(false);
+    let filter = if show_deleted {
+        "1=1"
+    } else {
+        "is_deleted = 0"
+    };
+    let query_str = format!(
         r#"
         SELECT
             id,
@@ -2614,15 +2975,20 @@ async fn list_users(state: State<'_, AppState>) -> Result<Vec<UserRow>, String> 
             driver_license_expires_on,
             vehicle,
             COALESCE(hipaa_certified, 0) as hipaa_certified,
-            COALESCE(is_driver, 0) as is_driver
+            COALESCE(is_driver, 0) as is_driver,
+            COALESCE(dl_copy_on_file, 0) as dl_copy_on_file,
+            notes,
+            deleted_at
         FROM users
-        WHERE is_deleted = 0
+        WHERE {}
         ORDER BY name ASC
         "#,
-    )
-    .fetch_all(&state.pool)
-    .await
-    .map_err(|e| e.to_string())?;
+        filter
+    );
+    let rows = sqlx::query_as::<_, UserRow>(&query_str)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     audit_db(&state.pool, "list_users", "unknown", "unknown").await;
     Ok(rows)
@@ -2955,6 +3321,12 @@ struct BudgetCategoryRow {
     is_active: i64,
 }
 
+#[derive(Debug, Deserialize)]
+struct BudgetCategoryUpdateInput {
+    id: String,
+    annual_budget: Option<f64>,
+}
+
 #[derive(Debug, Serialize, FromRow)]
 struct WorkOrderStatusHistoryRow {
     id: String,
@@ -3019,6 +3391,32 @@ struct DriverAvailabilityRow {
     availability_schedule: Option<String>,
 }
 
+#[derive(Debug, sqlx::FromRow)]
+struct UserFlagsExistingRow {
+    email: Option<String>,
+    telephone: Option<String>,
+    physical_address_line1: Option<String>,
+    physical_address_line2: Option<String>,
+    physical_address_city: Option<String>,
+    physical_address_state: Option<String>,
+    physical_address_postal_code: Option<String>,
+    mailing_address_line1: Option<String>,
+    mailing_address_line2: Option<String>,
+    mailing_address_city: Option<String>,
+    mailing_address_state: Option<String>,
+    mailing_address_postal_code: Option<String>,
+    availability_notes: Option<String>,
+    availability_schedule: Option<String>,
+    driver_license_status: Option<String>,
+    driver_license_number: Option<String>,
+    driver_license_expires_on: Option<String>,
+    vehicle: Option<String>,
+    hipaa_certified: i32,
+    is_driver: i32,
+    dl_copy_on_file: i32,
+    notes: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 struct UserUpdateInput {
     id: String,
@@ -3042,6 +3440,8 @@ struct UserUpdateInput {
     vehicle: Option<String>,
     hipaa_certified: Option<bool>,
     is_driver: Option<bool>,
+    dl_copy_on_file: Option<bool>,
+    notes: Option<String>,
 }
 
 #[tauri::command]
@@ -3107,7 +3507,7 @@ async fn update_user_flags(
     }
     audit_db(&state.pool, "update_user_flags", &role_val, &actor_val).await;
 
-    let existing = sqlx::query!(
+    let existing = sqlx::query_as::<_, UserFlagsExistingRow>(
         r#"
         SELECT email, telephone,
                physical_address_line1, physical_address_line2, physical_address_city,
@@ -3116,12 +3516,16 @@ async fn update_user_flags(
                mailing_address_state, mailing_address_postal_code,
                availability_notes, availability_schedule,
                driver_license_status, driver_license_number, driver_license_expires_on,
-               vehicle, hipaa_certified, is_driver
+               vehicle,
+               COALESCE(hipaa_certified, 0) as hipaa_certified,
+               COALESCE(is_driver, 0) as is_driver,
+               COALESCE(dl_copy_on_file, 0) as dl_copy_on_file,
+               notes
         FROM users
         WHERE id = ? AND is_deleted = 0
         "#,
-        input.id
     )
+    .bind(&input.id)
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -3138,8 +3542,10 @@ async fn update_user_flags(
         .filter(|s| !s.is_empty());
 
     let wants_driver = input.is_driver.unwrap_or(false);
+    let dl_copy = input.dl_copy_on_file.unwrap_or(false);
     let final_is_driver = wants_driver && status_clean.is_some() && expiry_clean.is_some();
     let hipaa = input.hipaa_certified.unwrap_or(false);
+    let notes_clean = input.notes.as_ref().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
 
     sqlx::query(
         r#"
@@ -3164,6 +3570,8 @@ async fn update_user_flags(
             vehicle = ?,
             hipaa_certified = ?,
             is_driver = ?,
+            dl_copy_on_file = ?,
+            notes = ?,
             updated_at = datetime('now')
         WHERE id = ?
         "#,
@@ -3188,6 +3596,8 @@ async fn update_user_flags(
     .bind(&input.vehicle)
     .bind(if hipaa { 1 } else { 0 })
     .bind(if final_is_driver { 1 } else { 0 })
+    .bind(if dl_copy { 1 } else { 0 })
+    .bind(&notes_clean)
     .bind(&input.id)
     .execute(&state.pool)
     .await
@@ -3237,9 +3647,159 @@ async fn update_user_flags(
         log_field("vehicle", prev.vehicle, input.vehicle.clone());
         log_field("hipaa_certified", Some(prev.hipaa_certified.to_string()), Some(hipaa.to_string()));
         log_field("is_driver", Some(prev.is_driver.to_string()), Some(final_is_driver.to_string()));
+        log_field(
+            "dl_copy_on_file",
+            Some(prev.dl_copy_on_file.to_string()),
+            Some((if dl_copy { 1 } else { 0 }).to_string()),
+        );
+        log_field("notes", prev.notes.clone(), notes_clean.clone());
     }
 
     Ok(())
+}
+
+#[derive(Debug, Serialize)]
+struct DriverDlReminderRow {
+    id: String,
+    name: String,
+}
+
+#[tauri::command]
+async fn count_completed_deliveries_by_driver(
+    state: State<'_, AppState>,
+    user_id: String,
+) -> Result<i64, String> {
+    let name_row = sqlx::query_scalar::<_, String>("SELECT name FROM users WHERE id = ? AND is_deleted = 0")
+        .bind(&user_id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    let driver_name = name_row.ok_or("User not found")?;
+
+    let rows = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT COALESCE(assignees_json, '[]')
+        FROM work_orders
+        WHERE is_deleted = 0
+          AND status IN ('completed', 'delivered')
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut count: i64 = 0;
+    for json in rows {
+        let assignees: Vec<String> = serde_json::from_str(&json).unwrap_or_default();
+        if assignees.iter().any(|a| a.eq_ignore_ascii_case(&driver_name)) {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
+#[tauri::command]
+async fn check_driver_dl_reminder(state: State<'_, AppState>) -> Result<Vec<DriverDlReminderRow>, String> {
+    let drivers = sqlx::query_as::<_, (String, String)>(
+        r#"
+        SELECT id, name
+        FROM users
+        WHERE is_deleted = 0 AND is_driver = 1
+          AND COALESCE(dl_copy_on_file, 0) = 0
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let rows = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT COALESCE(assignees_json, '[]')
+        FROM work_orders
+        WHERE is_deleted = 0 AND status IN ('completed', 'delivered')
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut completed_by_name: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    for json in rows {
+        let assignees: Vec<String> = serde_json::from_str(&json).unwrap_or_default();
+        for a in assignees {
+            *completed_by_name.entry(a.to_lowercase()).or_insert(0) += 1;
+        }
+    }
+
+    let mut out = Vec::new();
+    for (id, name) in drivers {
+        let n = completed_by_name.get(&name.to_lowercase()).copied().unwrap_or(0);
+        if n >= 3 {
+            out.push(DriverDlReminderRow { id, name });
+        }
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+async fn revoke_driver_if_no_copy(
+    state: State<'_, AppState>,
+    user_id: String,
+) -> Result<bool, String> {
+    #[derive(Debug, sqlx::FromRow)]
+    struct RevokeCheck {
+        is_driver: i32,
+        dl_copy_on_file: i32,
+        name: String,
+    }
+    let r = sqlx::query_as::<_, RevokeCheck>(
+        "SELECT is_driver, COALESCE(dl_copy_on_file, 0) as dl_copy_on_file, name FROM users WHERE id = ? AND is_deleted = 0",
+    )
+    .bind(&user_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let r = match r {
+        None => return Ok(false),
+        Some(r) => r,
+    };
+    if r.is_driver != 1 {
+        return Ok(false);
+    }
+    if r.dl_copy_on_file != 0 {
+        return Ok(false);
+    }
+    let driver_name = r.name;
+
+    let rows = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT COALESCE(assignees_json, '[]')
+        FROM work_orders
+        WHERE is_deleted = 0 AND status IN ('completed', 'delivered')
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut count: i64 = 0;
+    for json in rows {
+        let assignees: Vec<String> = serde_json::from_str(&json).unwrap_or_default();
+        if assignees.iter().any(|a| a.eq_ignore_ascii_case(&driver_name)) {
+            count += 1;
+        }
+    }
+    if count < 3 {
+        return Ok(false);
+    }
+
+    sqlx::query("UPDATE users SET is_driver = 0, updated_at = datetime('now') WHERE id = ?")
+        .bind(&user_id)
+        .execute(&state.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(true)
 }
 
 #[derive(Debug, Deserialize)]
@@ -4571,6 +5131,46 @@ async fn list_budget_categories(state: State<'_, AppState>) -> Result<Vec<Budget
 }
 
 #[tauri::command]
+async fn update_budget_category(
+    state: State<'_, AppState>,
+    input: BudgetCategoryUpdateInput,
+    role: Option<String>,
+    actor: Option<String>,
+) -> Result<(), String> {
+    let role_val = role.unwrap_or_else(|| "unknown".to_string()).to_lowercase();
+    let actor_val = actor.unwrap_or_else(|| "unknown".to_string());
+
+    // Only admins, leads, and staff can edit budgets
+    if role_val != "admin" && role_val != "lead" && role_val != "staff" {
+        return Err("Only admins, leads, or staff can edit budgets.".to_string());
+    }
+
+    audit_db(
+        &state.pool,
+        "update_budget_category",
+        &role_val,
+        &actor_val,
+    )
+    .await;
+
+    sqlx::query(
+        r#"
+        UPDATE budget_categories
+        SET annual_budget = ?,
+            updated_at = datetime('now')
+        WHERE id = ? AND is_deleted = 0
+        "#,
+    )
+    .bind(input.annual_budget)
+    .bind(&input.id)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn list_work_order_status_history(
     state: State<'_, AppState>,
     work_order_id: Option<String>,
@@ -4854,6 +5454,7 @@ async fn list_audit_logs(
             SELECT id, event, role, actor, entity, entity_id, field, old_value, new_value, created_at
             FROM audit_logs
             WHERE date(created_at) = date('now')
+              AND event NOT IN ('list', 'list_clients', 'list_work_orders', 'list_inventory_items', 'list_users', 'list_delivery_events', 'list_audit_logs')
             ORDER BY created_at DESC
             "#
         }
@@ -4862,6 +5463,7 @@ async fn list_audit_logs(
             SELECT id, event, role, actor, entity, entity_id, field, old_value, new_value, created_at
             FROM audit_logs
             WHERE created_at >= datetime('now', '-7 days')
+              AND event NOT IN ('list', 'list_clients', 'list_work_orders', 'list_inventory_items', 'list_users', 'list_delivery_events', 'list_audit_logs')
             ORDER BY created_at DESC
             "#
         }
@@ -4870,6 +5472,7 @@ async fn list_audit_logs(
             SELECT id, event, role, actor, entity, entity_id, field, old_value, new_value, created_at
             FROM audit_logs
             WHERE date(created_at) >= date('now', 'start of month')
+              AND event NOT IN ('list', 'list_clients', 'list_work_orders', 'list_inventory_items', 'list_users', 'list_delivery_events', 'list_audit_logs')
             ORDER BY created_at DESC
             "#
         }
@@ -4878,6 +5481,7 @@ async fn list_audit_logs(
             SELECT id, event, role, actor, entity, entity_id, field, old_value, new_value, created_at
             FROM audit_logs
             WHERE date(created_at) >= date('now', 'start of year')
+              AND event NOT IN ('list', 'list_clients', 'list_work_orders', 'list_inventory_items', 'list_users', 'list_delivery_events', 'list_audit_logs')
             ORDER BY created_at DESC
             "#
         }
@@ -4886,6 +5490,7 @@ async fn list_audit_logs(
             r#"
             SELECT id, event, role, actor, entity, entity_id, field, old_value, new_value, created_at
             FROM audit_logs
+            WHERE event NOT IN ('list', 'list_clients', 'list_work_orders', 'list_inventory_items', 'list_users', 'list_delivery_events', 'list_audit_logs')
             ORDER BY created_at DESC
             "#
         }
@@ -5050,10 +5655,12 @@ fn main() -> Result<()> {
             ping,
             create_client,
             list_clients,
+            list_clients_for_household,
             check_client_conflict,
             update_client,
             delete_client,
             delete_user,
+            permanently_delete_user,
             create_inventory_item,
             list_inventory_items,
             update_inventory_item,
@@ -5070,6 +5677,9 @@ fn main() -> Result<()> {
             ensure_user_exists,
             update_user_flags,
             get_available_drivers,
+            count_completed_deliveries_by_driver,
+            check_driver_dl_reminder,
+            revoke_driver_if_no_copy,
             login_user,
             change_password,
             reset_password,
@@ -5094,6 +5704,7 @@ fn main() -> Result<()> {
             create_time_entry,
             list_time_entries,
             list_budget_categories,
+            update_budget_category,
             list_work_order_status_history,
             list_client_approval_history,
             create_client_communication,
